@@ -5,7 +5,7 @@ import yfinance as yf
 import time
 import sqlite3
 
-# --- 1. DANH SÁCH 2 SÀN LỚN (HOSE & HNX) ---
+# --- 1. MASTER UNIVERSE 2 SÀN LỚN (HOSE & HNX) ---
 HOSE_LIST = [
     "ACB", "BCM", "BID", "BSI", "BSR", "BVH", "BWE", "CII",
     "CMG", "CTD", "CTG", "CTR", "CTS", "DGC", "DGW", "DIG",
@@ -52,7 +52,7 @@ for s in HOSE_LIST:
 for s in HNX_LIST:
     FINEX_UNIVERSE.append((s, 'HNX', classify_sector(s)))
 
-# --- 2. TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN ---
+# --- 2. TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 3 BẢNG BCTC & CỔ PHIẾU ---
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -83,7 +83,7 @@ TRANSLATION_MAP = {
     'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
     'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
 
-    # Cân đối kế toán & Cổ phiếu
+    # Cân đối kế toán & Số lượng cổ phiếu
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
@@ -111,6 +111,7 @@ TRANSLATION_MAP = {
     'Payables': 'Các khoản phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
     
+    # Số lượng cổ phiếu trọng yếu
     'Ordinary Shares Number': 'Số lượng cổ phiếu lưu hành',
     'Share Issued': 'Số lượng cổ phiếu phát hành',
     'Ordinary Shares': 'Cổ phiếu phổ thông (Số lượng)',
@@ -137,7 +138,7 @@ def translate_metric(metric_name):
     return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Engine] Bắt đầu cào 2 sàn (HOSE, HNX) cho {len(FINEX_UNIVERSE)} mã...")
+    print(f"🚀 [FINEX Engine] Bắt đầu cào dữ liệu 2 sàn HOSE & HNX cho {len(FINEX_UNIVERSE)} doanh nghiệp...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -242,12 +243,12 @@ def main():
         
         df_final = df_final.sort_values(by=['ma_chung_khoan', 'nam', 'statement_type'], ascending=[True, False, True])
         
-        # 1. CSV
+        # 1. Xuất file CSV
         csv_path = 'vietnam_financial_statements.csv'
         df_final.to_csv(csv_path, index=False)
         print(f"✅ Đã xuất thành công file CSV: {len(df_final)} bản ghi.")
         
-        # 2. SQLite
+        # 2. Lưu đồng thời vào SQLite Database
         db_path = 'vietnam_stock_database.db'
         conn = sqlite3.connect(db_path)
         df_final.to_sql('financial_statements', conn, if_exists='replace', index=False)
