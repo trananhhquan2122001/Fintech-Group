@@ -5,7 +5,7 @@ import yfinance as yf
 import time
 import sqlite3
 
-# --- 1. TẬP TRUNG 2 SÀN LỚN (HOSE & HNX) ĐỂ ĐẢM BẢO TỶ LỆ THÀNH CÔNG 100% ---
+# --- 1. DANH SÁCH 2 SÀN LỚN (HOSE & HNX) ---
 HOSE_LIST = [
     "ACB", "BCM", "BID", "BSI", "BSR", "BVH", "BWE", "CII",
     "CMG", "CTD", "CTG", "CTR", "CTS", "DGC", "DGW", "DIG",
@@ -52,7 +52,7 @@ for s in HOSE_LIST:
 for s in HNX_LIST:
     FINEX_UNIVERSE.append((s, 'HNX', classify_sector(s)))
 
-# --- 2. TỪ ĐIỂN VIỆT HÓA ĐẦY ĐỦ 3 BẢNG BCTC & SỐ LƯỢNG CỔ PHIẾU ---
+# --- 2. TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN ---
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -83,7 +83,7 @@ TRANSLATION_MAP = {
     'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
     'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
 
-    # Cân đối kế toán & Số lượng cổ phiếu
+    # Cân đối kế toán & Cổ phiếu
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
@@ -111,7 +111,6 @@ TRANSLATION_MAP = {
     'Payables': 'Các khoản phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
     
-    # Số lượng cổ phiếu
     'Ordinary Shares Number': 'Số lượng cổ phiếu lưu hành',
     'Share Issued': 'Số lượng cổ phiếu phát hành',
     'Ordinary Shares': 'Cổ phiếu phổ thông (Số lượng)',
@@ -138,20 +137,19 @@ def translate_metric(metric_name):
     return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Engine] Bắt đầu cào 2 sàn lớn HOSE & HNX cho {len(FINEX_UNIVERSE)} mã...")
+    print(f"🚀 [FINEX Engine] Bắt đầu cào 2 sàn (HOSE, HNX) cho {len(FINEX_UNIVERSE)} mã...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     current_calendar_year = datetime.now().year
     
     for symbol, san_gd, nhom_nganh in FINEX_UNIVERSE:
-        print(f"🔄 Đang xử lý [{san_gd}] {symbol} - Nhóm: {nhom_nganh}...")
         try:
             ticker = yf.Ticker(f"{symbol}.VN")
             
             # 1. Dữ liệu thị trường
             hist = ticker.history(period="1d")
-            if not hist.empty:
+            if hist is not None and not hist.empty:
                 latest = hist.iloc[-1]
                 all_data.append({
                     'ma_chung_khoan': symbol,
@@ -177,29 +175,32 @@ def main():
                 })
 
             # 2. Cổ tức
-            dividends = ticker.dividends
-            if dividends is not None and not dividends.empty:
-                for date_idx, div_val in dividends.items():
-                    if pd.notna(div_val) and div_val > 0:
-                        date_str = str(date_idx).split('T')[0].split(' ')[0]
-                        year_val = date_str.split('-')[0]
-                        all_data.append({
-                            'ma_chung_khoan': symbol,
-                            'san_giao_dich': san_gd,
-                            'nhom_nganh_finex': nhom_nganh,
-                            'statement_type': TRANSLATION_MAP['Dividend_Data'],
-                            'nam': year_val,
-                            'period_date': date_str,
-                            'metric': TRANSLATION_MAP['Dividend Payout'],
-                            'value': float(div_val),
-                            'scrape_time': current_time
-                        })
+            try:
+                dividends = ticker.dividends
+                if dividends is not None and not dividends.empty:
+                    for date_idx, div_val in dividends.items():
+                        if pd.notna(div_val) and div_val > 0:
+                            date_str = str(date_idx).split('T')[0].split(' ')[0]
+                            year_val = date_str.split('-')[0]
+                            all_data.append({
+                                'ma_chung_khoan': symbol,
+                                'san_giao_dich': san_gd,
+                                'nhom_nganh_finex': nhom_nganh,
+                                'statement_type': TRANSLATION_MAP['Dividend_Data'],
+                                'nam': year_val,
+                                'period_date': date_str,
+                                'metric': TRANSLATION_MAP['Dividend Payout'],
+                                'value': float(div_val),
+                                'scrape_time': current_time
+                            })
+            except Exception:
+                pass
 
-            # 3. 3 Báo cáo tài chính cốt lõi
+            # 3. 3 Báo cáo tài chính
             statements = {
-                'Income_Statement': ticker.financials,
-                'Balance_Sheet': ticker.balance_sheet,
-                'Cash_Flow': ticker.cashflow
+                'Income_Statement': getattr(ticker, 'financials', None),
+                'Balance_Sheet': getattr(ticker, 'balance_sheet', None),
+                'Cash_Flow': getattr(ticker, 'cashflow', None)
             }
             
             for stmt_key, df_stmt in statements.items():
@@ -226,9 +227,10 @@ def main():
                                         'scrape_time': current_time
                                     })
                                     
-            time.sleep(0.2)
+            time.sleep(0.1)
         except Exception as e:
-            print(f"⚠️ Cảnh báo mã {symbol}: {e}")
+            print(f"⚠️ Bỏ qua lỗi nhỏ ở mã {symbol}: {e}")
+            continue
             
     if all_data:
         df_final = pd.DataFrame(all_data)
@@ -243,14 +245,14 @@ def main():
         # 1. CSV
         csv_path = 'vietnam_financial_statements.csv'
         df_final.to_csv(csv_path, index=False)
-        print(f"✅ Đã xuất CSV: {len(df_final)} bản ghi.")
+        print(f"✅ Đã xuất thành công file CSV: {len(df_final)} bản ghi.")
         
         # 2. SQLite
         db_path = 'vietnam_stock_database.db'
         conn = sqlite3.connect(db_path)
         df_final.to_sql('financial_statements', conn, if_exists='replace', index=False)
         conn.close()
-        print(f"✅ Đã lưu SQLite Database '{db_path}' thành công!")
+        print(f"✅ Đã lưu đồng thời vào SQLite Database '{db_path}' thành công!")
         
     else:
         print("⚠️ Không thu thập được dữ liệu.")
