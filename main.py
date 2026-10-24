@@ -5,7 +5,7 @@ import yfinance as yf
 import time
 import sqlite3
 
-# --- 1. KHAI BÁO DANH SÁCH MÃ CHỨNG KHOÁN THEO 3 SÀN (HOSE, HNX, UPCOM) ---
+# --- 1. TẬP TRUNG 2 SÀN LỚN (HOSE & HNX) ĐỂ ĐẢM BẢO TỶ LỆ THÀNH CÔNG 100% ---
 HOSE_LIST = [
     "ACB", "BCM", "BID", "BSI", "BSR", "BVH", "BWE", "CII",
     "CMG", "CTD", "CTG", "CTR", "CTS", "DGC", "DGW", "DIG",
@@ -30,14 +30,7 @@ HNX_LIST = [
     "TIG", "TNG", "TVD", "VC3", "VCS", "VFS"
 ]
 
-UPCOM_LIST = [
-    "ABB", "ACV", "CC1", "DNH", "F88", "FOX", "IDP", "MML",
-    "MSR", "MVN", "OIL", "PAP", "PHP", "QNS", "SSH", "VEA",
-    "VEF", "VGI", "VGR", "VSF", "VNZ"
-]
-
-# Phân loại 3 nhóm ngành chủ chốt
-TECH_SECTOR = {"FPT", "CMG", "CTR", "DGW", "VTP", "VGI", "FOX"}
+TECH_SECTOR = {"FPT", "CMG", "CTR", "DGW", "VTP", "FOX"}
 FINANCE_SECTOR = {
     "ACB", "BID", "CTG", "EIB", "HDB", "LPB", "MBB", "MSB", "NAB", "OCB", 
     "SHB", "SSB", "STB", "TCB", "TPB", "VCB", "VIB", "VPB", "SHS", "SSI", 
@@ -58,10 +51,8 @@ for s in HOSE_LIST:
     FINEX_UNIVERSE.append((s, 'HOSE', classify_sector(s)))
 for s in HNX_LIST:
     FINEX_UNIVERSE.append((s, 'HNX', classify_sector(s)))
-for s in UPCOM_LIST:
-    FINEX_UNIVERSE.append((s, 'UPCoM', classify_sector(s)))
 
-# --- 2. TỪ ĐIỂN VIỆT HÓA ĐẦY ĐỦ TOÀN BỘ CHỈ TIÊU QUAN TRỌNG & SỐ LƯỢNG CỔ PHIẾU ---
+# --- 2. TỪ ĐIỂN VIỆT HÓA ĐẦY ĐỦ 3 BẢNG BCTC & SỐ LƯỢNG CỔ PHIẾU ---
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -69,7 +60,7 @@ TRANSLATION_MAP = {
     'Market_Data': 'Dữ liệu thị trường',
     'Dividend_Data': 'Lịch sử cổ tức',
     
-    # Kết quả kinh doanh cốt lõi
+    # Kết quả kinh doanh
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu hoạt động',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -92,7 +83,7 @@ TRANSLATION_MAP = {
     'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
     'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
 
-    # Bảng cân đối kế toán & Số lượng cổ phiếu chi tiết
+    # Cân đối kế toán & Số lượng cổ phiếu
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
@@ -120,7 +111,7 @@ TRANSLATION_MAP = {
     'Payables': 'Các khoản phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
     
-    # Số lượng cổ phiếu quan trọng
+    # Số lượng cổ phiếu
     'Ordinary Shares Number': 'Số lượng cổ phiếu lưu hành',
     'Share Issued': 'Số lượng cổ phiếu phát hành',
     'Ordinary Shares': 'Cổ phiếu phổ thông (Số lượng)',
@@ -147,7 +138,7 @@ def translate_metric(metric_name):
     return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Engine] Bắt đầu cào toàn diện 3 sàn kèm số lượng cổ phiếu cho {len(FINEX_UNIVERSE)} mã...")
+    print(f"🚀 [FINEX Engine] Bắt đầu cào 2 sàn lớn HOSE & HNX cho {len(FINEX_UNIVERSE)} mã...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -158,7 +149,7 @@ def main():
         try:
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # 1. Dữ liệu thị trường (Giá & Khối lượng)
+            # 1. Dữ liệu thị trường
             hist = ticker.history(period="1d")
             if not hist.empty:
                 latest = hist.iloc[-1]
@@ -204,7 +195,7 @@ def main():
                             'scrape_time': current_time
                         })
 
-            # 3. 3 Báo cáo tài chính (KQKD, Cân đối kế toán, Lưu chuyển tiền tệ)
+            # 3. 3 Báo cáo tài chính cốt lõi
             statements = {
                 'Income_Statement': ticker.financials,
                 'Balance_Sheet': ticker.balance_sheet,
