@@ -141,7 +141,7 @@ FINEX_UNIVERSE = [
     ('VFS', 'HNX30', 'Tài chính')
 ]
 
-# Từ điển Việt hóa toàn diện 100% các khoản mục BCTC và thị trường
+# Từ điển Việt hóa toàn diện tuyệt đối (Bao gồm cả các chỉ tiêu kỹ thuật chi tiết)
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -149,7 +149,7 @@ TRANSLATION_MAP = {
     'Market_Data': 'Dữ liệu thị trường',
     'Dividend_Data': 'Lịch sử cổ tức',
     
-    # --- Kết quả kinh doanh ---
+    # --- Kết quả kinh doanh & Chỉ tiêu cốt lõi ---
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu hoạt động',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -162,11 +162,36 @@ TRANSLATION_MAP = {
     'Net Interest Income': 'Thu nhập lãi thuần',
     'Interest Income': 'Thu nhập lãi và các khoản tương tự',
     'Interest Expense': 'Chi phí lãi và các chi phí tương tự',
-    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (EPS)',
-    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (EPS)',
+    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (EPS pha loãng)',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (EPS cơ bản)',
     'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
     
-    # --- Bảng cân đối kế toán (Đã bao phủ toàn bộ các mục chi tiết) ---
+    # --- Các chỉ tiêu kỹ thuật bổ sung (Khắc phục triệt để lỗi tiếng Anh) ---
+    'Basic Average Shares': 'Cổ phiếu bình quân cơ bản',
+    'Diluted Average Shares': 'Cổ phiếu bình quân suy giảm',
+    'Diluted NI Availto Com Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông (pha loãng)',
+    'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
+    'Average Dilution Earnings': 'Thu nhập pha loãng bình quân',
+    'Preferred Stock Dividends': 'Cổ tức cổ phiếu ưu đãi',
+    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
+    'Net Income Including Noncontrolling Interests': 'Lợi nhuận gộp bao gồm cổ đông không kiểm soát',
+    'Net Income Continuous Operations': 'Lợi nhuận từ hoạt động tiếp tục',
+    'Other Non Operating Income Expenses': 'Thu nhập/chi phí hoạt động khác ngoài kinh doanh',
+    'Special Income Charges': 'Khoản thu nhập/chi phí đặc biệt',
+    'Write Off': 'Xóa sổ tài sản',
+    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi vay ngoài hoạt động kinh doanh',
+    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
+    'Interest Expense Non Operating': 'Chi phí lãi vay ngoài hoạt động kinh doanh',
+    'Interest Income Non Operating': 'Thu nhập lãi ngoài hoạt động kinh doanh',
+    'Operating Expense': 'Chi phí hoạt động',
+    'Other Operating Expenses': 'Chi phí hoạt động khác',
+    'Depreciation And Amortization In Income Statement': 'Chi phí khấu hao và phân bổ',
+    'Depreciation Income Statement': 'Khấu hao trong báo cáo kết quả kinh doanh',
+    'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
+    'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Gain On Sale Of Security': 'Lãi từ bán chứng khoán đầu tư',
+    
+    # --- Bảng cân đối kế toán ---
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
@@ -226,11 +251,11 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_name):
-    """Hàm ánh xạ chuyển đổi tên chỉ tiêu sang tiếng Việt chuẩn xác"""
-    return TRANSLATION_MAP.get(metric_name, metric_name)
+    """Hàm ánh xạ chuyển đổi tên chỉ tiêu sang tiếng Việt. Nếu chưa có trong từ điển, lọc bỏ để đảm bảo dữ liệu sạch 100% tiếng Việt."""
+    return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu thu thập, làm sạch và chuẩn hóa nhãn cho {len(FINEX_UNIVERSE)} mã chứng khoán...")
+    print(f"🚀 [FINEX Pipeline] Thu thập và chuẩn hóa dữ liệu thuần Việt cho {len(FINEX_UNIVERSE)} mã...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -240,7 +265,7 @@ def main():
         try:
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # 1. Thu thập dữ liệu thị trường sạch
+            # 1. Dữ liệu thị trường
             hist = ticker.history(period="1d")
             if not hist.empty:
                 latest = hist.iloc[-1]
@@ -268,7 +293,7 @@ def main():
                     'scrape_time': current_time
                 })
 
-            # 2. Thu thập lịch sử cổ tức sạch
+            # 2. Cổ tức
             dividends = ticker.dividends
             if dividends is not None and not dividends.empty:
                 for date_idx, div_val in dividends.items():
@@ -287,7 +312,7 @@ def main():
                             'scrape_time': current_time
                         })
 
-            # 3. Thu thập Báo cáo tài chính (Làm sạch: lọc bỏ NaN, giá trị 0 và chuẩn hóa nhãn Việt hóa)
+            # 3. Báo cáo tài chính (Chỉ giữ lại các chỉ tiêu đã dịch sang tiếng Việt sạch sẽ)
             statements = {
                 'Income_Statement': ticker.financials,
                 'Balance_Sheet': ticker.balance_sheet,
@@ -303,24 +328,22 @@ def main():
                         year_val = date_str.split('-')[0]
                         
                         for idx, val in df_stmt[date_col].items():
-                            # Lọc dữ liệu sạch theo chuẩn MLOps: Bỏ qua NaN và giá trị bằng 0
                             if pd.notna(val) and val != 0:
-                                raw_metric = str(idx)
-                                clean_metric = translate_metric(raw_metric)
-                                
-                                # Chỉ đưa vào dữ liệu nếu chỉ tiêu đã được định danh rõ ràng
-                                all_data.append({
-                                    'ma_chung_khoan': symbol,
-                                    'chi_so': chi_so,
-                                    'nhom_nganh_finex': nhom_nganh,
-                                    'statement_type': vn_stmt_name,
-                                    'nam': year_val,
-                                    'period_date': date_str,
-                                    'metric': clean_metric,
-                                    'value': float(val),
-                                    'scrape_time': current_time
-                                })
-                                
+                                clean_metric = translate_metric(str(idx))
+                                # Strict Filtering: Chỉ nhận các chỉ tiêu đã được Việt hóa thành công
+                                if clean_metric is not None:
+                                    all_data.append({
+                                        'ma_chung_khoan': symbol,
+                                        'chi_so': chi_so,
+                                        'nhom_nganh_finex': nhom_nganh,
+                                        'statement_type': vn_stmt_name,
+                                        'nam': year_val,
+                                        'period_date': date_str,
+                                        'metric': clean_metric,
+                                        'value': float(val),
+                                        'scrape_time': current_time
+                                    })
+                                    
             time.sleep(0.3)
         except Exception as e:
             print(f"❌ Lỗi xử lý mã {symbol}: {e}")
@@ -336,7 +359,7 @@ def main():
         
         file_path = 'vietnam_financial_statements.csv'
         df_final.to_csv(file_path, index=False)
-        print(f"✅ Hoàn tất đường ống dữ liệu! Đã lưu thành công {len(df_final)} bản ghi chuẩn sạch vào '{file_path}'.")
+        print(f"✅ Hoàn tất! Đã lưu {len(df_final)} bản ghi thuần Việt 100% vào '{file_path}'.")
     else:
         print("⚠️ Không thu thập được dữ liệu.")
 
