@@ -141,7 +141,7 @@ FINEX_UNIVERSE = [
     ('VFS', 'HNX30', 'Tài chính')
 ]
 
-# Từ điển Việt hóa toàn diện tuyệt đối (Bao gồm cả các chỉ tiêu kỹ thuật chi tiết)
+# Từ điển Việt hóa toàn diện, bao phủ mọi chỉ tiêu quan trọng của 3 báo cáo tài chính
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -149,7 +149,7 @@ TRANSLATION_MAP = {
     'Market_Data': 'Dữ liệu thị trường',
     'Dividend_Data': 'Lịch sử cổ tức',
     
-    # --- Kết quả kinh doanh & Chỉ tiêu cốt lõi ---
+    # --- 1. BÁO CÁO KẾT QUẢ KINH DOANH ---
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu hoạt động',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -165,117 +165,87 @@ TRANSLATION_MAP = {
     'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (EPS pha loãng)',
     'Basic EPS': 'Lãi cơ bản trên cổ phiếu (EPS cơ bản)',
     'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
-    
-    # --- Các chỉ tiêu kỹ thuật bổ sung (Khắc phục triệt để lỗi tiếng Anh) ---
-    'Basic Average Shares': 'Cổ phiếu bình quân cơ bản',
-    'Diluted Average Shares': 'Cổ phiếu bình quân suy giảm',
-    'Diluted NI Availto Com Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông (pha loãng)',
-    'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
-    'Average Dilution Earnings': 'Thu nhập pha loãng bình quân',
-    'Preferred Stock Dividends': 'Cổ tức cổ phiếu ưu đãi',
-    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
-    'Net Income Including Noncontrolling Interests': 'Lợi nhuận gộp bao gồm cổ đông không kiểm soát',
-    'Net Income Continuous Operations': 'Lợi nhuận từ hoạt động tiếp tục',
-    'Other Non Operating Income Expenses': 'Thu nhập/chi phí hoạt động khác ngoài kinh doanh',
-    'Special Income Charges': 'Khoản thu nhập/chi phí đặc biệt',
-    'Write Off': 'Xóa sổ tài sản',
-    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi vay ngoài hoạt động kinh doanh',
-    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
-    'Interest Expense Non Operating': 'Chi phí lãi vay ngoài hoạt động kinh doanh',
-    'Interest Income Non Operating': 'Thu nhập lãi ngoài hoạt động kinh doanh',
     'Operating Expense': 'Chi phí hoạt động',
-    'Other Operating Expenses': 'Chi phí hoạt động khác',
-    'Depreciation And Amortization In Income Statement': 'Chi phí khấu hao và phân bổ',
-    'Depreciation Income Statement': 'Khấu hao trong báo cáo kết quả kinh doanh',
-    'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
     'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
-    'Gain On Sale Of Security': 'Lãi từ bán chứng khoán đầu tư',
-    
-    # --- Bảng cân đối kế toán ---
+    'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
+    'Research And Development': 'Chi phí nghiên cứu và phát triển',
+    'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
+    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
+    'Other Operating Expenses': 'Chi phí hoạt động khác',
+
+    # --- 2. BẢNG CÂN ĐỐI KẾ TOÁN ---
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
-    'Cash Cash Equivalents And Federal Funds Sold': 'Tiền, tương đương tiền và tiền gửi liên ngân hàng',
     'Cash Equivalents': 'Các khoản tương đương tiền',
-    'Cash Financial': 'Tiền mặt và tài sản tài chính tương đương',
     'Inventory': 'Hàng tồn kho',
-    'Other Inventories': 'Hàng tồn kho khác',
-    'Finished Goods': 'Thành phẩm',
     'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
-    'Gross Accounts Receivable': 'Phải thu khách hàng (nguyên giá)',
-    'Other Receivables': 'Các khoản phải thu khác',
-    'Taxes Receivable': 'Thuế và các khoản phải thu nhà nước',
     'Net Loan': 'Cho vay khách hàng (Cho vay ròng)',
-    'Other Short Term Investments': 'Đầu tư tài chính ngắn hạn khác',
-    
-    'Gross PPE': 'Nguyên giá tài sản cố định hữu hình',
-    'Accumulated Depreciation': 'Hao mòn tài sản cố định lũy kế',
-    'Net PPE': 'Tài sản cố định hữu hình (ròng)',
-    'Buildings And Improvements': 'Nhà cửa và vật kiến trúc',
-    'Machinery Furniture Equipment': 'Máy móc, thiết bị và dụng cụ quản lý',
-    'Construction In Progress': 'Chi phí xây dựng cơ bản dở dang',
-    'Other Properties': 'Bất động sản và tài sản khác',
-    'Prepaid Assets': 'Chi phí trả trước',
-    
     'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
     'Current Liabilities': 'Nợ ngắn hạn',
     'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn',
     'Stockholders Equity': 'Vốn chủ sở hữu',
     'Common Stock Equity': 'Vốn cổ phần phổ thông',
     'Common Stock': 'Cổ phiếu phổ thông',
-    'Capital Stock': 'Vốn điều lệ / Vốn góp chủ sở hữu',
+    'Capital Stock': 'Vốn điều lệ / Vốn góp',
     'Additional Paid In Capital': 'Thặng dư vốn cổ phần',
     'Retained Earnings': 'Lợi nhuận chưa phân phối',
     'Total Debt': 'Tổng nợ vay',
     'Net Debt': 'Nợ vay ròng',
-    'Tangible Book Value': 'Giá trị sổ sách hữu hình',
-    'Net Tangible Assets': 'Tài sản hữu hình ròng',
-    
+    'Net PPE': 'Tài sản cố định hữu hình (ròng)',
+    'Gross PPE': 'Nguyên giá tài sản cố định hữu hình',
+    'Accumulated Depreciation': 'Hao mòn tài sản cố định lũy kế',
+    'Construction In Progress': 'Chi phí xây dựng cơ bản dở dang',
+    'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình',
     'Payables': 'Các khoản phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
-    'Total Tax Payable': 'Thuế và các khoản phải nộp nhà nước',
-    'Other Payable': 'Các khoản phải trả khác',
-    
-    # --- Lưu chuyển tiền tệ ---
+    'Ordinary Shares Number': 'Số lượng cổ phiếu lưu hành',
+    'Share Issued': 'Số lượng cổ phiếu phát hành',
+
+    # --- 3. BÁO CÁO LƯU CHUYỂN TIỀN TỆ ---
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
-    
-    # --- Dữ liệu thị trường & Cổ tức ---
+    'Repayment Of Debt': 'Trả nợ gốc vay',
+    'Issuance Of Debt': 'Phát hành thêm nợ vay',
+    'Cash Dividends Paid': 'Cổ tức đã trả bằng tiền',
+
+    # --- DỮ LIỆU THỊ TRƯỜNG & CỔ TỨC ---
     'Close Price': 'Giá đóng cửa',
     'Volume': 'Khối lượng giao dịch',
     'Dividend Payout': 'Cổ tức tiền mặt'
 }
 
 def translate_metric(metric_name):
-    """Hàm ánh xạ chuyển đổi tên chỉ tiêu sang tiếng Việt. Nếu chưa có trong từ điển, lọc bỏ để đảm bảo dữ liệu sạch 100% tiếng Việt."""
+    """Lọc sạch tuyệt đối: Chỉ nhận các chỉ tiêu có trong từ điển tiếng Việt chuẩn xác"""
     return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Thu thập và chuẩn hóa dữ liệu thuần Việt cho {len(FINEX_UNIVERSE)} mã...")
+    print(f"🚀 [FINEX Engine] Bắt đầu cào toàn bộ 3 bảng báo cáo tài chính từ 2015-2026 cho {len(FINEX_UNIVERSE)} mã...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    TARGET_START_YEAR = 2015
+    current_calendar_year = datetime.now().year
     
     for symbol, chi_so, nhom_nganh in FINEX_UNIVERSE:
-        print(f"🔄 Đang xử lý: [{chi_so}] {symbol} - {nhom_nganh}...")
+        print(f"🔄 Đang xử lý: [{chi_so}] {symbol} ({nhom_nganh})...")
         try:
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # 1. Dữ liệu thị trường
+            # 1. Dữ liệu thị trường (Giá & Khối lượng hiện tại)
             hist = ticker.history(period="1d")
             if not hist.empty:
                 latest = hist.iloc[-1]
-                current_year = str(datetime.now().year)
                 all_data.append({
                     'ma_chung_khoan': symbol,
                     'chi_so': chi_so,
                     'nhom_nganh_finex': nhom_nganh,
                     'statement_type': TRANSLATION_MAP['Market_Data'],
-                    'nam': current_year,
+                    'nam': str(current_calendar_year),
                     'period_date': datetime.now().strftime('%Y-%m-%d'),
                     'metric': TRANSLATION_MAP['Close Price'],
                     'value': float(latest['Close']),
@@ -286,33 +256,34 @@ def main():
                     'chi_so': chi_so,
                     'nhom_nganh_finex': nhom_nganh,
                     'statement_type': TRANSLATION_MAP['Market_Data'],
-                    'nam': current_year,
+                    'nam': str(current_calendar_year),
                     'period_date': datetime.now().strftime('%Y-%m-%d'),
                     'metric': TRANSLATION_MAP['Volume'],
                     'value': float(latest['Volume']),
                     'scrape_time': current_time
                 })
 
-            # 2. Cổ tức
+            # 2. Lịch sử cổ tức (Từ 2015 trở lại đây)
             dividends = ticker.dividends
             if dividends is not None and not dividends.empty:
                 for date_idx, div_val in dividends.items():
                     if pd.notna(div_val) and div_val > 0:
                         date_str = str(date_idx).split('T')[0].split(' ')[0]
                         year_val = date_str.split('-')[0]
-                        all_data.append({
-                            'ma_chung_khoan': symbol,
-                            'chi_so': chi_so,
-                            'nhom_nganh_finex': nhom_nganh,
-                            'statement_type': TRANSLATION_MAP['Dividend_Data'],
-                            'nam': year_val,
-                            'period_date': date_str,
-                            'metric': TRANSLATION_MAP['Dividend Payout'],
-                            'value': float(div_val),
-                            'scrape_time': current_time
-                        })
+                        if int(year_val) >= TARGET_START_YEAR:
+                            all_data.append({
+                                'ma_chung_khoan': symbol,
+                                'chi_so': chi_so,
+                                'nhom_nganh_finex': nhom_nganh,
+                                'statement_type': TRANSLATION_MAP['Dividend_Data'],
+                                'nam': year_val,
+                                'period_date': date_str,
+                                'metric': TRANSLATION_MAP['Dividend Payout'],
+                                'value': float(div_val),
+                                'scrape_time': current_time
+                            })
 
-            # 3. Báo cáo tài chính (Chỉ giữ lại các chỉ tiêu đã dịch sang tiếng Việt sạch sẽ)
+            # 3. Thu thập 3 Báo cáo tài chính cốt lõi (KQKD, Cân đối kế toán, Lưu chuyển tiền tệ)
             statements = {
                 'Income_Statement': ticker.financials,
                 'Balance_Sheet': ticker.balance_sheet,
@@ -327,39 +298,42 @@ def main():
                         date_str = str(date_col).split('T')[0]
                         year_val = date_str.split('-')[0]
                         
-                        for idx, val in df_stmt[date_col].items():
-                            if pd.notna(val) and val != 0:
-                                clean_metric = translate_metric(str(idx))
-                                # Strict Filtering: Chỉ nhận các chỉ tiêu đã được Việt hóa thành công
-                                if clean_metric is not None:
-                                    all_data.append({
-                                        'ma_chung_khoan': symbol,
-                                        'chi_so': chi_so,
-                                        'nhom_nganh_finex': nhom_nganh,
-                                        'statement_type': vn_stmt_name,
-                                        'nam': year_val,
-                                        'period_date': date_str,
-                                        'metric': clean_metric,
-                                        'value': float(val),
-                                        'scrape_time': current_time
-                                    })
-                                    
+                        if int(year_val) >= TARGET_START_YEAR:
+                            for idx, val in df_stmt[date_col].items():
+                                if pd.notna(val) and val != 0:
+                                    clean_metric = translate_metric(str(idx))
+                                    if clean_metric is not None:
+                                        all_data.append({
+                                            'ma_chung_khoan': symbol,
+                                            'chi_so': chi_so,
+                                            'nhom_nganh_finex': nhom_nganh,
+                                            'statement_type': vn_stmt_name,
+                                            'nam': year_val,
+                                            'period_date': date_str,
+                                            'metric': clean_metric,
+                                            'value': float(val),
+                                            'scrape_time': current_time
+                                        })
+                                        
             time.sleep(0.3)
         except Exception as e:
-            print(f"❌ Lỗi xử lý mã {symbol}: {e}")
+            print(f"⚠️ Cảnh báo mã {symbol}: {e}")
             
     if all_data:
         df_final = pd.DataFrame(all_data)
         
-        # Sắp xếp đúng chuẩn cấu trúc trường dữ liệu FINEX đề xuất
+        # Sắp xếp cấu trúc cột chuẩn mực, trực quan, đúng hàng đúng lối
         df_final = df_final[[
             'ma_chung_khoan', 'chi_so', 'nhom_nganh_finex', 
             'statement_type', 'nam', 'period_date', 'metric', 'value', 'scrape_time'
         ]]
         
+        # Sắp xếp thứ tự dòng theo Mã -> Năm (mới nhất đến cũ nhất) -> Loại báo cáo
+        df_final = df_final.sort_values(by=['ma_chung_khoan', 'nam', 'statement_type'], ascending=[True, False, True])
+        
         file_path = 'vietnam_financial_statements.csv'
         df_final.to_csv(file_path, index=False)
-        print(f"✅ Hoàn tất! Đã lưu {len(df_final)} bản ghi thuần Việt 100% vào '{file_path}'.")
+        print(f"✅ Hoàn tất toàn bộ! Đã lưu {len(df_final)} bản ghi sạch chuẩn tiếng Việt vào '{file_path}'.")
     else:
         print("⚠️ Không thu thập được dữ liệu.")
 
