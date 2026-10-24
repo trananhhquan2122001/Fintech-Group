@@ -1,65 +1,43 @@
 import os
-import psycopg2
+import pandas as pd
 from datetime import datetime
 
-# Danh sách 10 mã doanh nghiệp VN30 tiêu biểu để test
+# Danh sách 10 mã doanh nghiệp VN30 tiêu biểu
 SYMBOLS = ['VCB', 'TCB', 'FPT', 'HPG', 'VIC', 'VHM', 'MBB', 'VPB', 'BID', 'STB']
 
-def get_db_connection():
-    # Lấy mật khẩu bảo mật từ biến môi trường
-    db_password = os.getenv("DB_PASSWORD")
-    
-    connection = psycopg2.connect(
-        host="localhost",
-        database="vietnam_stock_database",  # Tên cơ sở dữ liệu của cậu
-        user="postgres",
-        password=db_password,
-        port="5432"
-    )
-    return connection
-
-def setup_database(cursor):
-    # Đặt tên bảng đúng theo ý muốn của cậu: du_lieu_10_doanh_nghiep
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS du_lieu_10_doanh_nghiep (
-            id SERIAL PRIMARY KEY,
-            symbol VARCHAR(10) NOT NULL,
-            scrape_time TIMESTAMP NOT NULL,
-            status VARCHAR(50) NOT NULL
-        );
-    """)
-
 def main():
-    print("🚀 Bắt đầu tiến trình cào dữ liệu cho 10 doanh nghiệp...")
+    print("🚀 Bắt đầu tiến trình thu thập dữ liệu 10 doanh nghiệp...")
     
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+    data_list = []
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    for symbol in SYMBOLS:
+        print(f"Đang xử lý dữ liệu cho mã: {symbol}...")
         
-        # Khởi tạo bảng với tên mới
-        setup_database(cursor)
-        conn.commit()
-
-        for symbol in SYMBOLS:
-            print(f" Đang xử lý dữ liệu cho mã: {symbol}...")
-            
-            current_time = datetime.now()
-            status = "Collected Successfully"
-            
-            # Lưu dữ liệu vào bảng du_lieu_10_doanh_nghiep
-            cursor.execute("""
-                INSERT INTO du_lieu_10_doanh_nghiep (symbol, scrape_time, status)
-                VALUES (%s, %s, %s);
-            """, (symbol, current_time, status))
-            conn.commit()
-            
-        print(" Đã cào và lưu thành công dữ liệu của cả 10 doanh nghiệp vào bảng 'du_lieu_10_doanh_nghiep'!")
-        
-        cursor.close()
-        conn.close()
-        
-    except Exception as e:
-        print(f"❌ Có lỗi xảy ra trong quá trình chạy: {e}")
+        # Giả lập dữ liệu cào được cho từng mã cổ phiếu
+        data_list.append({
+            'symbol': symbol,
+            'scrape_time': current_time,
+            'status': 'Collected Successfully'
+        })
+    
+    # Chuyển đổi dữ liệu thành DataFrame của Pandas
+    df = pd.DataFrame(data_list)
+    
+    # Tên file lưu trữ dữ liệu
+    file_path = 'vietnam_stock_data.csv'
+    
+    # Kiểm tra xem file cũ đã tồn tại chưa để cộng dồn hoặc ghi mới
+    if os.path.exists(file_path):
+        # Đọc dữ liệu cũ và gộp dữ liệu mới vào
+        df_old = pd.read_csv(file_path)
+        df_combined = pd.concat([df_old, df], ignore_index=True)
+        df_combined.to_csv(file_path, index=False)
+        print(f" Đã cập nhật và lưu dồn dữ liệu vào file '{file_path}'!")
+    else:
+        # Ghi file mới nếu chưa có
+        df.to_csv(file_path, index=False)
+        print(f" Đã tạo mới và lưu dữ liệu vào file '{file_path}'!")
 
 if __name__ == "__main__":
     main()
