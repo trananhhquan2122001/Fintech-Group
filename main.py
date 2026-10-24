@@ -3,145 +3,65 @@ import pandas as pd
 from datetime import datetime
 import yfinance as yf
 import time
+import sqlite3
 
-# Danh sách Master Universe đầy đủ 100% các doanh nghiệp thuộc rổ VN30, VN100, HNX30 (3 nhóm ngành)
-FINEX_UNIVERSE = [
-    # --- NHÓM 1: SẢN XUẤT VÀ CÔNG NGHIỆP & PHI TÀI CHÍNH ---
-    ('VIC', 'VN30', 'Sản xuất và công nghiệp'),
-    ('VHM', 'VN30', 'Sản xuất và công nghiệp'),
-    ('GAS', 'VN30', 'Sản xuất và công nghiệp'),
-    ('MCH', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HPG', 'VN30', 'Sản xuất và công nghiệp'),
-    ('VPL', 'VN30', 'Sản xuất và công nghiệp'),
-    ('BSR', 'VN100', 'Sản xuất và công nghiệp'),
-    ('GVR', 'VN30', 'Sản xuất và công nghiệp'),
-    ('VNM', 'VN30', 'Sản xuất và công nghiệp'),
-    ('MSN', 'VN30', 'Sản xuất và công nghiệp'),
-    ('MWG', 'VN30', 'Sản xuất và công nghiệp'),
-    ('VJC', 'VN30', 'Sản xuất và công nghiệp'),
-    ('VRE', 'VN30', 'Sản xuất và công nghiệp'),
-    ('SAB', 'VN30', 'Sản xuất và công nghiệp'),
-    ('PLX', 'VN30', 'Sản xuất và công nghiệp'),
-    ('BCM', 'VN100', 'Sản xuất và công nghiệp'),
-    ('POW', 'VN100', 'Sản xuất và công nghiệp'),
-    ('GMD', 'VN100', 'Sản xuất và công nghiệp'),
-    ('GEX', 'VN100', 'Sản xuất và công nghiệp'),
-    ('REE', 'VN100', 'Sản xuất và công nghiệp'),
-    ('FRT', 'VN100', 'Sản xuất và công nghiệp'),
-    ('NVL', 'VN100', 'Sản xuất và công nghiệp'),
-    ('KBC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('VGC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('SBT', 'VN100', 'Sản xuất và công nghiệp'),
-    ('VPI', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HAG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DCM', 'VN100', 'Sản xuất và công nghiệp'),
-    ('KDH', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PVD', 'VN100', 'Sản xuất và công nghiệp'),
-    ('SJS', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DPM', 'VN100', 'Sản xuất và công nghiệp'),
-    ('KDC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DXG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('SIP', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PVT', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PDR', 'VN100', 'Sản xuất và công nghiệp'),
-    ('TCH', 'VN100', 'Sản xuất và công nghiệp'),
-    ('BAF', 'VN100', 'Sản xuất và công nghiệp'),
-    ('BMP', 'VN100', 'Sản xuất và công nghiệp'),
-    ('TAL', 'VN100', 'Sản xuất và công nghiệp'),
-    ('NLG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('VHC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('VCG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('BWE', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PNJ', 'VN100', 'Sản xuất và công nghiệp'),
-    ('CII', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HSG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DIG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PC1', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PHR', 'VN100', 'Sản xuất và công nghiệp'),
-    ('CTD', 'VN100', 'Sản xuất và công nghiệp'),
-    ('NT2', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DBC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HDG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('NKG', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HHV', 'VN100', 'Sản xuất và công nghiệp'),
-    ('VSC', 'VN100', 'Sản xuất và công nghiệp'),
-    ('HT1', 'VN100', 'Sản xuất và công nghiệp'),
-    ('ANV', 'VN100', 'Sản xuất và công nghiệp'),
-    ('PAN', 'VN100', 'Sản xuất và công nghiệp'),
-    ('KOS', 'VN100', 'Sản xuất và công nghiệp'),
-    ('GEE', 'VN100', 'Sản xuất và công nghiệp'),
-    ('DGC', 'VN30', 'Sản xuất và công nghiệp'),
-    ('IDC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('CAP', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('LAS', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('BCC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('CEO', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('DTD', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('DVM', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('DXP', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('HLD', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('HUT', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('L14', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('L18', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('LHC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('NBC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('NDN', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('PLC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('PVC', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('PVG', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('PVS', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('SLS', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('TIG', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('TNG', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('TVD', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('VC3', 'HNX30', 'Sản xuất và công nghiệp'),
-    ('VCS', 'HNX30', 'Sản xuất và công nghiệp'),
-
-    # --- NHÓM 2: CÔNG NGHỆ ---
-    ('FPT', 'VN30', 'Công nghệ'),
-    ('CMG', 'VN100', 'Công nghệ'),
-    ('CTR', 'VN100', 'Công nghệ'),
-    ('DGW', 'VN100', 'Công nghệ'),
-    ('VTP', 'VN100', 'Công nghệ'),
-
-    # --- NHÓM 3: TÀI CHÍNH (Ngân hàng, Chứng khoán, Bảo hiểm) ---
-    ('VCB', 'VN30', 'Tài chính'),
-    ('BID', 'VN30', 'Tài chính'),
-    ('TCB', 'VN30', 'Tài chính'),
-    ('VPB', 'VN30', 'Tài chính'),
-    ('CTG', 'VN30', 'Tài chính'),
-    ('MBB', 'VN30', 'Tài chính'),
-    ('STB', 'VN30', 'Tài chính'),
-    ('ACB', 'VN30', 'Tài chính'),
-    ('LPB', 'VN30', 'Tài chính'),
-    ('HDB', 'VN30', 'Tài chính'),
-    ('MSB', 'VN100', 'Tài chính'),
-    ('SHB', 'VN30', 'Tài chính'),
-    ('SSB', 'VN30', 'Tài chính'),
-    ('VIB', 'VN30', 'Tài chính'),
-    ('TPB', 'VN30', 'Tài chính'),
-    ('EIB', 'VN100', 'Tài chính'),
-    ('OCB', 'VN100', 'Tài chính'),
-    ('NAB', 'VN100', 'Tài chính'),
-    ('SSI', 'VN30', 'Tài chính'),
-    ('VCI', 'VN100', 'Tài chính'),
-    ('HCM', 'VN100', 'Tài chính'),
-    ('VND', 'VN100', 'Tài chính'),
-    ('VIX', 'VN100', 'Tài chính'),
-    ('FTS', 'VN100', 'Tài chính'),
-    ('BSI', 'VN100', 'Tài chính'),
-    ('CTS', 'VN100', 'Tài chính'),
-    ('DSE', 'VN100', 'Tài chính'),
-    ('EVF', 'VN100', 'Tài chính'),
-    ('BVH', 'VN100', 'Tài chính'),
-    ('BVS', 'HNX30', 'Tài chính'),
-    ('MBS', 'HNX30', 'Tài chính'),
-    ('PSI', 'HNX30', 'Tài chính'),
-    ('SHS', 'HNX30', 'Tài chính'),
-    ('VFS', 'HNX30', 'Tài chính')
+# --- 1. KHAI BÁO DANH SÁCH MÃ CHỨNG KHOÁN THEO 3 SÀN (HOSE, HNX, UPCOM) ---
+HOSE_LIST = [
+    "ACB", "BCM", "BID", "BSI", "BSR", "BVH", "BWE", "CII",
+    "CMG", "CTD", "CTG", "CTR", "CTS", "DGC", "DGW", "DIG",
+    "DPM", "DSE", "DXG", "EIB", "EVF", "FPT", "FRT", "FTS",
+    "GAS", "GEE", "GEX", "GMD", "GVR", "HAG", "HCM", "HDB",
+    "HDG", "HHV", "HSG", "HT1", "HPG", "KBC", "KDC", "KDH",
+    "LPB", "MBB", "MCH", "MSB", "MSN", "MWG", "NAB", "NKG",
+    "NLG", "NT2", "NVL", "OCB", "PAN", "PC1", "PDR", "PHR",
+    "PLX", "PNJ", "POW", "PVD", "PVT", "REE", "SAB", "SBT",
+    "SHB", "SIP", "SSB", "SSI", "STB", "TCB", "TCX", "TCH",
+    "TPB", "VCB", "VCI", "VCG", "VCK", "VGC", "VHC", "VIB",
+    "VIC", "VIX", "VJC", "VND", "VNM", "VPI", "VPB", "VRE",
+    "VHM", "VPL", "VTP", "ANV", "BAF", "BMP", "DBC", "DCM",
+    "FMC", "HDC", "KOS", "MPC", "QCG", "SZC", "TAL", "VSC",
+    "VTO", "YEG"
 ]
 
-# Từ điển Việt hóa toàn diện tuyệt đối cho 3 bảng BCTC, Thị trường và Cổ tức
+HNX_LIST = [
+    "BCC", "BVS", "CAP", "CEO", "DTD", "DVM", "DXP", "HLD",
+    "HUT", "IDC", "L14", "L18", "LAS", "LHC", "MBS", "NBC",
+    "NDN", "PLC", "PSI", "PVC", "PVG", "PVS", "SHS", "SLS",
+    "TIG", "TNG", "TVD", "VC3", "VCS", "VFS"
+]
+
+UPCOM_LIST = [
+    "ABB", "ACV", "CC1", "DNH", "F88", "FOX", "IDP", "MML",
+    "MSR", "MVN", "OIL", "PAP", "PHP", "QNS", "SSH", "VEA",
+    "VEF", "VGI", "VGR", "VSF", "VNZ"
+]
+
+# Phân loại 3 nhóm ngành chủ chốt
+TECH_SECTOR = {"FPT", "CMG", "CTR", "DGW", "VTP", "VGI", "FOX"}
+FINANCE_SECTOR = {
+    "ACB", "BID", "CTG", "EIB", "HDB", "LPB", "MBB", "MSB", "NAB", "OCB", 
+    "SHB", "SSB", "STB", "TCB", "TPB", "VCB", "VIB", "VPB", "SHS", "SSI", 
+    "VCI", "HCM", "VND", "VIX", "FTS", "BSI", "CTS", "MBS", "BVS", "PSI", 
+    "VFS", "EVF", "BVH", "DSE", "BSR"
+]
+
+def classify_sector(symbol):
+    if symbol in TECH_SECTOR:
+        return 'Công nghệ'
+    elif symbol in FINANCE_SECTOR:
+        return 'Tài chính'
+    else:
+        return 'Sản xuất và công nghiệp'
+
+FINEX_UNIVERSE = []
+for s in HOSE_LIST:
+    FINEX_UNIVERSE.append((s, 'HOSE', classify_sector(s)))
+for s in HNX_LIST:
+    FINEX_UNIVERSE.append((s, 'HNX', classify_sector(s)))
+for s in UPCOM_LIST:
+    FINEX_UNIVERSE.append((s, 'UPCoM', classify_sector(s)))
+
+# --- 2. TỪ ĐIỂN VIỆT HÓA ĐẦY ĐỦ TOÀN BỘ CHỈ TIÊU QUAN TRỌNG & SỐ LƯỢNG CỔ PHIẾU ---
 TRANSLATION_MAP = {
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -149,7 +69,7 @@ TRANSLATION_MAP = {
     'Market_Data': 'Dữ liệu thị trường',
     'Dividend_Data': 'Lịch sử cổ tức',
     
-    # --- 1. BÁO CÁO KẾT QUẢ KINH DOANH ---
+    # Kết quả kinh doanh cốt lõi
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu hoạt động',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -171,9 +91,8 @@ TRANSLATION_MAP = {
     'Research And Development': 'Chi phí nghiên cứu và phát triển',
     'Net Income Common Stockholders': 'Lợi nhuận phân bổ cho cổ đông phổ thông',
     'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
-    'Other Operating Expenses': 'Chi phí hoạt động khác',
 
-    # --- 2. BẢNG CÂN ĐỐI KẾ TOÁN ---
+    # Bảng cân đối kế toán & Số lượng cổ phiếu chi tiết
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Total Non Current Assets': 'Tài sản dài hạn',
@@ -200,10 +119,15 @@ TRANSLATION_MAP = {
     'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình',
     'Payables': 'Các khoản phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
+    
+    # Số lượng cổ phiếu quan trọng
     'Ordinary Shares Number': 'Số lượng cổ phiếu lưu hành',
     'Share Issued': 'Số lượng cổ phiếu phát hành',
+    'Ordinary Shares': 'Cổ phiếu phổ thông (Số lượng)',
+    'Diluted Average Shares': 'Cổ phiếu bình quân suy giảm',
+    'Basic Average Shares': 'Cổ phiếu bình quân cơ bản',
 
-    # --- 3. BÁO CÁO LƯU CHUYỂN TIỀN TỆ ---
+    # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
@@ -213,35 +137,34 @@ TRANSLATION_MAP = {
     'Issuance Of Debt': 'Phát hành thêm nợ vay',
     'Cash Dividends Paid': 'Cổ tức đã trả bằng tiền',
 
-    # --- DỮ LIỆU THỊ TRƯỜNG & CỔ TỨC ---
+    # Thị trường & Cổ tức
     'Close Price': 'Giá đóng cửa',
     'Volume': 'Khối lượng giao dịch',
     'Dividend Payout': 'Cổ tức tiền mặt'
 }
 
 def translate_metric(metric_name):
-    """Lọc sạch tuyệt đối: Chỉ nhận các chỉ tiêu có trong từ điển tiếng Việt chuẩn xác"""
     return TRANSLATION_MAP.get(metric_name, None)
 
 def main():
-    print(f"🚀 [FINEX Engine] Bắt đầu cào toàn bộ 3 bảng báo cáo và dữ liệu thị trường cho {len(FINEX_UNIVERSE)} mã doanh nghiệp...")
+    print(f"🚀 [FINEX Engine] Bắt đầu cào toàn diện 3 sàn kèm số lượng cổ phiếu cho {len(FINEX_UNIVERSE)} mã...")
     
     all_data = []
     current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     current_calendar_year = datetime.now().year
     
-    for symbol, chi_so, nhom_nganh in FINEX_UNIVERSE:
-        print(f"🔄 Đang xử lý: [{chi_so}] {symbol} ({nhom_nganh})...")
+    for symbol, san_gd, nhom_nganh in FINEX_UNIVERSE:
+        print(f"🔄 Đang xử lý [{san_gd}] {symbol} - Nhóm: {nhom_nganh}...")
         try:
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # 1. Dữ liệu thị trường (Giá & Khối lượng hiện tại)
+            # 1. Dữ liệu thị trường (Giá & Khối lượng)
             hist = ticker.history(period="1d")
             if not hist.empty:
                 latest = hist.iloc[-1]
                 all_data.append({
                     'ma_chung_khoan': symbol,
-                    'chi_so': chi_so,
+                    'san_giao_dich': san_gd,
                     'nhom_nganh_finex': nhom_nganh,
                     'statement_type': TRANSLATION_MAP['Market_Data'],
                     'nam': str(current_calendar_year),
@@ -252,7 +175,7 @@ def main():
                 })
                 all_data.append({
                     'ma_chung_khoan': symbol,
-                    'chi_so': chi_so,
+                    'san_giao_dich': san_gd,
                     'nhom_nganh_finex': nhom_nganh,
                     'statement_type': TRANSLATION_MAP['Market_Data'],
                     'nam': str(current_calendar_year),
@@ -262,7 +185,7 @@ def main():
                     'scrape_time': current_time
                 })
 
-            # 2. Lịch sử cổ tức (Lấy toàn bộ lịch sử có sẵn)
+            # 2. Cổ tức
             dividends = ticker.dividends
             if dividends is not None and not dividends.empty:
                 for date_idx, div_val in dividends.items():
@@ -271,7 +194,7 @@ def main():
                         year_val = date_str.split('-')[0]
                         all_data.append({
                             'ma_chung_khoan': symbol,
-                            'chi_so': chi_so,
+                            'san_giao_dich': san_gd,
                             'nhom_nganh_finex': nhom_nganh,
                             'statement_type': TRANSLATION_MAP['Dividend_Data'],
                             'nam': year_val,
@@ -281,7 +204,7 @@ def main():
                             'scrape_time': current_time
                         })
 
-            # 3. Thu thập toàn bộ 3 Báo cáo tài chính (KQKD, Cân đối kế toán, Lưu chuyển tiền tệ)
+            # 3. 3 Báo cáo tài chính (KQKD, Cân đối kế toán, Lưu chuyển tiền tệ)
             statements = {
                 'Income_Statement': ticker.financials,
                 'Balance_Sheet': ticker.balance_sheet,
@@ -302,7 +225,7 @@ def main():
                                 if clean_metric is not None:
                                     all_data.append({
                                         'ma_chung_khoan': symbol,
-                                        'chi_so': chi_so,
+                                        'san_giao_dich': san_gd,
                                         'nhom_nganh_finex': nhom_nganh,
                                         'statement_type': vn_stmt_name,
                                         'nam': year_val,
@@ -312,25 +235,32 @@ def main():
                                         'scrape_time': current_time
                                     })
                                     
-            time.sleep(0.3)
+            time.sleep(0.2)
         except Exception as e:
             print(f"⚠️ Cảnh báo mã {symbol}: {e}")
             
     if all_data:
         df_final = pd.DataFrame(all_data)
         
-        # Sắp xếp cấu trúc cột chuẩn mực, trực quan, đúng hàng đúng lối
         df_final = df_final[[
-            'ma_chung_khoan', 'chi_so', 'nhom_nganh_finex', 
+            'ma_chung_khoan', 'san_giao_dich', 'nhom_nganh_finex', 
             'statement_type', 'nam', 'period_date', 'metric', 'value', 'scrape_time'
         ]]
         
-        # Sắp xếp thứ tự dòng theo Mã -> Năm (mới nhất đến cũ nhất) -> Loại báo cáo
         df_final = df_final.sort_values(by=['ma_chung_khoan', 'nam', 'statement_type'], ascending=[True, False, True])
         
-        file_path = 'vietnam_financial_statements.csv'
-        df_final.to_csv(file_path, index=False)
-        print(f"✅ Hoàn tất toàn bộ! Đã lưu {len(df_final)} bản ghi sạch chuẩn tiếng Việt vào '{file_path}'.")
+        # 1. CSV
+        csv_path = 'vietnam_financial_statements.csv'
+        df_final.to_csv(csv_path, index=False)
+        print(f"✅ Đã xuất CSV: {len(df_final)} bản ghi.")
+        
+        # 2. SQLite
+        db_path = 'vietnam_stock_database.db'
+        conn = sqlite3.connect(db_path)
+        df_final.to_sql('financial_statements', conn, if_exists='replace', index=False)
+        conn.close()
+        print(f"✅ Đã lưu SQLite Database '{db_path}' thành công!")
+        
     else:
         print("⚠️ Không thu thập được dữ liệu.")
 
