@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import time
 from datetime import datetime
 import pandas as pd
@@ -42,7 +41,6 @@ def get_sector(symbol):
 
 # Từ điển Việt hóa toàn diện chỉ tiêu tài chính
 TRANSLATION_MAP = {
-    # Cân đối kế toán
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
@@ -58,8 +56,6 @@ TRANSLATION_MAP = {
     'Stockholders Equity': 'Vốn chủ sở hữu',
     'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối',
     'Total Capitalization': 'Tổng nguồn vốn',
-
-    # Kết quả kinh doanh
     'Total Revenue': 'Tổng doanh thu',
     'Cost Of Revenue': 'Giá vốn hàng bán',
     'Gross Profit': 'Lợi nhuận gộp',
@@ -70,8 +66,6 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Tax Provision': 'Chi phí thuế TNDN',
     'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
-
-    # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
@@ -82,7 +76,6 @@ TRANSLATION_MAP = {
 }
 
 def safe_float_convert(val):
-    """Hàm chuyển đổi giá trị số an toàn tuyệt đối, chống lỗi crash pipeline."""
     try:
         if pd.isna(val):
             return 0.0
@@ -91,7 +84,6 @@ def safe_float_convert(val):
         return 0.0
 
 def process_statement_df(symbol, df_annual, df_quarterly):
-    """Vét cạn toàn diện cả Năm (Annual) và Quý (Quarterly), đầy đủ mọi chỉ tiêu không sót dòng nào."""
     records = []
     sector_name = get_sector(symbol)
     
@@ -120,11 +112,11 @@ def process_statement_df(symbol, df_annual, df_quarterly):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu cào vét triệt để (Năm + Quý) & phân loại 3 nhóm ngành cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline] Bắt đầu cào vét triệt để xuất 3 file CSV cho {len(ALL_TARGET_STOCKS)} mã...")
     
-    bs_records = []  # Bảng 1: Cân đối kế toán
-    is_records = []  # Bảng 2: Kết quả kinh doanh
-    cf_records = []  # Bảng 3: Lưu chuyển tiền tệ
+    bs_records = []
+    is_records = []
+    cf_records = []
     
     success_count = 0
     fail_count = 0
@@ -134,23 +126,19 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý [{get_sector(symbol)}] - {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # Vét cả bản Annual và Quarterly cho 3 bảng
             bs_annual = getattr(ticker, 'balance_sheet', None)
             bs_quarterly = getattr(ticker, 'quarterly_balance_sheet', None)
-            
             is_annual = getattr(ticker, 'financials', None)
             is_quarterly = getattr(ticker, 'quarterly_financials', None)
-            
             cf_annual = getattr(ticker, 'cashflow', None)
             cf_quarterly = getattr(ticker, 'quarterly_cashflow', None)
             
-            # Gom dữ liệu vào từng danh sách tương ứng
             bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly))
             is_records.extend(process_statement_df(symbol, is_annual, is_quarterly))
             cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly))
             
             success_count += 1
-            time.sleep(0.15)  # Giãn cách chống rate-limit
+            time.sleep(0.15)
             
         except Exception as e:
             fail_count += 1
@@ -162,27 +150,23 @@ def main():
     df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
     df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
 
-    # --- 1. LƯU TRỮ VÀO SQLITE DATABASE ---
-    db_path = 'vietnam_stock_database.db'
-    conn = sqlite3.connect(db_path)
-    
-    df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
-    df_is.to_sql('ket_qua_kinh_doanh', conn, if_exists='replace', index=False)
-    df_cf.to_sql('luu_chuyen_tien_te', conn, if_exists='replace', index=False)
-    
-    conn.close()
+    # --- CHỈ XUẤT RA 3 FILE CSV RIÊNG BIỆT ---
+    csv_bs = 'can_doi_ke_toan.csv'
+    csv_is = 'ket_qua_kinh_doanh.csv'
+    csv_cf = 'luu_chuyen_tien_te.csv'
 
-    # --- 2. XUẤT RA CÁC FILE CSV ĐỂ KIỂM TRA TRỰC TIẾP ---
-    df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
-    df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
-    df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
-    
+    df_bs.to_csv(csv_bs, index=False, encoding='utf-8-sig')
+    df_is.to_csv(csv_is, index=False, encoding='utf-8-sig')
+    df_cf.to_csv(csv_cf, index=False, encoding='utf-8-sig')
+
+    print(f"📁 Đã xuất thành công 3 file CSV tại:")
+    print(f" - {os.path.abspath(csv_bs)} ({len(df_bs)} dòng)")
+    print(f" - {os.path.abspath(csv_is)} ({len(df_is)} dòng)")
+    print(f" - {os.path.abspath(csv_cf)} ({len(df_cf)} dòng)")
+
     print(f"==================================================")
-    print(f" ✅ CÀO, TÁCH 3 BẢNG & XUẤT FILE CSV THÀNH CÔNG (Exit Code 0)")
+    print(f" ✅ HOÀN TẤT XUẤT 3 FILE CSV (Exit Code 0)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - [can_doi_ke_toan]: {len(df_bs)} dòng -> Đã lưu SQLite & can_doi_ke_toan.csv")
-    print(f" - [ket_qua_kinh_doanh]: {len(df_is)} dòng -> Đã lưu SQLite & ket_qua_kinh_doanh.csv")
-    print(f" - [luu_chuyen_tien_te]: {len(df_cf)} dòng -> Đã lưu SQLite & luu_chuyen_tien_te.csv")
     print(f"==================================================")
     
     import sys
