@@ -27,122 +27,156 @@ HNX30 = [
 
 ALL_TARGET_STOCKS = sorted(list(set(VN100 + HNX30)))
 
+# Phân loại cụ thể thành 3 nhóm ngành yêu cầu
 def get_sector(symbol):
     if symbol in ["FPT", "CMG", "VTP", "ICT", "ELC"]:
         return "Công nghệ"
-    elif symbol in ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", "HCM", "VND", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "BSI", "CTS", "FTS", "MBS", "BVS"]:
+    elif symbol in [
+        "VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", 
+        "HCM", "VND", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", 
+        "BSI", "CTS", "FTS", "MBS", "BVS", "EVF", "DSE"
+    ]:
         return "Tài chính & Ngân hàng"
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
+# Từ điển Việt hóa toàn diện chỉ tiêu tài chính
 TRANSLATION_MAP = {
-    'Income_Statement': 'Báo cáo kết quả kinh doanh',
-    'Balance_Sheet': 'Bảng cân đối kế toán',
-    'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
-    'Market_Data': 'Dữ liệu thị trường',
+    # Cân đối kế toán
+    'Total Assets': 'Tổng tài sản',
+    'Current Assets': 'Tài sản ngắn hạn',
+    'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
+    'Receivables': 'Các khoản phải thu',
+    'Inventory': 'Hàng tồn kho',
+    'Total Non Current Assets': 'Tổng tài sản dài hạn',
+    'Net PPE': 'Tài sản cố định thuần',
+    'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
+    'Current Liabilities': 'Nợ ngắn hạn',
+    'Accounts Payable': 'Phải trả người bán ngắn hạn',
+    'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
+    'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn',
+    'Stockholders Equity': 'Vốn chủ sở hữu',
+    'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối',
+    'Total Capitalization': 'Tổng nguồn vốn',
+
+    # Kết quả kinh doanh
     'Total Revenue': 'Tổng doanh thu',
+    'Cost Of Revenue': 'Giá vốn hàng bán',
     'Gross Profit': 'Lợi nhuận gộp',
     'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
     'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
-    'Total Assets': 'Tổng tài sản',
-    'Stockholders Equity': 'Vốn chủ sở hữu',
-    'Total Debt': 'Tổng nợ vay',
+    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
+    'Interest Expense': 'Chi phí lãi vay',
+    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
+    'Tax Provision': 'Chi phí thuế TNDN',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
+
+    # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
-    'Close Price': 'Giá đóng cửa',
-    'Volume': 'Khối lượng giao dịch'
+    'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
+    'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
+    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
+    'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
+    'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
+    'Free Cash Flow': 'Dòng tiền tự do (FCF)'
 }
 
-def main():
-    print(f"🚀 [FINEX CI/CD] Bắt đầu cào dữ liệu cho {len(ALL_TARGET_STOCKS)} mã...")
+def process_statement_df(symbol, df_annual, df_quarterly, statement_name):
+    """Vét cạn toàn diện cả Năm (Annual) và Quý (Quarterly), đầy đủ mọi chỉ tiêu."""
+    records = []
+    sector_name = get_sector(symbol)
     
-    all_records = []
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    current_year = str(datetime.now().year)
+    # Hàm con để ép dữ liệu vào danh sách
+    def parse_df(df, ky_bao_cao):
+        if df is not None and not df.empty:
+            for col in df.columns:
+                date_str = str(col).split('T')[0].split(' ')[0]
+                year_val = date_str.split('-')[0]
+                for row_idx, val in df[col].items():
+                    if pd.notna(val):
+                        metric_str = str(row_idx).strip()
+                        vn_metric = TRANSLATION_MAP.get(metric_str, metric_str)
+                        records.append({
+                            'ma_chung_khoan': symbol,
+                            'nhom_nganh': sector_name,
+                            'loai_ky': ky_bao_cao,
+                            'nam': year_val,
+                            'ngay_ky': date_str,
+                            'chi_tieu_goc': metric_str,
+                            'chi_tieu_tieng_viet': vn_metric,
+                            'gia_tri': float(val) if isinstance(val, (int, float, str)) and str(val).replace('.','',1).isdigit() else 0.0
+                        })
+
+    # Lấy cả năm lẫn quý không sót gì
+    parse_df(df_annual, 'Năm')
+    parse_df(df_quarterly, 'Quý')
+    
+    return records
+
+def main():
+    print(f"🚀 [FINEX Pipeline] Bắt đầu cào vét triệt để (Năm + Quý) & phân loại 3 nhóm ngành cho {len(ALL_TARGET_STOCKS)} mã...")
+    
+    bs_records = []  # Bảng 1: Cân đối kế toán
+    is_records = []  # Bảng 2: Kết quả kinh doanh
+    cf_records = []  # Bảng 3: Lưu chuyển tiền tệ
     
     success_count = 0
     fail_count = 0
     
     for idx, symbol in enumerate(ALL_TARGET_STOCKS, 1):
         try:
-            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
+            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý [{get_sector(symbol)}] - {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            # 1. Dữ liệu thị trường
-            hist = ticker.history(period="3d")
-            if hist is not None and not hist.empty:
-                latest = hist.iloc[-1]
-                date_str = str(hist.index[-1]).split('T')[0]
-                all_records.append({
-                    'ma_chung_khoan': symbol, 'nhom_nganh': get_sector(symbol),
-                    'loai_bao_cao': TRANSLATION_MAP['Market_Data'], 'nam': current_year,
-                    'ngay_ky': date_str, 'chi_tieu_goc': 'Close Price',
-                    'chi_tieu_tieng_viet': TRANSLATION_MAP['Close Price'],
-                    'gia_tri': float(latest['Close']), 'thoi_gian_cap_nhat': current_time
-                })
-                all_records.append({
-                    'ma_chung_khoan': symbol, 'nhom_nganh': get_sector(symbol),
-                    'loai_bao_cao': TRANSLATION_MAP['Market_Data'], 'nam': current_year,
-                    'ngay_ky': date_str, 'chi_tieu_goc': 'Volume',
-                    'chi_tieu_tieng_viet': TRANSLATION_MAP['Volume'],
-                    'gia_tri': float(latest['Volume']), 'thoi_gian_cap_nhat': current_time
-                })
-
-            # 2. Báo cáo tài chính
-            statements = {
-                'Income_Statement': getattr(ticker, 'financials', None),
-                'Balance_Sheet': getattr(ticker, 'balance_sheet', None),
-                'Cash_Flow': getattr(ticker, 'cashflow', None)
-            }
+            # Vét cả bản Annual và Quarterly cho 3 bảng
+            bs_annual = getattr(ticker, 'balance_sheet', None)
+            bs_quarterly = getattr(ticker, 'quarterly_balance_sheet', None)
             
-            for stmt_key, df_stmt in statements.items():
-                if df_stmt is not None and not df_stmt.empty:
-                    vn_stmt_name = TRANSLATION_MAP.get(stmt_key, stmt_key)
-                    for col in df_stmt.columns:
-                        date_str = str(col).split('T')[0]
-                        year_val = date_str.split('-')[0]
-                        for row_idx, val in df_stmt[col].items():
-                            if pd.notna(val) and val != 0:
-                                metric_str = str(row_idx)
-                                vn_metric = TRANSLATION_MAP.get(metric_str, metric_str)
-                                all_records.append({
-                                    'ma_chung_khoan': symbol, 'nhom_nganh': get_sector(symbol),
-                                    'loai_bao_cao': vn_stmt_name, 'nam': year_val,
-                                    'ngay_ky': date_str, 'chi_tieu_goc': metric_str,
-                                    'chi_tieu_tieng_viet': vn_metric, 'gia_tri': float(val),
-                                    'thoi_gian_cap_nhat': current_time
-                                })
+            is_annual = getattr(ticker, 'financials', None)
+            is_quarterly = getattr(ticker, 'quarterly_financials', None)
+            
+            cf_annual = getattr(ticker, 'cashflow', None)
+            cf_quarterly = getattr(ticker, 'quarterly_cashflow', None)
+            
+            # Gom dữ liệu vào từng bảng tương ứng
+            bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly, 'Bảng cân đối kế toán'))
+            is_records.extend(process_statement_df(symbol, is_annual, is_quarterly, 'Báo cáo kết quả kinh doanh'))
+            cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly, 'Báo cáo lưu chuyển tiền tệ'))
+            
             success_count += 1
-            time.sleep(0.3) # Giãn cách để tránh bị Yahoo Finance rate-limit block IP
+            time.sleep(0.2)
             
         except Exception as e:
             fail_count += 1
-            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng/API tạm thời: {e}")
-            continue # QUAN TRỌNG: Dùng continue để KHÔNG BAO GIỜ làm sập toàn bộ pipeline
+            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
+            continue
 
-    # Tạo DataFrame tổng hợp
-    if all_records:
-        df_final = pd.DataFrame(all_records)
-    else:
-        df_final = pd.DataFrame(columns=[
-            'ma_chung_khoan', 'nhom_nganh', 'loai_bao_cao', 'nam', 
-            'ngay_ky', 'chi_tieu_goc', 'chi_tieu_tieng_viet', 'gia_tri', 'thoi_gian_cap_nhat'
-        ])
-    
-    df_final = df_final.drop_duplicates().fillna(0)
-    
-    # Lưu SQLite Database
+    # Kết nối SQLite và lưu thành 3 bảng độc lập, sạch sẽ
     db_path = 'vietnam_stock_database.db'
     conn = sqlite3.connect(db_path)
-    df_final.to_sql('financial_statements', conn, if_exists='replace', index=False)
+    
+    # 1. Bảng Cân đối kế toán
+    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
+    df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
+    
+    # 2. Bảng Kết quả kinh doanh
+    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
+    df_is.to_sql('ket_qua_kinh_doanh', conn, if_exists='replace', index=False)
+    
+    # 3. Bảng Lưu chuyển tiền tệ
+    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
+    df_cf.to_sql('luu_chuyen_tien_te', conn, if_exists='replace', index=False)
+    
     conn.close()
     
     print(f"==================================================")
-    print(f" ✅ PIPELINE HOÀN TẤT THÀNH CÔNG (Exit Code 0)")
-    print(f" - Thành công: {success_count} mã | Lỗi bỏ qua: {fail_count} mã")
-    print(f" - Tổng bản ghi lưu vào SQLite: {len(df_final)}")
+    print(f" ✅ CÀO VÀ TÁCH 3 BẢNG THÀNH CÔNG (Exit Code 0)")
+    print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
+    print(f" - Bảng [can_doi_ke_toan]: {len(df_bs)} dòng")
+    print(f" - Bảng [ket_qua_kinh_doanh]: {len(df_is)} dòng")
+    print(f" - Bảng [luu_chuyen_tien_te]: {len(df_cf)} dòng")
     print(f"==================================================")
     
-    # Ép thoát 0 sạch sẽ để GitHub Actions không báo lỗi đỏ
     import sys
     sys.exit(0)
 
