@@ -28,7 +28,7 @@ HNX30 = [
 
 ALL_TARGET_STOCKS = sorted(list(set(VN100 + HNX30)))
 
-# Thiết lập Session giả lập trình duyệt để chống chặn kết nối trên GitHub Actions
+# Thiết lập Session giả lập trình duyệt chống chặn kết nối
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -147,7 +147,6 @@ def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
                 for row_idx, val in df[col].items():
                     if pd.notna(val):
                         metric_original = str(row_idx).strip()
-                        # Dịch hoàn toàn sang tiếng Việt, nếu không có trong từ điển thì giữ nguyên bản gốc
                         metric_vn = TRANSLATION_MAP.get(metric_original, metric_original)
                         records.append({
                             'ma_chung_khoan': symbol,
@@ -165,7 +164,7 @@ def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu vét cạn 100% (BCTC + Cổ tức + Khối lượng cổ phiếu) cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline] Bắt đầu vét cạn dữ liệu (BCTC + Cổ tức + Thông tin) cho {len(ALL_TARGET_STOCKS)} mã...")
     
     bs_records = []
     is_records = []
@@ -181,15 +180,15 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            # 1. Báo cáo tài chính (Năm + Quý) - Vét sạch mọi chỉ tiêu
-            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
-            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
+            # 1. Báo cáo tài chính (Năm + Quý)
+            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Bảng cân đối kế toán', 'Năm'))
+            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Bảng cân đối kế toán', 'Quý'))
             
-            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
-            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
+            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Báo cáo kết quả kinh doanh', 'Năm'))
+            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Báo cáo kết quả kinh doanh', 'Quý'))
             
-            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
-            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
+            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
+            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
             
             # 2. Cổ tức
             try:
@@ -206,7 +205,7 @@ def main():
             except Exception:
                 pass
 
-            # 3. Khối lượng cổ phiếu lưu hành & thông tin cấu trúc
+            # 3. Thông tin cổ phiếu
             try:
                 info = ticker.info
                 if info:
@@ -232,14 +231,14 @@ def main():
             print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    # Chuyển đổi sang DataFrame
+    # Chuyển đổi sang DataFrame và loại bỏ trùng lặp
     df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
     df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
     df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
     df_div = pd.DataFrame(div_records).drop_duplicates() if div_records else pd.DataFrame()
     df_info = pd.DataFrame(info_records).drop_duplicates() if info_records else pd.DataFrame()
 
-    # --- 1. LƯU ĐỒNG THỜI VÀO SQLITE DATABASE (Khắc phục triệt để lỗi thiếu file .db trên GitHub Actions) ---
+    # --- 1. LƯU VÀO SQLITE DATABASE ---
     db_path = 'vietnam_stock_database.db'
     conn = sqlite3.connect(db_path)
     df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
@@ -256,6 +255,7 @@ def main():
     df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
     df_div.to_csv('co_tuc.csv', index=False, encoding='utf-8-sig')
     df_info.to_csv('thong_tin_co_phieu.csv', index=False, encoding='utf-8-sig')
+    print("📂 Đã xuất toàn bộ dữ liệu ra các file CSV (hỗ trợ hiển thị tiếng Việt UTF-8-SIG).")
 
     print(f"==================================================")
     print(f" ✅ HOÀN TẤT VÉT CẠN & VIỆT HÓA 100% (Exit Code 0)")
@@ -266,9 +266,6 @@ def main():
     print(f" - [co_tuc]: {len(df_div)} dòng")
     print(f" - [thong_tin_co_phieu]: {len(df_info)} dòng")
     print(f"==================================================")
-    
-    import sys
-    sys.exit(0)
 
 if __name__ == "__main__":
     main()
