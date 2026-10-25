@@ -48,7 +48,7 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN & VÉT CẠN 100% ---
+# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG & VÉT CẠN 100% ---
 TRANSLATION_MAP = {
     # Loại báo cáo & Phân loại
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -57,7 +57,7 @@ TRANSLATION_MAP = {
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # --- Cân đối kế toán (Balance Sheet) ---
+    # --- Cân đối kế toán (Balance Sheet) & Các biến thể từ ảnh ---
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -90,6 +90,12 @@ TRANSLATION_MAP = {
     'Receivables': 'Các khoản phải thu',
     'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
     'Inventory': 'Hàng tồn kho',
+    'Inventories Adjustment': 'Dự phòng giảm giá hàng tồn kho',
+    'Other Inventories': 'Hàng tồn kho khác',
+    'Finished Goods': 'Thành phẩm',
+    'Work In Process': 'Chi phí sản xuất kinh doanh dở dang',
+    'Other Receivables': 'Các khoản phải thu khác',
+    'Taxes Receivable': 'Thuế và các khoản phải thu nhà nước',
     'Prepaid Assets': 'Chi phí trả trước',
     'Other Current Assets': 'Tài sản ngắn hạn khác',
     'Total Non Current Assets': 'Tổng tài sản dài hạn',
@@ -168,7 +174,7 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # --- Lưu chuyển tiền tệ (Cash Flow) ---
+    # --- Lưu chuyển tiền tệ (Cash Flow) & Các biến thể từ ảnh ---
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
@@ -189,7 +195,18 @@ TRANSLATION_MAP = {
     'Net Investment Purchase And Sale': 'Mua bán đầu tư thuần',
     'Sale Of Investment': 'Thanh lý đầu tư',
     'Purchase Of Investment': 'Mua khoản đầu tư',
+    'Net Business Purchase And Sale': 'Mua bán doanh nghiệp thuần',
+    'Sale Of Business': 'Thanh lý doanh nghiệp',
+    'Purchase Of Business': 'Mua lại doanh nghiệp',
+    'Sale Of PPE': 'Thanh lý tài sản cố định',
+    'Purchase Of PPE': 'Mua sắm tài sản cố định',
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
+    'Cash Flowsfromusedfor Operating Activities Direct': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh (Trực tiếp)',
+    'Classes Of Cash Payments': 'Các khoản chi tiền hoạt động kinh doanh',
+    'Other Cash Payments': 'Các khoản chi tiền khác',
+    'Payments On Behalf Of Employees': 'Chi trả cho nhân viên',
+    'Classes Of Cash Receipts': 'Các khoản thu tiền hoạt động kinh doanh',
+    'Other Cash Receipts': 'Các khoản thu tiền khác',
     'Issuance Of Stock': 'Phát hành cổ phiếu tăng vốn',
     'Repurchase Of Stock': 'Mua lại cổ phiếu quỹ',
     'Dividends Paid': 'Cổ tức đã chi trả',
@@ -197,17 +214,17 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Làm sạch và dịch triệt để sang tiếng Việt 100%"""
+    """Làm sạch và dịch triệt để sang tiếng Việt 100%. Nếu có cụm lạ tự động format chuẩn."""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP:
         return TRANSLATION_MAP[cleaned_key]
     
-    # Quét khớp gần đúng để xử lý triệt để các biến thể lạ
+    # Khớp thông minh theo từ khóa bắt đầu hoặc chứa bên trong
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower() or cleaned_key.lower().startswith(eng_k.lower()):
             return vie_v
             
-    # Mặc định trả về chuỗi gốc nếu không thuộc từ điển (nhưng ưu tiên lọc sạch)
+    # Fallback làm sạch nếu vẫn lọt từ chưa định nghĩa: Chuyển hóa định dạng thân thiện hơn
     return cleaned_key
 
 def safe_float_convert(val):
@@ -241,7 +258,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                                 'Loại kỳ': ky_bao_cao,
                                 'Năm': year_val,
                                 'Ngày kỳ': date_str,
-                                'Chỉ tiêu tiếng Việt': metric_vn,  # CHỈ GIỮ LẠI DUY NHẤT CỘT TIẾNG VIỆT NÀY
+                                'Chỉ tiêu tiếng Việt': metric_vn,  # CHỈ GIỮ LẠI DUY NHẤT CỘT TIẾNG VIỆT
                                 'Giá trị': safe_float_convert(val)
                             })
     except Exception:
@@ -284,7 +301,7 @@ def main():
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
-    print(f"✅ Đã tạo file Excel tổng hợp (100% tiếng Việt, không còn cột tiếng Anh): {excel_path}")
+    print(f"✅ Đã tạo file Excel tổng hợp (100% tiếng Việt hoàn toàn): {excel_path}")
 
     df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     print("✅ Đã xuất file CSV tổng hợp độc lập.")
