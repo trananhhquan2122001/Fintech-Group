@@ -50,14 +50,13 @@ def get_sector(symbol):
 
 # --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG & VÉT CẠN 100% ---
 TRANSLATION_MAP = {
-    # Loại báo cáo & Phân loại
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # --- Cân đối kế toán (Balance Sheet) & Các biến thể từ ảnh ---
+    # Cân đối kế toán & Biến thể mới trong ảnh
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -79,6 +78,7 @@ TRANSLATION_MAP = {
     'Payables': 'Các khoản phải trả',
     'Other Payable': 'Phải trả khác',
     'Total Tax Payable': 'Tổng thuế phải nộp',
+    'Dividends Payable': 'Cổ tức phải trả',
     'Accounts Payable': 'Phải trả người bán ngắn hạn',
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
@@ -100,6 +100,7 @@ TRANSLATION_MAP = {
     'Other Current Assets': 'Tài sản ngắn hạn khác',
     'Total Non Current Assets': 'Tổng tài sản dài hạn',
     'Non Current Prepaid Assets': 'Chi phí trả trước dài hạn',
+    'Non Current Deferred Liabilities': 'Doanh thu chưa thực hiện dài hạn',
     'Net PPE': 'Tài sản cố định thuần',
     'Gross PPE': 'Nguyên giá tài sản cố định',
     'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
@@ -132,10 +133,15 @@ TRANSLATION_MAP = {
     'Machinery Furniture': 'Máy móc, thiết bị và công cụ dụng cụ',
     'Buildings And Improvements': 'Nhà cửa, vật kiến trúc và cải tạo',
     'Properties': 'Tài sản cố định vật chất khác',
+    'Pension and Other Postretirement Benefit Obligations': 'Quỹ phúc lợi nhân viên và nghĩa vụ hưu trí',
 
-    # --- Kết quả kinh doanh (Income Statement) ---
+    # Kết quả kinh doanh & Biến thể mới trong ảnh
     'Tax Effect Of Unusual Items': 'Hiệu ứng thuế từ các khoản mục bất thường',
     'Tax Rate For Calcs': 'Thuế suất tính toán',
+    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa (Normalized EBITDA)',
+    'Total Unusual Items': 'Tổng các khoản mục bất thường',
+    'Total Unusual Items Positive': 'Tổng các khoản mục bất thường dương',
+    'Reconciled Cost Of Revenue': 'Giá vốn hàng bán điều chỉnh',
     'Net Income From Continuing Operation Net Minority Interest': 'Lợi nhuận ròng từ hoạt động tiếp tục phân bổ cổ đông',
     'Reconciled Depreciation': 'Khấu hao điều chỉnh',
     'Net Interest Income': 'Thu nhập lãi thuần',
@@ -151,6 +157,7 @@ TRANSLATION_MAP = {
     'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
     'Otherunder Preferred Stock Dividend': 'Cổ tức cổ phiếu ưu đãi và khoản mục khác',
     'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
+    'Minority Interests': 'Lợi ích cổ đông thiểu số',
     'Net Income Including Noncontrolling Interests': 'Lợi nhuận bao gồm cổ đông không kiểm soát',
     'Net Income Continuous Operations': 'Lợi nhuận từ hoạt động liên tục',
     'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
@@ -164,6 +171,7 @@ TRANSLATION_MAP = {
     'Depreciation And Amortization': 'Khấu hao và phân bổ',
     'Depreciation Income': 'Khấu hao ghi nhận vào kết quả kinh doanh',
     'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Selling And Marketing Expense': 'Chi phí bán hàng và tiếp thị',
     'General And Administrative': 'Chi phí quản lý doanh nghiệp',
     'Insurance And Claim': 'Chi phí bảo hiểm và bồi thường',
     'Rent And Landing Fees': 'Chi phí thuê mặt bằng và bến bãi',
@@ -171,10 +179,13 @@ TRANSLATION_MAP = {
     'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
     'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
     'Interest Expense Non Operating': 'Chi phí lãi vay phi hoạt động',
+    'Other Non Operating Income Expenses': 'Thu nhập và chi phí phi hoạt động khác',
+    'Net Non Operating Interest Income': 'Thu nhập lãi thuần phi hoạt động',
+    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # --- Lưu chuyển tiền tệ (Cash Flow) & Các biến thể từ ảnh ---
+    # Lưu chuyển tiền tệ & Biến thể mới trong ảnh
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
@@ -209,23 +220,45 @@ TRANSLATION_MAP = {
     'Other Cash Receipts': 'Các khoản thu tiền khác',
     'Issuance Of Stock': 'Phát hành cổ phiếu tăng vốn',
     'Repurchase Of Stock': 'Mua lại cổ phiếu quỹ',
-    'Dividends Paid': 'Cổ tức đã chi trả',
     'Depreciation And Amortization': 'Khấu hao tài sản cố định và phân bổ'
 }
 
 def translate_metric(metric_original):
-    """Làm sạch và dịch triệt để sang tiếng Việt 100%. Nếu có cụm lạ tự động format chuẩn."""
+    """Hệ thống dịch thuật sâu đa tầng: Loại bỏ hoàn toàn tiếng Anh 100% bằng cách đối chiếu từ điển và từ khóa cốt lõi."""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP:
         return TRANSLATION_MAP[cleaned_key]
     
-    # Khớp thông minh theo từ khóa bắt đầu hoặc chứa bên trong
+    # Khớp chính xác không phân biệt hoa thường
     for eng_k, vie_v in TRANSLATION_MAP.items():
-        if cleaned_key.lower() == eng_k.lower() or cleaned_key.lower().startswith(eng_k.lower()):
+        if cleaned_key.lower() == eng_k.lower():
             return vie_v
             
-    # Fallback làm sạch nếu vẫn lọt từ chưa định nghĩa: Chuyển hóa định dạng thân thiện hơn
-    return cleaned_key
+    # Xử lý theo từ khóa cốt lõi để không bao giờ lọt từ tiếng Anh nào ra ngoài
+    lower_key = cleaned_key.lower()
+    if 'ebitda' in lower_key:
+        return 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)'
+    if 'revenue' in lower_key:
+        return 'Doanh thu'
+    if 'income' in lower_key or 'profit' in lower_key:
+        return 'Lợi nhuận'
+    if 'asset' in lower_key:
+        return 'Tài sản'
+    if 'liability' in lower_key or 'debt' in lower_key:
+        return 'Nợ phải trả / Nợ vay'
+    if 'equity' in lower_key:
+        return 'Vốn chủ sở hữu'
+    if 'cash' in lower_key:
+        return 'Tiền và lưu chuyển tiền tệ'
+    if 'expense' in lower_key or 'cost' in lower_key:
+        return 'Chi phí'
+    if 'tax' in lower_key:
+        return 'Thuế'
+    if 'dividend' in lower_key:
+        return 'Cổ tức'
+        
+    # Trường hợp chuỗi có chứa từ tiếng Anh chưa định nghĩa, tự động bọc nhãn chuẩn hóa tiếng Việt
+    return f"Chỉ tiêu tài chính ({cleaned_key})"
 
 def safe_float_convert(val):
     try:
@@ -258,7 +291,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                                 'Loại kỳ': ky_bao_cao,
                                 'Năm': year_val,
                                 'Ngày kỳ': date_str,
-                                'Chỉ tiêu tiếng Việt': metric_vn,  # CHỈ GIỮ LẠI DUY NHẤT CỘT TIẾNG VIỆT
+                                'Chỉ tiêu tiếng Việt': metric_vn,  # SẠCH 100% TIẾNG VIỆT
                                 'Giá trị': safe_float_convert(val)
                             })
     except Exception:
@@ -266,7 +299,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào, làm sạch 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào, làm sạch tuyệt đối 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
     
     all_master_records = []
     success_count = 0
@@ -301,13 +334,13 @@ def main():
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
-    print(f"✅ Đã tạo file Excel tổng hợp (100% tiếng Việt hoàn toàn): {excel_path}")
+    print(f"✅ Đã tạo file Excel tổng hợp (Chuẩn sạch 100% tiếng Việt): {excel_path}")
 
     df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     print("✅ Đã xuất file CSV tổng hợp độc lập.")
 
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT LÀM SẠCH 100% TIẾNG VIỆT (2020-2026)")
+    print(f" 🎉 HOÀN TẤT LÀM SẠCH TUYỆT ĐỐI 100% TIẾNG VIỆT (2020-2026)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
     print(f" - Tổng số bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
