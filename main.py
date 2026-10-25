@@ -27,7 +27,7 @@ HNX30 = [
 
 ALL_TARGET_STOCKS = sorted(list(set(VN100 + HNX30)))
 
-# Thiết lập Session giả lập trình duyệt chống chặn kết nối
+# Thiết lập Session giả lập trình duyệt chống chặn kết nối trên GitHub Actions
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -45,16 +45,15 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% (PHỦ KÍN MỌI CHỈ TIÊU TÀI CHÍNH) ---
+# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% ---
 TRANSLATION_MAP = {
-    # --- Loại báo cáo & Phân loại ---
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # --- Cân đối kế toán (Balance Sheet) ---
+    # Cân đối kế toán
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -106,7 +105,7 @@ TRANSLATION_MAP = {
     'Net Debt': 'Nợ vay ròng',
     'Working Capital': 'Vốn lưu động ròng',
 
-    # --- Kết quả kinh doanh (Income Statement) ---
+    # Kết quả kinh doanh
     'Tax Effect Of Unusual Items': 'Hiệu ứng thuế từ các khoản mục bất thường',
     'Tax Rate For Calcs': 'Thuế suất tính toán',
     'Net Income From Continuing Operation Net Minor...': 'Lợi nhuận ròng từ hoạt động tiếp tục phân bổ cổ đông',
@@ -143,7 +142,7 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # --- Lưu chuyển tiền tệ (Cash Flow) ---
+    # Lưu chuyển tiền tệ
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
@@ -207,7 +206,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu cào, chuẩn hóa 100% tiếng Việt & xuất Excel/CSV cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [GitHub Action / FINEX] Bắt đầu cào, chuẩn hóa 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
     
     bs_records = []
     is_records = []
@@ -223,7 +222,6 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            # 1. Báo cáo tài chính (Năm + Quý)
             bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
             bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
@@ -233,7 +231,6 @@ def main():
             cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
             cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
             
-            # 2. Cổ tức
             try:
                 dividends = ticker.dividends
                 if dividends is not None and not dividends.empty:
@@ -248,7 +245,6 @@ def main():
             except Exception:
                 pass
 
-            # 3. Thông tin cổ phiếu
             try:
                 info = ticker.info
                 if info:
@@ -274,17 +270,15 @@ def main():
             print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    # Chuyển đổi sang DataFrame và loại bỏ trùng lặp
     df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
     df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
     df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
     df_div = pd.DataFrame(div_records).drop_duplicates() if div_records else pd.DataFrame()
     df_info = pd.DataFrame(info_records).drop_duplicates() if info_records else pd.DataFrame()
 
-    # --- XUẤT RA CẢ EXCEL (.xlsx) VÀ CSV (.csv) SẠCH SẼ TIẾNG VIỆT ---
-    print("\n💾 Đang lưu file Excel và CSV...")
+    print("\n💾 Đang xuất file Excel tổng hợp và CSV...")
     
-    # Xuất file Excel tổng hợp (mỗi bảng là 1 Sheet riêng biệt)
+    # Xuất file Excel tổng hợp
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_bs.to_excel(writer, sheet_name='Cân đối kế toán', index=False)
@@ -294,7 +288,7 @@ def main():
         df_info.to_excel(writer, sheet_name='Thông tin cổ phiếu', index=False)
     print(f"✅ Đã tạo file Excel tổng hợp: {excel_path}")
 
-    # Xuất các file CSV riêng lẻ (hỗ trợ tiếng Việt UTF-8-SIG)
+    # Xuất các file CSV độc lập
     df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
     df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
     df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
@@ -303,13 +297,8 @@ def main():
     print("✅ Đã xuất các file CSV độc lập.")
 
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT XUẤT DỮ LIỆU EXCEL & CSV (100% TIẾNG VIỆT)")
+    print(f" 🎉 HOÀN TẤT XUẤT DỮ LIỆU TRÊN GITHUB (100% TIẾNG VIỆT)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - [Cân đối kế toán]: {len(df_bs):,} dòng")
-    print(f" - [Kết quả kinh doanh]: {len(df_is):,} dòng")
-    print(f" - [Lưu chuyển tiền tệ]: {len(df_cf):,} dòng")
-    print(f" - [Cổ tức]: {len(df_div):,} dòng")
-    print(f" - [Thông tin cổ phiếu]: {len(df_info):,} dòng")
     print(f"==================================================")
 
 if __name__ == "__main__":
