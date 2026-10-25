@@ -144,43 +144,45 @@ def main():
             cf_annual = getattr(ticker, 'cashflow', None)
             cf_quarterly = getattr(ticker, 'quarterly_cashflow', None)
             
-            # Gom dữ liệu vào từng bảng tương ứng
+            # Gom dữ liệu vào từng danh sách tương ứng
             bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly))
             is_records.extend(process_statement_df(symbol, is_annual, is_quarterly))
             cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly))
             
             success_count += 1
-            time.sleep(0.15)  # Giãn cách tối ưu tránh bị Yahoo Finance rate-limit block
+            time.sleep(0.15)  # Giãn cách chống rate-limit
             
         except Exception as e:
             fail_count += 1
             print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    # Kết nối SQLite và lưu thành 3 bảng độc lập, sạch sẽ
+    # Chuyển đổi sang DataFrame
+    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
+    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
+    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
+
+    # --- 1. LƯU TRỮ VÀO SQLITE DATABASE ---
     db_path = 'vietnam_stock_database.db'
     conn = sqlite3.connect(db_path)
     
-    # 1. Bảng Cân đối kế toán
-    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
     df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
-    
-    # 2. Bảng Kết quả kinh doanh
-    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
     df_is.to_sql('ket_qua_kinh_doanh', conn, if_exists='replace', index=False)
-    
-    # 3. Bảng Lưu chuyển tiền tệ
-    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
     df_cf.to_sql('luu_chuyen_tien_te', conn, if_exists='replace', index=False)
     
     conn.close()
+
+    # --- 2. XUẤT RA CÁC FILE CSV ĐỂ KIỂM TRA TRỰC TIẾP ---
+    df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
+    df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
+    df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
     
     print(f"==================================================")
-    print(f" ✅ CÀO VÀ TÁCH 3 BẢNG THÀNH CÔNG (Exit Code 0)")
+    print(f" ✅ CÀO, TÁCH 3 BẢNG & XUẤT FILE CSV THÀNH CÔNG (Exit Code 0)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - Bảng [can_doi_ke_toan]: {len(df_bs)} dòng")
-    print(f" - Bảng [ket_qua_kinh_doanh]: {len(df_is)} dòng")
-    print(f" - Bảng [luu_chuyen_tien_te]: {len(df_cf)} dòng")
+    print(f" - [can_doi_ke_toan]: {len(df_bs)} dòng -> Đã lưu SQLite & can_doi_ke_toan.csv")
+    print(f" - [ket_qua_kinh_doanh]: {len(df_is)} dòng -> Đã lưu SQLite & ket_qua_kinh_doanh.csv")
+    print(f" - [luu_chuyen_tien_te]: {len(df_cf)} dòng -> Đã lưu SQLite & luu_chuyen_tien_te.csv")
     print(f"==================================================")
     
     import sys
