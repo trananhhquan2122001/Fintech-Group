@@ -35,13 +35,13 @@ jobs:
             echo "Error: vietnam_stock_database.xlsx file missing!"
             exit 1
           else
-            echo "Excel and CSV files generated successfully!"
+            echo "Excel and CSV datasets generated successfully!"
           fi
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add vietnam_stock_database.xlsx *.csv || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Excel & CSV datasets [skip ci]"
+          git add vietnam_stock_database.xlsx vietnam_stock_database_tong_hop.csv || true
+          git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (2020-2026) [skip ci]"
           git push || echo "No changes to push"
