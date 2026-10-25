@@ -1,4 +1,5 @@
 import os
+import sqlite3
 import time
 from datetime import datetime
 import pandas as pd
@@ -27,7 +28,7 @@ HNX30 = [
 
 ALL_TARGET_STOCKS = sorted(list(set(VN100 + HNX30)))
 
-# Cấu hình Session giả lập trình duyệt để chống chặn IP trên GitHub Actions
+# Thiết lập Session giả lập trình duyệt để chống chặn kết nối trên GitHub Actions
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
@@ -44,6 +45,88 @@ def get_sector(symbol):
         return "Tài chính & Ngân hàng"
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
+
+# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% CÁC CHỈ TIÊU TÀI CHÍNH ---
+TRANSLATION_MAP = {
+    # --- Cân đối kế toán (Balance Sheet) ---
+    'Total Assets': 'Tổng tài sản',
+    'Current Assets': 'Tài sản ngắn hạn',
+    'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
+    'Cash Cash Equivalents And Short Term Investments': 'Tiền, tương đương tiền và đầu tư ngắn hạn',
+    'Receivables': 'Các khoản phải thu',
+    'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
+    'Inventory': 'Hàng tồn kho',
+    'Prepaid Assets': 'Chi phí trả trước',
+    'Other Current Assets': 'Tài sản ngắn hạn khác',
+    'Total Non Current Assets': 'Tổng tài sản dài hạn',
+    'Net PPE': 'Tài sản cố định thuần',
+    'Gross PPE': 'Nguyên giá tài sản cố định',
+    'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
+    'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình khác',
+    'Investments And Advances': 'Đầu tư tài chính dài hạn',
+    'Long Term Equity Investment': 'Đầu tư vào công ty liên kết, liên doanh',
+    'Other Non Current Assets': 'Tài sản dài hạn khác',
+    'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
+    'Current Liabilities': 'Nợ ngắn hạn',
+    'Accounts Payable': 'Phải trả người bán ngắn hạn',
+    'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
+    'Current Deferred Liabilities': 'Doanh thu chưa thực hiện ngắn hạn',
+    'Other Current Liabilities': 'Nợ ngắn hạn khác',
+    'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn',
+    'Long Term Debt': 'Vay và nợ thuê tài chính dài hạn',
+    'Long Term Provisions': 'Dự phòng phải trả dài hạn',
+    'Other Non Current Liabilities': 'Nợ dài hạn khác',
+    'Stockholders Equity': 'Vốn chủ sở hữu',
+    'Common Stock': 'Vốn góp chủ sở hữu (Cổ phiếu phổ thông)',
+    'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối',
+    'Capital Surplus': 'Thặng dư vốn cổ phần',
+    'Other Equity Adjustments': 'Các quỹ và nguồn vốn khác',
+    'Total Capitalization': 'Tổng nguồn vốn',
+    'Total Debt': 'Tổng nợ vay',
+    'Net Debt': 'Nợ vay ròng',
+    'Working Capital': 'Vốn lưu động ròng',
+
+    # --- Kết quả kinh doanh (Income Statement) ---
+    'Total Revenue': 'Tổng doanh thu',
+    'Operating Revenue': 'Doanh thu thuần',
+    'Cost Of Revenue': 'Giá vốn hàng bán',
+    'Gross Profit': 'Lợi nhuận gộp',
+    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
+    'Operating Expense': 'Chi phí hoạt động',
+    'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Research And Development': 'Chi phí nghiên cứu và phát triển',
+    'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
+    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
+    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
+    'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
+    'Interest Expense': 'Chi phí lãi vay',
+    'Interest Expense Non Operating': 'Chi phí lãi vay phi hoạt động',
+    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
+    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
+    'Net Income From Continuing And Discontinued Operation': 'Lợi nhuận từ hoạt động tiếp tục và không tiếp tục',
+    'Normalized Income': 'Lợi nhuận chuẩn hóa',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
+    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
+    'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
+    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân suy giảm',
+    'Total Operating Expenses': 'Tổng chi phí hoạt động',
+
+    # --- Lưu chuyển tiền tệ (Cash Flow) ---
+    'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
+    'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
+    'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
+    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
+    'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
+    'Changes In Cash': 'Biến động tiền và tương đương tiền',
+    'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
+    'Free Cash Flow': 'Dòng tiền tự do (FCF)',
+    'Repayment Of Debt': 'Trả nợ gốc vay',
+    'Issuance Of Debt': 'Phát hành nợ vay',
+    'Issuance Of Stock': 'Phát hành cổ phiếu tăng vốn',
+    'Repurchase Of Stock': 'Mua lại cổ phiếu quỹ',
+    'Dividends Paid': 'Cổ tức đã chi trả',
+    'Depreciation And Amortization': 'Khấu hao tài sản cố định và phân bổ'
+}
 
 def safe_float_convert(val):
     try:
@@ -63,7 +146,9 @@ def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
                 year_val = date_str.split('-')[0]
                 for row_idx, val in df[col].items():
                     if pd.notna(val):
-                        metric_str = str(row_idx).strip()
+                        metric_original = str(row_idx).strip()
+                        # Dịch hoàn toàn sang tiếng Việt, nếu không có trong từ điển thì giữ nguyên bản gốc
+                        metric_vn = TRANSLATION_MAP.get(metric_original, metric_original)
                         records.append({
                             'ma_chung_khoan': symbol,
                             'nhom_nganh': sector_name,
@@ -71,7 +156,8 @@ def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
                             'loai_ky': ky_bao_cao,
                             'nam': year_val,
                             'ngay_ky': date_str,
-                            'chi_tieu_goc': metric_str,
+                            'chi_tieu_goc': metric_original,
+                            'chi_tieu_tieng_viet': metric_vn,
                             'gia_tri': safe_float_convert(val)
                         })
     except Exception:
@@ -79,7 +165,7 @@ def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline Robust] Bắt đầu cào vét an toàn cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline] Bắt đầu vét cạn 100% (BCTC + Cổ tức + Khối lượng cổ phiếu) cho {len(ALL_TARGET_STOCKS)} mã...")
     
     bs_records = []
     is_records = []
@@ -95,7 +181,7 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            # 1. Báo cáo tài chính (Năm + Quý)
+            # 1. Báo cáo tài chính (Năm + Quý) - Vét sạch mọi chỉ tiêu
             bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
             bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
@@ -120,7 +206,7 @@ def main():
             except Exception:
                 pass
 
-            # 3. Thông tin cổ phiếu & khối lượng
+            # 3. Khối lượng cổ phiếu lưu hành & thông tin cấu trúc
             try:
                 info = ticker.info
                 if info:
@@ -139,20 +225,32 @@ def main():
                 pass
             
             success_count += 1
-            time.sleep(0.3)  # Giãn cách an toàn tránh bị rate-limit
+            time.sleep(0.3)
             
         except Exception as e:
             fail_count += 1
-            print(f"⚠️ Bỏ qua mã {symbol} do lỗi kết nối: {e}")
+            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    # Xuất file CSV
-    df_bs = pd.DataFrame(bs_records).drop_duplicates()
-    df_is = pd.DataFrame(is_records).drop_duplicates()
-    df_cf = pd.DataFrame(cf_records).drop_duplicates()
-    df_div = pd.DataFrame(div_records).drop_duplicates()
-    df_info = pd.DataFrame(info_records).drop_duplicates()
+    # Chuyển đổi sang DataFrame
+    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
+    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
+    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
+    df_div = pd.DataFrame(div_records).drop_duplicates() if div_records else pd.DataFrame()
+    df_info = pd.DataFrame(info_records).drop_duplicates() if info_records else pd.DataFrame()
 
+    # --- 1. LƯU ĐỒNG THỜI VÀO SQLITE DATABASE (Khắc phục triệt để lỗi thiếu file .db trên GitHub Actions) ---
+    db_path = 'vietnam_stock_database.db'
+    conn = sqlite3.connect(db_path)
+    df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
+    df_is.to_sql('ket_qua_kinh_doanh', conn, if_exists='replace', index=False)
+    df_cf.to_sql('luu_chuyen_tien_te', conn, if_exists='replace', index=False)
+    df_div.to_sql('co_tuc', conn, if_exists='replace', index=False)
+    df_info.to_sql('thong_tin_co_phieu', conn, if_exists='replace', index=False)
+    conn.close()
+    print("💾 Đã tạo và lưu thành công file SQLite: vietnam_stock_database.db")
+
+    # --- 2. XUẤT RA CÁC FILE CSV ĐỂ KIỂM TRA TRỰC TIẾP ---
     df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
     df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
     df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
@@ -160,13 +258,13 @@ def main():
     df_info.to_csv('thong_tin_co_phieu.csv', index=False, encoding='utf-8-sig')
 
     print(f"==================================================")
-    print(f" ✅ HOÀN TẤT VÉT CẠN AN TOÀN (Exit Code 0)")
-    print(f" - Thành công: {success_count} mã | Lỗi/Bỏ qua: {fail_count} mã")
-    print(f" - [can_doi_ke_toan.csv]: {len(df_bs)} dòng")
-    print(f" - [ket_qua_kinh_doanh.csv]: {len(df_is)} dòng")
-    print(f" - [luu_chuyen_tien_te.csv]: {len(df_cf)} dòng")
-    print(f" - [co_tuc.csv]: {len(df_div)} dòng")
-    print(f" - [thong_tin_co_phieu.csv]: {len(df_info)} dòng")
+    print(f" ✅ HOÀN TẤT VÉT CẠN & VIỆT HÓA 100% (Exit Code 0)")
+    print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
+    print(f" - [can_doi_ke_toan]: {len(df_bs)} dòng")
+    print(f" - [ket_qua_kinh_doanh]: {len(df_is)} dòng")
+    print(f" - [luu_chuyen_tien_te]: {len(df_cf)} dòng")
+    print(f" - [co_tuc]: {len(df_div)} dòng")
+    print(f" - [thong_tin_co_phieu]: {len(df_info)} dòng")
     print(f"==================================================")
     
     import sys
