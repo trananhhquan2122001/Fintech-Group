@@ -81,12 +81,20 @@ TRANSLATION_MAP = {
     'Free Cash Flow': 'Dòng tiền tự do (FCF)'
 }
 
-def process_statement_df(symbol, df_annual, df_quarterly, statement_name):
-    """Vét cạn toàn diện cả Năm (Annual) và Quý (Quarterly), đầy đủ mọi chỉ tiêu."""
+def safe_float_convert(val):
+    """Hàm chuyển đổi giá trị số an toàn tuyệt đối, chống lỗi crash pipeline."""
+    try:
+        if pd.isna(val):
+            return 0.0
+        return float(val)
+    except (ValueError, TypeError):
+        return 0.0
+
+def process_statement_df(symbol, df_annual, df_quarterly):
+    """Vét cạn toàn diện cả Năm (Annual) và Quý (Quarterly), đầy đủ mọi chỉ tiêu không sót dòng nào."""
     records = []
     sector_name = get_sector(symbol)
     
-    # Hàm con để ép dữ liệu vào danh sách
     def parse_df(df, ky_bao_cao):
         if df is not None and not df.empty:
             for col in df.columns:
@@ -104,13 +112,11 @@ def process_statement_df(symbol, df_annual, df_quarterly, statement_name):
                             'ngay_ky': date_str,
                             'chi_tieu_goc': metric_str,
                             'chi_tieu_tieng_viet': vn_metric,
-                            'gia_tri': float(val) if isinstance(val, (int, float, str)) and str(val).replace('.','',1).isdigit() else 0.0
+                            'gia_tri': safe_float_convert(val)
                         })
 
-    # Lấy cả năm lẫn quý không sót gì
     parse_df(df_annual, 'Năm')
     parse_df(df_quarterly, 'Quý')
-    
     return records
 
 def main():
@@ -139,12 +145,12 @@ def main():
             cf_quarterly = getattr(ticker, 'quarterly_cashflow', None)
             
             # Gom dữ liệu vào từng bảng tương ứng
-            bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly, 'Bảng cân đối kế toán'))
-            is_records.extend(process_statement_df(symbol, is_annual, is_quarterly, 'Báo cáo kết quả kinh doanh'))
-            cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly, 'Báo cáo lưu chuyển tiền tệ'))
+            bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly))
+            is_records.extend(process_statement_df(symbol, is_annual, is_quarterly))
+            cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly))
             
             success_count += 1
-            time.sleep(0.2)
+            time.sleep(0.15)  # Giãn cách tối ưu tránh bị Yahoo Finance rate-limit block
             
         except Exception as e:
             fail_count += 1
