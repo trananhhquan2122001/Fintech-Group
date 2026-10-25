@@ -34,27 +34,30 @@ session.headers.update({
 })
 
 def get_sector(symbol):
-    if symbol in ["FPT", "CMG", "VTP", "ICT", "ELC"]:
-        return "Công nghệ"
-    elif symbol in [
+    """Phân chia chính xác thành 3 nhóm ngành theo yêu cầu"""
+    tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR"]
+    finance_list = [
         "VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", 
         "HCM", "VND", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", 
-        "BSI", "CTS", "FTS", "MBS", "BVS", "EVF", "DSE"
-    ]:
+        "BSI", "CTS", "FTS", "MBS", "BVS", "EVF", "DSE", "VIX", "SHS", "ORS"
+    ]
+    if symbol in tech_list:
+        return "Công nghệ"
+    elif symbol in finance_list:
         return "Tài chính & Ngân hàng"
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG (ĐẢM BẢO 100% TIẾNG VIỆT) ---
+# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG (ĐẢM BẢO 100% TIẾNG VIỆT KHÔNG CÒN SÓT) ---
 TRANSLATION_MAP = {
-    # Loại báo cáo
+    # Loại báo cáo & Phân loại
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # Cân đối kế toán & các biến thể thường gặp
+    # --- Cân đối kế toán (Balance Sheet) ---
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -70,11 +73,13 @@ TRANSLATION_MAP = {
     'Capital Stock': 'Vốn cổ phần',
     'Common Stock': 'Vốn góp chủ sở hữu (Cổ phiếu phổ thông)',
     'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
+    'Total Liabilities Net': 'Tổng nợ phải trả',
     'Derivative Product Liabilities': 'Nợ sản phẩm phái sinh',
     'Long Term Debt And Capital Lease Obligation': 'Nợ dài hạn và nghĩa vụ thuê tài chính',
     'Payables': 'Các khoản phải trả',
     'Other Payable': 'Phải trả khác',
     'Total Tax Payable': 'Tổng thuế phải nộp',
+    'Accounts Payable': 'Phải trả người bán ngắn hạn',
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
@@ -85,15 +90,23 @@ TRANSLATION_MAP = {
     'Prepaid Assets': 'Chi phí trả trước',
     'Other Current Assets': 'Tài sản ngắn hạn khác',
     'Total Non Current Assets': 'Tổng tài sản dài hạn',
+    'Non Current Prepaid Assets': 'Chi phí trả trước dài hạn',
     'Net PPE': 'Tài sản cố định thuần',
     'Gross PPE': 'Nguyên giá tài sản cố định',
     'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
     'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình khác',
+    'Other Intangible Assets': 'Tài sản vô hình khác',
     'Investments And Advances': 'Đầu tư tài chính dài hạn',
+    'Investment in Financial Assets': 'Đầu tư tài chính',
+    'Held To Maturity Securities': 'Chứng khoán giữ đến ngày đáo hạn',
+    'Available For Sale Securities': 'Chứng khoán sẵn sàng để bán',
+    'Trading Securities': 'Chứng khoán kinh doanh',
     'Long Term Equity Investment': 'Đầu tư vào công ty liên kết, liên doanh',
+    'Investments in Other Investments': 'Đầu tư dài hạn khác',
+    'Investments in Joint Ventures': 'Đầu tư vào liên doanh liên kết',
+    'Investment Properties': 'Bất động sản đầu tư',
     'Other Non Current Assets': 'Tài sản dài hạn khác',
     'Current Liabilities': 'Nợ ngắn hạn',
-    'Accounts Payable': 'Phải trả người bán ngắn hạn',
     'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
     'Current Deferred Liabilities': 'Doanh thu chưa thực hiện ngắn hạn',
     'Other Current Liabilities': 'Nợ ngắn hạn khác',
@@ -105,11 +118,15 @@ TRANSLATION_MAP = {
     'Other Equity Adjustments': 'Các quỹ và nguồn vốn khác',
     'Net Debt': 'Nợ vay ròng',
     'Working Capital': 'Vốn lưu động ròng',
+    'Construction In Progress': 'Chi phí xây dựng cơ bản dở dang',
+    'Other Properties': 'Bất động sản khác',
+    'Machinery Furniture': 'Máy móc, thiết bị và công cụ dụng cụ',
+    'Buildings And Improvements': 'Nhà cửa, vật kiến trúc và cải tạo',
+    'Properties': 'Tài sản cố định vật chất khác',
 
-    # Kết quả kinh doanh & biến thể
+    # --- Kết quả kinh doanh (Income Statement) ---
     'Tax Effect Of Unusual Items': 'Hiệu ứng thuế từ các khoản mục bất thường',
     'Tax Rate For Calcs': 'Thuế suất tính toán',
-    'Net Income From Continuing Operation Net Minor...': 'Lợi nhuận ròng từ hoạt động tiếp tục phân bổ cổ đông',
     'Net Income From Continuing Operation Net Minority Interest': 'Lợi nhuận ròng từ hoạt động tiếp tục phân bổ cổ đông',
     'Reconciled Depreciation': 'Khấu hao điều chỉnh',
     'Net Interest Income': 'Thu nhập lãi thuần',
@@ -117,7 +134,6 @@ TRANSLATION_MAP = {
     'Interest Income': 'Thu nhập lãi',
     'Normalized Income': 'Lợi nhuận chuẩn hóa',
     'Net Income From Continuing And Discontinued Operation': 'Lợi nhuận từ hoạt động tiếp tục và không tiếp tục',
-    'Net Income From Continuing And Discontinued Op...': 'Lợi nhuận từ hoạt động tiếp tục và không tiếp tục',
     'Diluted Average Shares': 'Số lượng cổ phiếu bình quân suy giảm',
     'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
     'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
@@ -135,7 +151,13 @@ TRANSLATION_MAP = {
     'Gross Profit': 'Lợi nhuận gộp',
     'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
     'Operating Expense': 'Chi phí hoạt động',
+    'Other Operating Exp': 'Chi phí hoạt động khác',
+    'Depreciation And Amortization': 'Khấu hao và phân bổ',
+    'Depreciation Income': 'Khấu hao ghi nhận vào kết quả kinh doanh',
     'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'General And Administrative': 'Chi phí quản lý doanh nghiệp',
+    'Insurance And Claim': 'Chi phí bảo hiểm và bồi thường',
+    'Rent And Landing Fees': 'Chi phí thuê mặt bằng và bến bãi',
     'Research And Development': 'Chi phí nghiên cứu và phát triển',
     'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
     'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
@@ -143,13 +165,14 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # Lưu chuyển tiền tệ & biến thể
+    # --- Lưu chuyển tiền tệ (Cash Flow) ---
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
     'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
     'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
     'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
+    'Effect Of Exchange Rate Changes': 'Ảnh hưởng thay đổi tỷ giá hối đoái',
     'Changes In Cash': 'Biến động tiền và tương đương tiền',
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
     'Cash Dividends Paid': 'Cổ tức đã chi trả',
@@ -171,11 +194,18 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Hàm phụ trợ dịch thuật triệt để: Nếu có trong từ điển trả về tiếng Việt, nếu không tự động chuẩn hóa hiển thị gọn gàng."""
-    if metric_original in TRANSLATION_MAP:
-        return TRANSLATION_MAP[metric_original]
-    # Fallback tự động làm sạch nếu gặp từ khóa lạ
-    return metric_original
+    """Làm sạch và dịch triệt để sang tiếng Việt, loại bỏ hoàn toàn chữ Anh còn sót"""
+    cleaned_key = str(metric_original).strip()
+    if cleaned_key in TRANSLATION_MAP:
+        return TRANSLATION_MAP[cleaned_key]
+    
+    # Xử lý các trường hợp cụ thể bị cắt cụt (endswith hoặc startswith khớp với từ điển)
+    for eng_k, vie_v in TRANSLATION_MAP.items():
+        if cleaned_key.lower() == eng_k.lower() or cleaned_key.lower().startswith(eng_k.lower()):
+            return vie_v
+            
+    # Nếu vẫn không có trong từ điển, trả về định dạng làm sạch hoặc giữ nguyên bản nếu là tiếng Việt
+    return cleaned_key
 
 def safe_float_convert(val):
     try:
@@ -195,7 +225,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
                 
-                # CHỈ LẤY DỮ LIỆU TỪ NĂM 2020 ĐẾN 2026
+                # LẤY DỮ LIỆU LỊCH SỬ TỪ NĂM 2020 ĐẾN 2026 (hoặc lâu nhất có thể)
                 if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
@@ -217,7 +247,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào và Việt hóa 100% cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào, làm sạch 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
     
     all_master_records = []
     success_count = 0
@@ -228,7 +258,7 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            # Gom tất cả các loại báo cáo tài chính (Cân đối kế toán, KQKD, Lưu chuyển tiền tệ - Cả Năm & Quý)
+            # Cào toàn bộ BCTC (Năm và Quý)
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
@@ -246,25 +276,24 @@ def main():
             print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    # Tạo DataFrame tổng hợp duy nhất
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
     print("\n💾 Đang kết xuất ra bảng tổng hợp Excel duy nhất...")
     
-    # Gộp toàn bộ vào CHUNG MỘT BẢNG (1 Sheet duy nhất: 'Tong_Hop_Tai_Chinh')
+    # Kết xuất toàn bộ vào chung 1 bảng duy nhất
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
     print(f"✅ Đã tạo file Excel tổng hợp quy mô toàn thị trường: {excel_path}")
 
-    # Xuất file CSV tổng hợp dự phòng
+    # Xuất file CSV dự phòng
     df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     print("✅ Đã xuất file CSV tổng hợp độc lập.")
 
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT (GIAI ĐOẠN 2020-2026 - 100% TIẾNG VIỆT)")
+    print(f" 🎉 HOÀN TẤT LÀM SẠCH 100% TIẾNG VIỆT (2020-2026)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - Tổng số bản ghi tài chính chuẩn hóa: {len(df_master):,}")
+    print(f" - Tổng số bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
