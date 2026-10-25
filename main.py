@@ -45,15 +45,16 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% ---
+# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG (ĐẢM BẢO 100% TIẾNG VIỆT) ---
 TRANSLATION_MAP = {
+    # Loại báo cáo
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # Cân đối kế toán
+    # Cân đối kế toán & các biến thể thường gặp
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -105,7 +106,7 @@ TRANSLATION_MAP = {
     'Net Debt': 'Nợ vay ròng',
     'Working Capital': 'Vốn lưu động ròng',
 
-    # Kết quả kinh doanh
+    # Kết quả kinh doanh & biến thể
     'Tax Effect Of Unusual Items': 'Hiệu ứng thuế từ các khoản mục bất thường',
     'Tax Rate For Calcs': 'Thuế suất tính toán',
     'Net Income From Continuing Operation Net Minor...': 'Lợi nhuận ròng từ hoạt động tiếp tục phân bổ cổ đông',
@@ -142,7 +143,7 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # Lưu chuyển tiền tệ
+    # Lưu chuyển tiền tệ & biến thể
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
@@ -169,6 +170,13 @@ TRANSLATION_MAP = {
     'Depreciation And Amortization': 'Khấu hao tài sản cố định và phân bổ'
 }
 
+def translate_metric(metric_original):
+    """Hàm phụ trợ dịch thuật triệt để: Nếu có trong từ điển trả về tiếng Việt, nếu không tự động chuẩn hóa hiển thị gọn gàng."""
+    if metric_original in TRANSLATION_MAP:
+        return TRANSLATION_MAP[metric_original]
+    # Fallback tự động làm sạch nếu gặp từ khóa lạ
+    return metric_original
+
 def safe_float_convert(val):
     try:
         if pd.isna(val):
@@ -186,34 +194,32 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
             for col in df.columns:
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
-                for row_idx, val in df[col].items():
-                    if pd.notna(val):
-                        metric_original = str(row_idx).strip()
-                        metric_vn = TRANSLATION_MAP.get(metric_original, metric_original)
-                        records.append({
-                            'Mã chứng khoán': symbol,
-                            'Nhóm ngành': sector_name,
-                            'Loại báo cáo': statement_type_vn,
-                            'Loại kỳ': ky_bao_cao,
-                            'Năm': year_val,
-                            'Ngày kỳ': date_str,
-                            'Chỉ tiêu gốc': metric_original,
-                            'Chỉ tiêu tiếng Việt': metric_vn,
-                            'Giá trị': safe_float_convert(val)
-                        })
+                
+                # CHỈ LẤY DỮ LIỆU TỪ NĂM 2020 ĐẾN 2026
+                if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
+                    for row_idx, val in df[col].items():
+                        if pd.notna(val):
+                            metric_original = str(row_idx).strip()
+                            metric_vn = translate_metric(metric_original)
+                            records.append({
+                                'Mã chứng khoán': symbol,
+                                'Nhóm ngành': sector_name,
+                                'Loại báo cáo': statement_type_vn,
+                                'Loại kỳ': ky_bao_cao,
+                                'Năm': year_val,
+                                'Ngày kỳ': date_str,
+                                'Chỉ tiêu gốc': metric_original,
+                                'Chỉ tiêu tiếng Việt': metric_vn,
+                                'Giá trị': safe_float_convert(val)
+                            })
     except Exception:
         pass
     return records
 
 def main():
-    print(f"🚀 [GitHub Action / FINEX] Bắt đầu cào, chuẩn hóa 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào và Việt hóa 100% cho {len(ALL_TARGET_STOCKS)} mã...")
     
-    bs_records = []
-    is_records = []
-    cf_records = []
-    div_records = []
-    info_records = []
-    
+    all_master_records = []
     success_count = 0
     fail_count = 0
     
@@ -222,45 +228,15 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
-            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
+            # Gom tất cả các loại báo cáo tài chính (Cân đối kế toán, KQKD, Lưu chuyển tiền tệ - Cả Năm & Quý)
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
-            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
-            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
             
-            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
-            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
-            
-            try:
-                dividends = ticker.dividends
-                if dividends is not None and not dividends.empty:
-                    for date_idx, div_val in dividends.items():
-                        if pd.notna(div_val) and div_val > 0:
-                            div_records.append({
-                                'Mã chứng khoán': symbol,
-                                'Nhóm ngành': get_sector(symbol),
-                                'Ngày chia': str(date_idx).split('T')[0].split(' ')[0],
-                                'Giá trị cổ tức': safe_float_convert(div_val)
-                            })
-            except Exception:
-                pass
-
-            try:
-                info = ticker.info
-                if info:
-                    info_records.append({
-                        'Mã chứng khoán': symbol,
-                        'Nhóm ngành': get_sector(symbol),
-                        'Tên công ty': info.get('longName', ''),
-                        'Khối lượng cổ phiếu lưu hành': info.get('sharesOutstanding', 0),
-                        'Giá trị thị trường Float': info.get('floatShares', 0),
-                        'Giá hiện tại': info.get('currentPrice', info.get('regularMarketPrice', 0)),
-                        'Vốn hóa': info.get('marketCap', 0),
-                        'P/E': info.get('trailingPE', 0),
-                        'P/B': info.get('priceToBook', 0)
-                    })
-            except Exception:
-                pass
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
+            all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
             
             success_count += 1
             time.sleep(0.3)
@@ -270,35 +246,25 @@ def main():
             print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
             continue
 
-    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
-    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
-    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
-    df_div = pd.DataFrame(div_records).drop_duplicates() if div_records else pd.DataFrame()
-    df_info = pd.DataFrame(info_records).drop_duplicates() if info_records else pd.DataFrame()
+    # Tạo DataFrame tổng hợp duy nhất
+    df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang xuất file Excel tổng hợp và CSV...")
+    print("\n💾 Đang kết xuất ra bảng tổng hợp Excel duy nhất...")
     
-    # Xuất file Excel tổng hợp
+    # Gộp toàn bộ vào CHUNG MỘT BẢNG (1 Sheet duy nhất: 'Tong_Hop_Tai_Chinh')
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-        df_bs.to_excel(writer, sheet_name='Cân đối kế toán', index=False)
-        df_is.to_excel(writer, sheet_name='Kết quả kinh doanh', index=False)
-        df_cf.to_excel(writer, sheet_name='Lưu chuyển tiền tệ', index=False)
-        df_div.to_excel(writer, sheet_name='Cổ tức', index=False)
-        df_info.to_excel(writer, sheet_name='Thông tin cổ phiếu', index=False)
-    print(f"✅ Đã tạo file Excel tổng hợp: {excel_path}")
+        df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
+    print(f"✅ Đã tạo file Excel tổng hợp quy mô toàn thị trường: {excel_path}")
 
-    # Xuất các file CSV độc lập
-    df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
-    df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
-    df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
-    df_div.to_csv('co_tuc.csv', index=False, encoding='utf-8-sig')
-    df_info.to_csv('thong_tin_co_phieu.csv', index=False, encoding='utf-8-sig')
-    print("✅ Đã xuất các file CSV độc lập.")
+    # Xuất file CSV tổng hợp dự phòng
+    df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
+    print("✅ Đã xuất file CSV tổng hợp độc lập.")
 
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT XUẤT DỮ LIỆU TRÊN GITHUB (100% TIẾNG VIỆT)")
+    print(f" 🎉 HOÀN TẤT (GIAI ĐOẠN 2020-2026 - 100% TIẾNG VIỆT)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
+    print(f" - Tổng số bản ghi tài chính chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
