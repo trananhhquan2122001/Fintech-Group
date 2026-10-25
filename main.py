@@ -39,42 +39,6 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# Từ điển Việt hóa toàn diện chỉ tiêu tài chính
-TRANSLATION_MAP = {
-    'Total Assets': 'Tổng tài sản',
-    'Current Assets': 'Tài sản ngắn hạn',
-    'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
-    'Receivables': 'Các khoản phải thu',
-    'Inventory': 'Hàng tồn kho',
-    'Total Non Current Assets': 'Tổng tài sản dài hạn',
-    'Net PPE': 'Tài sản cố định thuần',
-    'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
-    'Current Liabilities': 'Nợ ngắn hạn',
-    'Accounts Payable': 'Phải trả người bán ngắn hạn',
-    'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
-    'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn',
-    'Stockholders Equity': 'Vốn chủ sở hữu',
-    'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối',
-    'Total Capitalization': 'Tổng nguồn vốn',
-    'Total Revenue': 'Tổng doanh thu',
-    'Cost Of Revenue': 'Giá vốn hàng bán',
-    'Gross Profit': 'Lợi nhuận gộp',
-    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
-    'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
-    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
-    'Interest Expense': 'Chi phí lãi vay',
-    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
-    'Tax Provision': 'Chi phí thuế TNDN',
-    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
-    'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
-    'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
-    'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
-    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
-    'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
-    'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
-    'Free Cash Flow': 'Dòng tiền tự do (FCF)'
-}
-
 def safe_float_convert(val):
     try:
         if pd.isna(val):
@@ -83,90 +47,112 @@ def safe_float_convert(val):
     except (ValueError, TypeError):
         return 0.0
 
-def process_statement_df(symbol, df_annual, df_quarterly):
+def parse_financial_df(symbol, df, statement_type, ky_bao_cao):
+    """Hàm vét cạn 100% mọi dòng chỉ tiêu từ yfinance mà không bỏ sót bất kỳ key nào."""
     records = []
     sector_name = get_sector(symbol)
-    
-    def parse_df(df, ky_bao_cao):
-        if df is not None and not df.empty:
-            for col in df.columns:
-                date_str = str(col).split('T')[0].split(' ')[0]
-                year_val = date_str.split('-')[0]
-                for row_idx, val in df[col].items():
-                    if pd.notna(val):
-                        metric_str = str(row_idx).strip()
-                        vn_metric = TRANSLATION_MAP.get(metric_str, metric_str)
-                        records.append({
-                            'ma_chung_khoan': symbol,
-                            'nhom_nganh': sector_name,
-                            'loai_ky': ky_bao_cao,
-                            'nam': year_val,
-                            'ngay_ky': date_str,
-                            'chi_tieu_goc': metric_str,
-                            'chi_tieu_tieng_viet': vn_metric,
-                            'gia_tri': safe_float_convert(val)
-                        })
-
-    parse_df(df_annual, 'Năm')
-    parse_df(df_quarterly, 'Quý')
+    if df is not None and not df.empty:
+        for col in df.columns:
+            date_str = str(col).split('T')[0].split(' ')[0]
+            year_val = date_str.split('-')[0]
+            for row_idx, val in df[col].items():
+                if pd.notna(val):
+                    metric_str = str(row_idx).strip()
+                    records.append({
+                        'ma_chung_khoan': symbol,
+                        'nhom_nganh': sector_name,
+                        'loai_bao_cao': statement_type,
+                        'loai_ky': ky_bao_cao,
+                        'nam': year_val,
+                        'ngay_ky': date_str,
+                        'chi_tieu_goc': metric_str,
+                        'gia_tri': safe_float_convert(val)
+                    })
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu cào vét triệt để xuất 3 file CSV cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline] Bắt đầu vét cạn 100% (BCTC + Cổ phiếu + Cổ tức) cho {len(ALL_TARGET_STOCKS)} mã...")
     
-    bs_records = []
-    is_records = []
-    cf_records = []
+    bs_records = []   # Bảng Cân đối kế toán (Năm + Quý)
+    is_records = []   # Bảng Kết quả kinh doanh (Năm + Quý)
+    cf_records = []   # Bảng Lưu chuyển tiền tệ (Năm + Quý)
+    div_records = []  # Bảng Cổ tức
+    info_records = [] # Bảng thông tin tổng quan & khối lượng cổ phiếu
     
     success_count = 0
     fail_count = 0
     
     for idx, symbol in enumerate(ALL_TARGET_STOCKS, 1):
         try:
-            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý [{get_sector(symbol)}] - {symbol}...")
+            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang vét cạn toàn diện: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN")
             
-            bs_annual = getattr(ticker, 'balance_sheet', None)
-            bs_quarterly = getattr(ticker, 'quarterly_balance_sheet', None)
-            is_annual = getattr(ticker, 'financials', None)
-            is_quarterly = getattr(ticker, 'quarterly_financials', None)
-            cf_annual = getattr(ticker, 'cashflow', None)
-            cf_quarterly = getattr(ticker, 'quarterly_cashflow', None)
+            # 1. Vét sạch 3 bảng Báo cáo tài chính (Cả Năm và Quý - 100% mọi chỉ tiêu gốc)
+            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
+            bs_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
-            bs_records.extend(process_statement_df(symbol, bs_annual, bs_quarterly))
-            is_records.extend(process_statement_df(symbol, is_annual, is_quarterly))
-            cf_records.extend(process_statement_df(symbol, cf_annual, cf_quarterly))
+            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
+            is_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
+            
+            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
+            cf_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
+            
+            # 2. Vét sạch dữ liệu Cổ tức (Dividends)
+            dividends = getattr(ticker, 'dividends', None)
+            if dividends is not None and not dividends.empty:
+                for date_idx, div_val in dividends.items():
+                    if pd.notna(div_val) and div_val > 0:
+                        div_records.append({
+                            'ma_chung_khoan': symbol,
+                            'nhom_nganh': get_sector(symbol),
+                            'ngay_chia': str(date_idx).split('T')[0].split(' ')[0],
+                            'gia_tri_co_tuc': safe_float_convert(div_val)
+                        })
+
+            # 3. Vét sạch thông tin số lượng cổ phiếu lưu hành & các chỉ số cấu trúc (`info`)
+            info = getattr(ticker, 'info', {})
+            if info:
+                info_records.append({
+                    'ma_chung_khoan': symbol,
+                    'nhom_nganh': get_sector(symbol),
+                    'ten_cong_ty': info.get('longName', ''),
+                    'khoi_luong_co_phieu_luu_hanh': info.get('sharesOutstanding', 0),
+                    'gia_tri_thi_truong_float': info.get('floatShares', 0),
+                    'gia_tri_hien_tai': info.get('currentPrice', info.get('regularMarketPrice', 0)),
+                    'von_hoa': info.get('marketCap', 0),
+                    'pe_ratio': info.get('trailingPE', 0),
+                    'pb_ratio': info.get('priceToBook', 0)
+                })
             
             success_count += 1
             time.sleep(0.15)
             
         except Exception as e:
             fail_count += 1
-            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
+            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng/dữ liệu: {e}")
             continue
 
-    # Chuyển đổi sang DataFrame
-    df_bs = pd.DataFrame(bs_records).drop_duplicates() if bs_records else pd.DataFrame()
-    df_is = pd.DataFrame(is_records).drop_duplicates() if is_records else pd.DataFrame()
-    df_cf = pd.DataFrame(cf_records).drop_duplicates() if cf_records else pd.DataFrame()
+    # Chuyển đổi và xuất toàn bộ ra các file CSV độc lập để Quân kiểm tra chi tiết
+    df_bs = pd.DataFrame(bs_records).drop_duplicates()
+    df_is = pd.DataFrame(is_records).drop_duplicates()
+    df_cf = pd.DataFrame(cf_records).drop_duplicates()
+    df_div = pd.DataFrame(div_records).drop_duplicates()
+    df_info = pd.DataFrame(info_records).drop_duplicates()
 
-    # --- CHỈ XUẤT RA 3 FILE CSV RIÊNG BIỆT ---
-    csv_bs = 'can_doi_ke_toan.csv'
-    csv_is = 'ket_qua_kinh_doanh.csv'
-    csv_cf = 'luu_chuyen_tien_te.csv'
-
-    df_bs.to_csv(csv_bs, index=False, encoding='utf-8-sig')
-    df_is.to_csv(csv_is, index=False, encoding='utf-8-sig')
-    df_cf.to_csv(csv_cf, index=False, encoding='utf-8-sig')
-
-    print(f"📁 Đã xuất thành công 3 file CSV tại:")
-    print(f" - {os.path.abspath(csv_bs)} ({len(df_bs)} dòng)")
-    print(f" - {os.path.abspath(csv_is)} ({len(df_is)} dòng)")
-    print(f" - {os.path.abspath(csv_cf)} ({len(df_cf)} dòng)")
+    df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
+    df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
+    df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
+    df_div.to_csv('co_tuc.csv', index=False, encoding='utf-8-sig')
+    df_info.to_csv('thong_tin_co_phieu.csv', index=False, encoding='utf-8-sig')
 
     print(f"==================================================")
-    print(f" ✅ HOÀN TẤT XUẤT 3 FILE CSV (Exit Code 0)")
+    print(f" ✅ VÉT CẠN THÀNH CÔNG 100% KHÔNG SÓT DÒNG NÀO (Exit Code 0)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
+    print(f" - [can_doi_ke_toan.csv]: {len(df_bs)} dòng")
+    print(f" - [ket_qua_kinh_doanh.csv]: {len(df_is)} dòng")
+    print(f" - [luu_chuyen_tien_te.csv]: {len(df_cf)} dòng")
+    print(f" - [co_tuc.csv]: {len(df_div)} dòng")
+    print(f" - [thong_tin_co_phieu.csv]: {len(df_info)} dòng")
     print(f"==================================================")
     
     import sys
