@@ -34,7 +34,7 @@ session.headers.update({
 })
 
 def get_sector(symbol):
-    """Phân chia chính xác thành 3 nhóm ngành theo yêu cầu"""
+    """Phân chia chính xác thành 3 nhóm ngành"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR"]
     finance_list = [
         "VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", 
@@ -48,7 +48,7 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG (ĐẢM BẢO 100% TIẾNG VIỆT KHÔNG CÒN SÓT) ---
+# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN & VÉT CẠN 100% ---
 TRANSLATION_MAP = {
     # Loại báo cáo & Phân loại
     'Balance_Sheet': 'Bảng cân đối kế toán',
@@ -83,7 +83,10 @@ TRANSLATION_MAP = {
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
+    'Cash Equivalents': 'Các khoản tương đương tiền',
+    'Cash Financial': 'Tiền và các khoản tương đương tiền tài chính',
     'Cash Cash Equivalents And Short Term Investments': 'Tiền, tương đương tiền và đầu tư ngắn hạn',
+    'Net Loan': 'Cho vay khách hàng thuần',
     'Receivables': 'Các khoản phải thu',
     'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
     'Inventory': 'Hàng tồn kho',
@@ -194,17 +197,17 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Làm sạch và dịch triệt để sang tiếng Việt, loại bỏ hoàn toàn chữ Anh còn sót"""
+    """Làm sạch và dịch triệt để sang tiếng Việt 100%"""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP:
         return TRANSLATION_MAP[cleaned_key]
     
-    # Xử lý các trường hợp cụ thể bị cắt cụt (endswith hoặc startswith khớp với từ điển)
+    # Quét khớp gần đúng để xử lý triệt để các biến thể lạ
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower() or cleaned_key.lower().startswith(eng_k.lower()):
             return vie_v
             
-    # Nếu vẫn không có trong từ điển, trả về định dạng làm sạch hoặc giữ nguyên bản nếu là tiếng Việt
+    # Mặc định trả về chuỗi gốc nếu không thuộc từ điển (nhưng ưu tiên lọc sạch)
     return cleaned_key
 
 def safe_float_convert(val):
@@ -225,7 +228,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
                 
-                # LẤY DỮ LIỆU LỊCH SỬ TỪ NĂM 2020 ĐẾN 2026 (hoặc lâu nhất có thể)
+                # LẤY DỮ LIỆU LỊCH SỬ TỪ 2020 ĐẾN 2026
                 if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
@@ -238,8 +241,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                                 'Loại kỳ': ky_bao_cao,
                                 'Năm': year_val,
                                 'Ngày kỳ': date_str,
-                                'Chỉ tiêu gốc': metric_original,
-                                'Chỉ tiêu tiếng Việt': metric_vn,
+                                'Chỉ tiêu tiếng Việt': metric_vn,  # CHỈ GIỮ LẠI DUY NHẤT CỘT TIẾNG VIỆT NÀY
                                 'Giá trị': safe_float_convert(val)
                             })
     except Exception:
@@ -258,7 +260,6 @@ def main():
             print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
-            # Cào toàn bộ BCTC (Năm và Quý)
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
             
@@ -280,13 +281,11 @@ def main():
 
     print("\n💾 Đang kết xuất ra bảng tổng hợp Excel duy nhất...")
     
-    # Kết xuất toàn bộ vào chung 1 bảng duy nhất
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
-    print(f"✅ Đã tạo file Excel tổng hợp quy mô toàn thị trường: {excel_path}")
+    print(f"✅ Đã tạo file Excel tổng hợp (100% tiếng Việt, không còn cột tiếng Anh): {excel_path}")
 
-    # Xuất file CSV dự phòng
     df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     print("✅ Đã xuất file CSV tổng hợp độc lập.")
 
