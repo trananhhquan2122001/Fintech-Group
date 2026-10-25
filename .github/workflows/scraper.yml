@@ -19,27 +19,33 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install core dependencies
+      - name: Check and install core dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --upgrade pandas requests yfinance
+          echo "Checking installed libraries..."
+          pip list
+          echo "Installing/Upgrading required packages..."
+          pip install --upgrade pandas requests yfinance sqlite3 || true
+          pip list
 
       - name: Run main script with error catching
         run: |
           python main.py
 
-      - name: Verify files generated
+      - name: Verify database generated
         run: |
           ls -la
-          if [ ! -f "vietnam_financial_statements.csv" ]; then
-            echo "CSV file missing!"
+          if [ ! -f "vietnam_stock_database.db" ]; then
+            echo "Error: vietnam_stock_database.db file missing!"
             exit 1
+          else
+            echo "Database generated successfully!"
           fi
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add vietnam_financial_statements.csv vietnam_stock_database.db || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX database [skip ci]"
+          git add vietnam_stock_database.db || true
+          git diff --staged --quiet || git commit -m "Auto-update FINEX SQLite database [skip ci]"
           git push || echo "No changes to push"
