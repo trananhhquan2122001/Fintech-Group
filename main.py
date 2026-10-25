@@ -1,5 +1,4 @@
 import os
-import sqlite3
 import time
 from datetime import datetime
 import pandas as pd
@@ -46,12 +45,14 @@ def get_sector(symbol):
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% (PHỦ KÍN MỌI BIẾN THỂ) ---
+# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN 100% (PHỦ KÍN MỌI CHỈ TIÊU TÀI CHÍNH) ---
 TRANSLATION_MAP = {
-    # --- Loại báo cáo ---
+    # --- Loại báo cáo & Phân loại ---
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
+    'Năm': 'Năm',
+    'Quý': 'Quý',
 
     # --- Cân đối kế toán (Balance Sheet) ---
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
@@ -191,22 +192,22 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                         metric_original = str(row_idx).strip()
                         metric_vn = TRANSLATION_MAP.get(metric_original, metric_original)
                         records.append({
-                            'ma_chung_khoan': symbol,
-                            'nhom_nganh': sector_name,
-                            'loai_bao_cao': statement_type_vn,
-                            'loai_ky': ky_bao_cao,
-                            'nam': year_val,
-                            'ngay_ky': date_str,
-                            'chi_tieu_goc': metric_original,
-                            'chi_tieu_tieng_viet': metric_vn,
-                            'gia_tri': safe_float_convert(val)
+                            'Mã chứng khoán': symbol,
+                            'Nhóm ngành': sector_name,
+                            'Loại báo cáo': statement_type_vn,
+                            'Loại kỳ': ky_bao_cao,
+                            'Năm': year_val,
+                            'Ngày kỳ': date_str,
+                            'Chỉ tiêu gốc': metric_original,
+                            'Chỉ tiêu tiếng Việt': metric_vn,
+                            'Giá trị': safe_float_convert(val)
                         })
     except Exception:
         pass
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline] Bắt đầu vét cạn & Việt hóa 100% cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX Pipeline] Bắt đầu cào, chuẩn hóa 100% tiếng Việt & xuất Excel/CSV cho {len(ALL_TARGET_STOCKS)} mã...")
     
     bs_records = []
     is_records = []
@@ -239,10 +240,10 @@ def main():
                     for date_idx, div_val in dividends.items():
                         if pd.notna(div_val) and div_val > 0:
                             div_records.append({
-                                'ma_chung_khoan': symbol,
-                                'nhom_nganh': get_sector(symbol),
-                                'ngay_chia': str(date_idx).split('T')[0].split(' ')[0],
-                                'gia_tri_co_tuc': safe_float_convert(div_val)
+                                'Mã chứng khoán': symbol,
+                                'Nhóm ngành': get_sector(symbol),
+                                'Ngày chia': str(date_idx).split('T')[0].split(' ')[0],
+                                'Giá trị cổ tức': safe_float_convert(div_val)
                             })
             except Exception:
                 pass
@@ -252,15 +253,15 @@ def main():
                 info = ticker.info
                 if info:
                     info_records.append({
-                        'ma_chung_khoan': symbol,
-                        'nhom_nganh': get_sector(symbol),
-                        'ten_cong_ty': info.get('longName', ''),
-                        'khoi_luong_co_phieu_luu_hanh': info.get('sharesOutstanding', 0),
-                        'gia_tri_thi_truong_float': info.get('floatShares', 0),
-                        'gia_tri_hien_tai': info.get('currentPrice', info.get('regularMarketPrice', 0)),
-                        'von_hoa': info.get('marketCap', 0),
-                        'pe_ratio': info.get('trailingPE', 0),
-                        'pb_ratio': info.get('priceToBook', 0)
+                        'Mã chứng khoán': symbol,
+                        'Nhóm ngành': get_sector(symbol),
+                        'Tên công ty': info.get('longName', ''),
+                        'Khối lượng cổ phiếu lưu hành': info.get('sharesOutstanding', 0),
+                        'Giá trị thị trường Float': info.get('floatShares', 0),
+                        'Giá hiện tại': info.get('currentPrice', info.get('regularMarketPrice', 0)),
+                        'Vốn hóa': info.get('marketCap', 0),
+                        'P/E': info.get('trailingPE', 0),
+                        'P/B': info.get('priceToBook', 0)
                     })
             except Exception:
                 pass
@@ -280,33 +281,35 @@ def main():
     df_div = pd.DataFrame(div_records).drop_duplicates() if div_records else pd.DataFrame()
     df_info = pd.DataFrame(info_records).drop_duplicates() if info_records else pd.DataFrame()
 
-    # --- 1. LƯU VÀO SQLITE DATABASE ---
-    db_path = 'vietnam_stock_database.db'
-    conn = sqlite3.connect(db_path)
-    df_bs.to_sql('can_doi_ke_toan', conn, if_exists='replace', index=False)
-    df_is.to_sql('ket_qua_kinh_doanh', conn, if_exists='replace', index=False)
-    df_cf.to_sql('luu_chuyen_tien_te', conn, if_exists='replace', index=False)
-    df_div.to_sql('co_tuc', conn, if_exists='replace', index=False)
-    df_info.to_sql('thong_tin_co_phieu', conn, if_exists='replace', index=False)
-    conn.close()
-    print("💾 Đã tạo và lưu thành công file SQLite: vietnam_stock_database.db")
+    # --- XUẤT RA CẢ EXCEL (.xlsx) VÀ CSV (.csv) SẠCH SẼ TIẾNG VIỆT ---
+    print("\n💾 Đang lưu file Excel và CSV...")
+    
+    # Xuất file Excel tổng hợp (mỗi bảng là 1 Sheet riêng biệt)
+    excel_path = 'vietnam_stock_database.xlsx'
+    with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
+        df_bs.to_excel(writer, sheet_name='Cân đối kế toán', index=False)
+        df_is.to_excel(writer, sheet_name='Kết quả kinh doanh', index=False)
+        df_cf.to_excel(writer, sheet_name='Lưu chuyển tiền tệ', index=False)
+        df_div.to_excel(writer, sheet_name='Cổ tức', index=False)
+        df_info.to_excel(writer, sheet_name='Thông tin cổ phiếu', index=False)
+    print(f"✅ Đã tạo file Excel tổng hợp: {excel_path}")
 
-    # --- 2. XUẤT RA CÁC FILE CSV ĐỂ KIỂM TRA TRỰC TIẾP ---
+    # Xuất các file CSV riêng lẻ (hỗ trợ tiếng Việt UTF-8-SIG)
     df_bs.to_csv('can_doi_ke_toan.csv', index=False, encoding='utf-8-sig')
     df_is.to_csv('ket_qua_kinh_doanh.csv', index=False, encoding='utf-8-sig')
     df_cf.to_csv('luu_chuyen_tien_te.csv', index=False, encoding='utf-8-sig')
     df_div.to_csv('co_tuc.csv', index=False, encoding='utf-8-sig')
     df_info.to_csv('thong_tin_co_phieu.csv', index=False, encoding='utf-8-sig')
-    print("📂 Đã xuất toàn bộ dữ liệu ra các file CSV sạch sẽ (hỗ trợ tiếng Việt UTF-8-SIG).")
+    print("✅ Đã xuất các file CSV độc lập.")
 
-    print(f"==================================================")
-    print(f" ✅ HOÀN TẤT VÉT CẠN & VIỆT HÓA 100% (Exit Code 0)")
+    print(f"\n==================================================")
+    print(f" 🎉 HOÀN TẤT XUẤT DỮ LIỆU EXCEL & CSV (100% TIẾNG VIỆT)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - [can_doi_ke_toan]: {len(df_bs)} dòng")
-    print(f" - [ket_qua_kinh_doanh]: {len(df_is)} dòng")
-    print(f" - [luu_chuyen_tien_te]: {len(df_cf)} dòng")
-    print(f" - [co_tuc]: {len(df_div)} dòng")
-    print(f" - [thong_tin_co_phieu]: {len(df_info)} dòng")
+    print(f" - [Cân đối kế toán]: {len(df_bs):,} dòng")
+    print(f" - [Kết quả kinh doanh]: {len(df_is):,} dòng")
+    print(f" - [Lưu chuyển tiền tệ]: {len(df_cf):,} dòng")
+    print(f" - [Cổ tức]: {len(df_div):,} dòng")
+    print(f" - [Thông tin cổ phiếu]: {len(df_info):,} dòng")
     print(f"==================================================")
 
 if __name__ == "__main__":
