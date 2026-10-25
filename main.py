@@ -5,27 +5,14 @@ import pandas as pd
 import yfinance as yf
 import requests
 
-# --- DANH SÁCH 130 MÃ (VN100 + HNX30) ---
-VN100 = [
-    "ACB", "ANV", "BAF", "BCM", "BID", "BSI", "BSR", "BMP", "BWE", "BVH",
-    "CII", "CMG", "CTD", "CTG", "CTR", "CTS", "DGC", "DGW", "DIG", "DPM",
-    "DSE", "DXG", "EIB", "EVF", "FPT", "FRT", "FTS", "GAS", "GEE", "GEX",
-    "GMD", "GVR", "HAG", "HCM", "HDB", "HDG", "HHV", "HPG", "HSG", "HT1",
-    "KBC", "KDC", "KDH", "LPB", "MBB", "MCH", "MSB", "MSN", "MWG", "NAB",
-    "NKG", "NLG", "NT2", "NVL", "OCB", "PAN", "PC1", "PDR", "PHR", "PLX",
-    "PNJ", "POW", "PVD", "PVT", "REE", "SAB", "SBT", "SHB", "SIP", "SSB",
-    "SSI", "STB", "TCB", "TCX", "TAL", "TCH", "TPB", "VCB", "VCG", "VCI",
-    "VCK", "VGC", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM",
-    "VPI", "VPL", "VPB", "VRE", "VSC", "VTP"
+# --- DANH SÁCH RỔ VN30 ĐÃ CẬP NHẬT (THÊM MCH, TCX | LOẠI POW, TPB) ---
+VN30_STOCKS = [
+    "ACB", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG", "MBB",
+    "MSN", "MWG", "PLX", "SAB", "SHB", "SSB", "SSI", "STB", "TCB", "VCB",
+    "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE", "MCH", "TCX"
 ]
 
-HNX30 = [
-    "BCC", "BVS", "CAP", "CEO", "DTD", "DVM", "DXP", "HLD", "HUT", "IDC",
-    "L14", "L18", "LAS", "LHC", "MBS", "NBC", "NDN", "PLC", "PSI", "PVC",
-    "PVG", "PVS", "SHS", "SLS", "TDN", "TIG", "TNG", "TVD", "VC3", "VCS"
-]
-
-ALL_TARGET_STOCKS = sorted(list(set(VN100 + HNX30)))
+ALL_TARGET_STOCKS = sorted(list(set(VN30_STOCKS)))
 
 # Thiết lập Session giả lập trình duyệt chống chặn kết nối trên GitHub Actions
 session = requests.Session()
@@ -39,16 +26,16 @@ def get_sector(symbol):
     finance_list = [
         "VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", 
         "HCM", "VND", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", 
-        "BSI", "CTS", "FTS", "MBS", "BVS", "EVF", "DSE", "VIX", "SHS", "ORS"
+        "BSI", "CTS", "FTS", "MBS", "BVS", "EVF", "DSE", "VIX", "SHS", "ORS", "BVH"
     ]
     if symbol in tech_list:
         return "Công nghệ"
-    elif symbol in finance_list:
+    elif symbol in finance_list or symbol in ["BID", "CTG", "MBB", "ACB", "TCB", "VPB", "STB", "SSI", "SHB", "SSB", "TPB", "VCB", "VIB", "HDB"]:
         return "Tài chính & Ngân hàng"
     else:
         return "Sản xuất, Bất động sản và Công nghiệp"
 
-# --- TỪ ĐIỂN VIỆT HÓA SIÊU MỞ RỘNG & VÉT CẠN 100% ---
+# --- TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN & VÉT CẠN 100% ---
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -56,7 +43,7 @@ TRANSLATION_MAP = {
     'Năm': 'Năm',
     'Quý': 'Quý',
 
-    # Cân đối kế toán & Biến thể mới trong ảnh
+    # Cân đối kế toán
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Debt': 'Tổng nợ vay',
@@ -135,7 +122,7 @@ TRANSLATION_MAP = {
     'Properties': 'Tài sản cố định vật chất khác',
     'Pension and Other Postretirement Benefit Obligations': 'Quỹ phúc lợi nhân viên và nghĩa vụ hưu trí',
 
-    # Kết quả kinh doanh & Biến thể mới trong ảnh
+    # Kết quả kinh doanh
     'Tax Effect Of Unusual Items': 'Hiệu ứng thuế từ các khoản mục bất thường',
     'Tax Rate For Calcs': 'Thuế suất tính toán',
     'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa (Normalized EBITDA)',
@@ -185,7 +172,7 @@ TRANSLATION_MAP = {
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Total Operating Expenses': 'Tổng chi phí hoạt động',
 
-    # Lưu chuyển tiền tệ & Biến thể mới trong ảnh
+    # Lưu chuyển tiền tệ
     'Free Cash Flow': 'Dòng tiền tự do (FCF)',
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Issuance Of Debt': 'Phát hành nợ vay',
@@ -224,21 +211,19 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Hệ thống dịch thuật sâu đa tầng: Loại bỏ hoàn toàn tiếng Anh 100% bằng cách đối chiếu từ điển và từ khóa cốt lõi."""
+    """Hệ thống dịch thuật sâu đa tầng: Loại bỏ hoàn toàn tiếng Anh 100% dựa trên từ điển và phân loại từ khóa cốt lõi."""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP:
         return TRANSLATION_MAP[cleaned_key]
     
-    # Khớp chính xác không phân biệt hoa thường
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower():
             return vie_v
             
-    # Xử lý theo từ khóa cốt lõi để không bao giờ lọt từ tiếng Anh nào ra ngoài
     lower_key = cleaned_key.lower()
     if 'ebitda' in lower_key:
         return 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)'
-    if 'revenue' in lower_key:
+    if 'revenue' in lower_key or 'sales' in lower_key:
         return 'Doanh thu'
     if 'income' in lower_key or 'profit' in lower_key:
         return 'Lợi nhuận'
@@ -257,7 +242,6 @@ def translate_metric(metric_original):
     if 'dividend' in lower_key:
         return 'Cổ tức'
         
-    # Trường hợp chuỗi có chứa từ tiếng Anh chưa định nghĩa, tự động bọc nhãn chuẩn hóa tiếng Việt
     return f"Chỉ tiêu tài chính ({cleaned_key})"
 
 def safe_float_convert(val):
@@ -278,7 +262,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
                 
-                # LẤY DỮ LIỆU LỊCH SỬ TỪ 2020 ĐẾN 2026
+                # CHỈ LẤY LỊCH SỬ TỪ 2020 ĐẾN 2026
                 if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
@@ -291,7 +275,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                                 'Loại kỳ': ky_bao_cao,
                                 'Năm': year_val,
                                 'Ngày kỳ': date_str,
-                                'Chỉ tiêu tiếng Việt': metric_vn,  # SẠCH 100% TIẾNG VIỆT
+                                'Chỉ tiêu tiếng Việt': metric_vn,  # SẠCH TUYỆT ĐỐI 100% TIẾNG VIỆT
                                 'Giá trị': safe_float_convert(val)
                             })
     except Exception:
@@ -299,7 +283,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     return records
 
 def main():
-    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu cào, làm sạch tuyệt đối 100% tiếng Việt cho {len(ALL_TARGET_STOCKS)} mã...")
+    print(f"🚀 [FINEX VN30 Pipeline 2020-2026] Bắt đầu cào chuyên sâu rổ VN30 ({len(ALL_TARGET_STOCKS)} mã), làm sạch 100% tiếng Việt...")
     
     all_master_records = []
     success_count = 0
@@ -307,7 +291,7 @@ def main():
     
     for idx, symbol in enumerate(ALL_TARGET_STOCKS, 1):
         try:
-            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý: {symbol}...")
+            print(f"⏳ [{idx}/{len(ALL_TARGET_STOCKS)}] Đang xử lý VN30: {symbol}...")
             ticker = yf.Ticker(f"{symbol}.VN", session=session)
             
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
@@ -324,23 +308,23 @@ def main():
             
         except Exception as e:
             fail_count += 1
-            print(f"⚠️ Bỏ qua mã {symbol} do lỗi mạng: {e}")
+            print(f"⚠️ Bỏ qua mã VN30 {symbol} do lỗi mạng: {e}")
             continue
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất ra bảng tổng hợp Excel duy nhất...")
+    print("\n💾 Đang kết xuất ra bảng tổng hợp Excel rổ VN30 duy nhất...")
     
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
-        df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
-    print(f"✅ Đã tạo file Excel tổng hợp (Chuẩn sạch 100% tiếng Việt): {excel_path}")
+        df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh_VN30', index=False)
+    print(f"✅ Đã tạo file Excel tổng hợp VN30 (100% tiếng Việt chuẩn gốc): {excel_path}")
 
     df_master.to_csv('vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     print("✅ Đã xuất file CSV tổng hợp độc lập.")
 
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT LÀM SẠCH TUYỆT ĐỐI 100% TIẾNG VIỆT (2020-2026)")
+    print(f" 🎉 HOÀN TẤT CÀO RỔ VN30 & LÀM SẠCH 100% TIẾNG VIỆT (2020-2026)")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
     print(f" - Tổng số bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
