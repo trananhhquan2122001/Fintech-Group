@@ -22,25 +22,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Force Clean and Install Dependencies
+      - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir --force-reinstall pandas requests yfinance openpyxl
+          pip install --no-cache-dir pandas requests yfinance openpyxl
 
-      - name: Run main script
+      - name: Run Pro Scraper Script
         run: |
           python main.py
-
-      - name: Verify Excel and CSV files generated
-        run: |
-          ls -la
-          ls -la data/ || true
-          if [ ! -f "vietnam_stock_database.xlsx" ]; then
-            echo "Error: vietnam_stock_database.xlsx file missing!"
-            exit 1
-          else
-            echo "Excel and CSV datasets generated successfully!"
-          fi
 
       - name: Commit and push changes directly to main
         run: |
@@ -54,6 +43,6 @@ jobs:
           git add vietnam_stock_database.xlsx data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (500 tickers 2020-2026) [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Pro 500 dataset [skip ci]"
           
           git push origin main
