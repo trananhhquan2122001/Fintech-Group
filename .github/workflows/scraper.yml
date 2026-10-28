@@ -10,10 +10,13 @@ jobs:
   run-scraper:
     runs-on: ubuntu-22.04
     permissions:
-      contents: write
+      contents: write # Cấp quyền ghi trực tiếp cho GITHUB_TOKEN
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -32,6 +35,7 @@ jobs:
       - name: Verify Excel and CSV files generated
         run: |
           ls -la
+          ls -la data/ || true
           if [ ! -f "vietnam_stock_database.xlsx" ]; then
             echo "Error: vietnam_stock_database.xlsx file missing!"
             exit 1
@@ -43,6 +47,15 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Đảm bảo đồng bộ với nhánh main hiện tại
+          git checkout main || git checkout master || true
+          
           git add vietnam_stock_database.xlsx data/ vietnam_stock_database_tong_hop.csv || true
+          
+          # Kiểm tra xem có thay đổi thực sự không trước khi commit
+          git status
           git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (2020-2026) [skip ci]"
-          git push || echo "No changes to push"
+          
+          # Đẩy trực tiếp lên nhánh chính
+          git push origin HEAD:main || git push origin HEAD:master || git push || echo "No changes to push"
