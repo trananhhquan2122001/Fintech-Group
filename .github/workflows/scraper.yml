@@ -10,7 +10,7 @@ jobs:
   run-scraper:
     runs-on: ubuntu-22.04
     permissions:
-      contents: write # Cấp quyền ghi trực tiếp cho GITHUB_TOKEN
+      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,19 +43,24 @@ jobs:
             echo "Excel and CSV datasets generated successfully!"
           fi
 
+      # --- BỔ SUNG: TỰ ĐỘNG ĐÓNG GÓI VÀ TẢI DỮ LIỆU VỀ MÁY QUA ARTIFACTS ---
+      - name: Upload database artifacts for download
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-database-output
+          path: |
+            vietnam_stock_database.xlsx
+            data/vietnam_stock_database_tong_hop.csv
+
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Đảm bảo đồng bộ với nhánh main hiện tại
           git checkout main || git checkout master || true
-          
           git add vietnam_stock_database.xlsx data/ vietnam_stock_database_tong_hop.csv || true
           
-          # Kiểm tra xem có thay đổi thực sự không trước khi commit
           git status
           git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (2020-2026) [skip ci]"
           
-          # Đẩy trực tiếp lên nhánh chính
-          git push origin HEAD:main || git push origin HEAD:master || git push || echo "No changes to push"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main || echo "Push skipped or no changes"
