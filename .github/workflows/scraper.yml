@@ -3,7 +3,6 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    # Lịch chạy tự động: Vào 12:00 trưa thứ Bảy hàng tuần (Giờ UTC)
     - cron: '0 12 * * 6'
 
 jobs:
@@ -43,24 +42,21 @@ jobs:
             echo "Excel and CSV datasets generated successfully!"
           fi
 
-      # --- BỔ SUNG: TỰ ĐỘNG ĐÓNG GÓI VÀ TẢI DỮ LIỆU VỀ MÁY QUA ARTIFACTS ---
-      - name: Upload database artifacts for download
-        uses: actions/upload-artifact@v4
-        with:
-          name: financial-database-output
-          path: |
-            vietnam_stock_database.xlsx
-            data/vietnam_stock_database_tong_hop.csv
-
-      - name: Commit and push changes
+      - name: Commit and push changes directly to main
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          git checkout main || git checkout master || true
-          git add vietnam_stock_database.xlsx data/ vietnam_stock_database_tong_hop.csv || true
+          # Cấu hình lại remote để cấp token quyền ghi trực tiếp
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git fetch origin main
+          git checkout main || git checkout -b main
+          
+          # Thêm các tệp dữ liệu vào git
+          git add vietnam_stock_database.xlsx data/vietnam_stock_database_tong_hop.csv || true
           
           git status
           git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (2020-2026) [skip ci]"
           
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main || echo "Push skipped or no changes"
+          # Đẩy thẳng code và dữ liệu lên nhánh main
+          git push origin main
