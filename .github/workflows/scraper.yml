@@ -47,16 +47,13 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Cấu hình lại remote để cấp token quyền ghi trực tiếp
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git fetch origin main
           git checkout main || git checkout -b main
           
-          # Thêm các tệp dữ liệu vào git
           git add vietnam_stock_database.xlsx data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (2020-2026) [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX unified dataset (500 tickers 2020-2026) [skip ci]"
           
-          # Đẩy thẳng code và dữ liệu lên nhánh main
           git push origin main
