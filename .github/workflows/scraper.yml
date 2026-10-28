@@ -3,7 +3,8 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 12 * * 6'
+    # Lịch chạy tự động: Vào 12:00 trưa hàng ngày / thứ Bảy (Giờ UTC)
+    - cron: '0 12 * * *'
 
 jobs:
   run-scraper:
@@ -43,6 +44,6 @@ jobs:
           git add vietnam_stock_database.xlsx data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Pro 500 dataset [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX 500 full 3 statements dataset [skip ci]"
           
           git push origin main
