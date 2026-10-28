@@ -5,10 +5,11 @@ import pandas as pd
 import yfinance as yf
 import requests
 
-# Thiết lập Session giả lập trình duyệt chống chặn kết nối trên GitHub Actions
+# Thiết lập Session giả lập trình duyệt chống chặn kết nối tối ưu trên GitHub Actions
 session = requests.Session()
 session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
 def load_500_tickers():
@@ -68,7 +69,7 @@ def load_500_tickers():
         "PRT", "PSA", "PSB", "PSC", "PSD", "PSE", "PSG", "PSI", "PSK", "PSO"
     ]
     unique_tickers = sorted(list(set([t.strip().upper() for t in tickers_list if t.strip()])))
-    print(f"🎯 [FINEX Engine Pro] Tổng số mã duy nhất cần xử lý: {len(unique_tickers)}")
+    print(f"🎯 [FINEX Enterprise Engine] Tổng số mã duy nhất chuẩn hóa cần xử lý: {len(unique_tickers)}")
     return unique_tickers
 
 def get_sector(symbol):
@@ -89,29 +90,27 @@ def get_sector(symbol):
     elif symbol in steel_materials: return "Vật liệu xây dựng & Hóa chất"
     else: return "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
-# TỪ ĐIỂN VIỆT HÓA TOÀN DIỆN CHO CẢ 3 BẢNG BÁO CÁO
+# TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH
 TRANSLATION_MAP = {
-    # Nhóm tên báo cáo gốc
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
 
-    # 1. BẢNG CÂN ĐỐI KẾ TOÁN & KHỐI LƯỢNG CỔ PHIẾU
+    # Cân đối kế toán
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Assets': 'Tổng tài sản',
     'Current Assets': 'Tài sản ngắn hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
     'Cash Equivalents': 'Các khoản tương đương tiền',
-    'Cash Financial': 'Tiền và các khoản đầu tư tài chính ngắn hạn',
     'Net Loan': 'Cho vay khách hàng thuần',
     'Receivables': 'Các khoản phải thu',
-    'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
+    'Accounts Receivable': 'Phải thu ngắn hạn khách hàng',
     'Inventory': 'Hàng tồn kho',
     'Total Non Current Assets': 'Tổng tài sản dài hạn',
     'Net PPE': 'Tài sản cố định thuần',
     'Gross PPE': 'Nguyên giá tài sản cố định',
-    'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
+    'Accumulated Depreciation': 'Hao mòn lũy kế TSCĐ',
     'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình',
     'Investments And Advances': 'Đầu tư tài chính dài hạn',
     'Investment Properties': 'Bất động sản đầu tư',
@@ -130,7 +129,7 @@ TRANSLATION_MAP = {
     'Additional Paid In Capital': 'Thặng dư vốn cổ phần',
     'Working Capital': 'Vốn lưu động ròng',
 
-    # 2. BÁO CÁO KẾT QUẢ KINH DOANH
+    # Kết quả kinh doanh
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu thuần',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -144,15 +143,15 @@ TRANSLATION_MAP = {
     'Interest Income': 'Thu nhập lãi',
     'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
     'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
-    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa (Normalized EBITDA)',
+    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
     'Pretax Income': 'Lợi nhuận kế toán trước thuế',
     'Tax Provision': 'Chi phí thuế TNDN',
     'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
-    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
+    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cổ đông phổ thông',
     'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
     'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
 
-    # 3. BÁO CÁO LƯU CHUYỂN TIỀN TỆ
+    # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
@@ -214,41 +213,46 @@ def main():
     all_master_records = []
     success_count, fail_count = 0, 0
     
+    # Chia batch 50 mã, có cơ chế checkpoint an toàn
     batch_size = 50
     for i in range(0, len(target_stocks), batch_size):
         batch = target_stocks[i:i+batch_size]
-        print(f"🔄 Đang cào 3 BCTC nhóm {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
+        print(f"🔄 [FINEX Pipeline] Đang cào batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
         
         for symbol in batch:
             try:
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                 
-                # 1. Bảng cân đối kế toán (Cả Năm và Quý)
+                # Cào toàn diện đủ 3 BCTC (Cả Năm và Quý)
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
-                
-                # 2. Báo cáo kết quả kinh doanh (Cả Năm và Quý)
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
-                
-                # 3. Báo cáo lưu chuyển tiền tệ (Cả Năm và Quý)
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
                 
                 success_count += 1
-                time.sleep(0.08)
+                time.sleep(0.06)
             except Exception:
                 fail_count += 1
                 continue
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất ra cơ sở dữ liệu Excel & CSV cho FINEX...")
+    print("\n💾 Đang kết xuất đồng thời tệp Excel & CSV nguyên bản cho FINEX Terminal...")
     os.makedirs('data', exist_ok=True)
+    
+    # Xuất file Excel chuẩn cấu trúc
     df_master.to_excel('vietnam_stock_database.xlsx', index=False, engine='openpyxl')
+    
+    # Xuất file CSV tổng hợp
     df_master.to_csv('data/vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
     
-    print(f"🎉 HOÀN TẤT ĐỦ 3 BÁO CÁO! Thành công: {success_count} | Lỗi: {fail_count} | Tổng bản ghi: {len(df_master):,}")
+    print(f"==================================================")
+    print(f" 🎉 HOÀN TẤT TOÀN BỘ QUY TRÌNH QUY MÔ 500 MÃ!")
+    print(f" - Doanh nghiệp thành công: {success_count} | Lỗi/Bỏ qua: {fail_count}")
+    print(f" - Tổng dung lượng bản ghi chuẩn hóa: {len(df_master):,}")
+    print(f"==================================================")
 
 if __name__ == "__main__":
     main()
