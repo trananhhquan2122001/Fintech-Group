@@ -12,15 +12,15 @@ session.headers.update({
 })
 
 def load_tickers_from_module():
-    """Đọc danh sách mã cổ phiếu trực tiếp từ module/file tickers.txt"""
+    """Đọc danh sách mã cổ phiếu trực tiếp từ tệp tickers.txt đã cấu hình"""
     tickers_file = 'tickers.txt'
     if os.path.exists(tickers_file):
         with open(tickers_file, 'r', encoding='utf-8') as f:
             tickers = [line.strip().upper() for line in f if line.strip()]
-            # Loại bỏ trùng lặp và giữ thứ tự sạch sẽ
+            # Loại bỏ trùng lặp và sắp xếp gọn gàng
             return sorted(list(set(tickers)))
     else:
-        print("⚠️ Không tìm thấy file tickers.txt, sử dụng danh sách mặc định dự phòng.")
+        print("⚠️ Không tìm thấy tệp tickers.txt, sử dụng danh sách mặc định dự phòng.")
         return ['VIC', 'VHM', 'VCB', 'FPT', 'TCB', 'HPG']
 
 def get_sector(symbol):
@@ -171,7 +171,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
                 
-                # Lịch sử từ 2020 đến 2026
+                # Lọc lịch sử từ 2020 đến 2026
                 if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
@@ -192,7 +192,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
 
 def main():
     target_stocks = load_tickers_from_module()
-    print(f"🚀 [FINEX Pipeline 2020-2026] Đã nạp {len(target_stocks)} mã từ module tickers.txt, bắt đầu quét...")
+    print(f"🚀 [FINEX Pipeline 2020-2026] Đã nạp {len(target_stocks)} mã từ tệp tickers.txt, bắt đầu quét...")
     
     all_master_records = []
     success_count = 0
@@ -219,20 +219,22 @@ def main():
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất ra bảng tổng hợp Excel & CSV...")
+    print("\n💾 Đang kết xuất ra cơ sở dữ liệu Excel & CSV tổng hợp...")
     os.makedirs('data', exist_ok=True)
     
+    # Lưu tệp Excel tổng hợp tại thư mục gốc
     excel_path = 'vietnam_stock_database.xlsx'
     with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
         df_master.to_excel(writer, sheet_name='Tong_Hop_Tai_Chinh', index=False)
     
+    # Lưu tệp CSV tổng hợp trong thư mục data/
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
     print(f"\n==================================================")
     print(f" 🎉 HOÀN TẤT CÀO DỮ LIỆU & LÀM SẠCH 100% TIẾNG VIỆT")
     print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
-    print(f" - Tổng số bản ghi: {len(df_master):,}")
+    print(f" - Tổng số bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
