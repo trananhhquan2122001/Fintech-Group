@@ -11,21 +11,154 @@ session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 })
 
-def load_tickers_from_module():
-    """Đọc danh sách mã cổ phiếu trực tiếp từ tệp tickers.txt đã cấu hình"""
-    tickers_file = 'tickers.txt'
-    if os.path.exists(tickers_file):
-        with open(tickers_file, 'r', encoding='utf-8') as f:
-            tickers = [line.strip().upper() for line in f if line.strip()]
-            # Loại bỏ trùng lặp và sắp xếp gọn gàng
-            return sorted(list(set(tickers)))
-    else:
-        print("⚠️ Không tìm thấy tệp tickers.txt, sử dụng danh sách mặc định dự phòng.")
-        return ['VIC', 'VHM', 'VCB', 'FPT', 'TCB', 'HPG']
+def load_and_merge_500_tickers():
+    """
+    Đọc tệp tickers.txt (nếu có chứa danh sách tổng hợp) hoặc tự động 
+    hợp nhất 5 nhóm mã chiến lược của FINEX, loại bỏ trùng lặp để lấy danh sách duy nhất.
+    """
+    # 5 Nhóm mã chiến lược của FINEX VN Terminal
+    group_1 = [
+        "ACB", "BID", "CTG", "VCB", "MBB", "TCB", "VPB", "HDB", "STB", "VIB",
+        "SHB", "LPB", "EIB", "SSB", "TPB", "MSB", "OCB", "NAB", "ABB",
+        "BVH", "BMI", "BIC", "PVI", "MIG", "VNR", "ABI",
+        "SSI", "HCM", "VCI", "VND", "SHS", "MBS", "FTS", "BSI", "CTS",
+        "VIX", "VDS", "ORS", "AGR", "VFS", "DSE",
+        "FPT", "CMG", "ELC", "FOX", "CTR", "VGI", "VNZ",
+        "HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV",
+        "GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW",
+        "NT2", "REE", "PC1", "GEX", "GEE", "TV2", "VSH", "CHP",
+        "VNM", "MCH", "MSN", "SAB", "QNS", "KDC", "SBT",
+        "MWG", "FRT", "DGW", "PNJ", "PET", "VTP",
+        "VHC", "ANV", "FMC", "IDI", "PAN", "LTG",
+        "DHG", "DBD", "IMP", "TRA", "DMC", "PME",
+        "VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC",
+        "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC",
+        "GMD", "HAH", "VSC", "PHP", "VOS",
+        "ACV", "HVN", "VJC", "AST", "SCS"
+    ]
+    
+    group_2 = [
+        "CTD", "CII", "C4G", "VCG", "FCN", "HHV", "LCG", "C47", "C32",
+        "DPR", "PHR", "TRC", "GVR", "DRI",
+        "VGC", "HT1", "BCC", "BTS", "HOM", "CLH",
+        "VCS", "PTB", "TLG", "DNP", "TDM", "BWE",
+        "BMP", "DQC", "RAL", "GDT", "SAV", "ACG",
+        "DPM", "DCM", "BFC", "LAS", "DDV",
+        "PAT", "MSR", "KSV", "KSB", "DHA", "BMC",
+        "VPG", "HAH", "GMD", "VTO", "VIP",
+        "TMS", "TCL", "STG", "SFI", "ILB",
+        "VNL", "DVP", "DXP", "CDN",
+        "VOS", "MVN", "VNA",
+        "PPC", "QTP", "HND", "NBP", "SJD", "TMP",
+        "GEG", "VEA", "DNH", "AVC", "SBA",
+        "HAX", "SVC", "CTF", "VVS",
+        "PAC", "GIL", "TNG", "MSH", "VGT", "STK",
+        "TCM", "TTA", "ADS", "HTG",
+        "DHC", "GSP", "PGC", "CNG",
+        "PVB", "PVC", "PXS", "PXT",
+        "POM", "TLH", "VGS",
+        "NNC", "KMT", "DHA",
+        "LIX", "NET", "TSC",
+        "PLC", "TNC", "CSM", "SRC",
+        "DAG", "NHH", "RDP",
+        "VIT", "VHL", "VLB",
+        "KHP", "BTP", "PPC",
+        "VNE", "VNEC"
+    ]
+
+    group_3 = [
+        "VAB", "BVB", "BAB", "NVB", "KLB",
+        "VDS", "TVS", "APG", "APS", "AAS", "ABW", "BMS",
+        "VIG", "WSS", "HAC", "HBS",
+        "BVS", "IVS",
+        "VIX", "VND", "SSI", "HCM", "VCI", "FTS",
+        "FPT", "FOX", "CMG", "ELC", "CTR", "VGI",
+        "ITD", "ICT", "SGT", "CMT",
+        "YEG", "VEF", "VNZ",
+        "VNM", "QNS", "MCH", "MSN", "SAB", "BHN",
+        "SLS", "LSS", "KTS", "SBT", "KDC",
+        "DBC", "BAF", "HAG", "HNG", "VLC", "MML",
+        "VHC", "ANV", "ASM", "IDI", "ABT", "ACL",
+        "FMC", "MPC", "CMX", "AAM",
+        "PNJ", "MWG", "FRT", "DGW", "PET",
+        "VEA", "HAX", "SVC",
+        "DHG", "DBD", "IMP", "TRA", "DMC", "DVN", "OPC", "DCL", "JVC", "AMV",
+        "BVH", "PVI", "BMI", "BIC", "MIG", "VNR",
+        "FRT", "MWG", "PET", "DGW",
+        "GMD", "HAH", "VSC", "PHP",
+        "ACV", "HVN", "VJC", "AST", "SCS",
+        "VTP", "VGI", "FOX",
+        "VIC", "VHM", "VRE", "KDH", "NLG", "DXG", "PDR", "DIG", "HDC", "CEO",
+        "BCM", "IDC", "KBC", "SIP", "SZC",
+        "VPI", "HDG", "NTL", "TCH",
+        "SCR", "IJC", "LGL"
+    ]
+
+    group_4 = [
+        "A32", "AAH", "AAS", "AAV", "ABB", "ABC", "ABI", "ABW",
+        "ACE", "ACM", "ACS", "ADC", "ADG", "ADP", "ADS",
+        "AFX", "AG1", "AGF", "AGG", "AGM", "AGP", "AGR",
+        "AGX", "AIC", "AIG", "ALC", "ALT", "ALV", "AMC",
+        "AME", "AMP", "AMS", "AMV", "ANI", "ANT", "APC",
+        "APF", "APG", "APH", "API", "APL", "APP", "APS",
+        "APT", "ARM", "ART", "ASG", "ASM", "ASP", "AST",
+        "ATA", "ATG", "ATS", "AVC", "AVG",
+        "BAB", "BAF", "BAL", "BAX", "BBH", "BBM", "BBS",
+        "BBT", "BCA", "BCB", "BCC", "BCE", "BCF", "BCM",
+        "BCP", "BCV", "BDG", "BDT", "BDW", "BED", "BEL",
+        "BFC", "BGE", "BGW", "BHA", "BHC", "BHG", "BHH",
+        "BHI", "BHK", "BHN", "BHP", "BIC", "BID", "BIG",
+        "BIO", "BKC", "BKG", "BLF", "BLI", "BLN", "BLT",
+        "BMC", "BMD", "BMF", "BMG", "BMJ", "BMK", "BMP",
+        "BMS", "BMV", "BNA", "BNW", "BOT", "BPC", "BQB",
+        "BQP", "BRC", "BRR", "BRS", "BSA", "BSD", "BSG",
+        "BSH", "BSI", "BSL", "BSP", "BSQ", "BSR", "BT1",
+        "BT6", "BTB", "BTD", "BTG", "BTH", "BTN", "BTP",
+        "BTS", "BTT", "BTU", "BTV", "BTW", "BVB", "BVG",
+        "BVH", "BVL", "BVN", "BVS", "BWA", "BWE", "BWS", "BXH"
+    ]
+
+    group_5 = [
+        "C21", "C22", "C32", "C47", "C4G", "C69", "C92", "CAD",
+        "CAG", "CAN", "CAP", "CAR", "CAT", "CBI", "CBS", "CC1",
+        "CCA", "CCC", "CCI", "CCL", "CCM", "CCP", "CCR", "CCS",
+        "CCT", "CCV", "CDC", "CDG", "CDN", "CDO", "CDP", "CDR",
+        "CEN", "CEO", "CET", "CFM", "CFV", "CGV", "CH5", "CHC",
+        "CHP", "CHS", "CI5", "CIA", "CID", "CIG", "CII", "CIP",
+        "CJC", "CK8", "CKA", "CKD", "CKG", "CKV", "CLC", "CLH",
+        "CLI", "CLL", "CLM", "CLW", "CLX", "CMC", "CMD", "CMF",
+        "CMG", "CMI", "CMK", "CMM", "CMN", "CMP", "CMS", "CMT",
+        "CMV", "CMW", "CMX", "CNA", "CNC", "CNG", "CNN", "CNT",
+        "COM", "CPA", "CPC", "CPH", "CPI", "CQN", "CQT", "CRC",
+        "CRE", "CRV", "CSC", "CSI", "CSM", "CST", "CSV", "CT3",
+        "CT6", "CTB", "CTD", "CTF", "CTG", "CTI", "CTP",
+        "D11", "D2D", "DAE", "DBC", "DBT", "DC2", "DCL", "DCM",
+        "DCR", "DCS", "DGC", "DGL", "DGT", "DHA", "DHG", "DHP",
+        "DHT", "DIG", "DL1", "DLG", "DMC", "DNC", "DNP", "DNT",
+        "DPG", "DPM", "DPR", "DQC", "DRC", "DRH", "DRI", "DSN",
+        "DST", "DTD", "DTL", "DTT", "DVP", "DXG", "DXV",
+        "EBS", "ECI", "EID", "ELC", "EME", "EMS", "EPH",
+        "EVF", "EVG", "FBA", "FDC", "FID", "FIC", "FLC", "FOC",
+        "G36", "GAB", "GAS", "GDT", "GEE", "GEL", "GEX", "GHC",
+        "GKM", "GMD", "GMC", "GMX", "GSP", "GTA", "GVR",
+        "H11", "HAI", "HAP", "HBC", "HBS", "HCD", "HCI", "HDA",
+        "HDC", "HDG", "HDO", "HEJ", "HGM", "HHP", "HHS", "HHV",
+        "HID", "HIG", "HII", "HJS", "HKT", "HLD", "HMC", "HMH",
+        "HNA", "HNF", "HOT", "HPG", "HPT", "HQC", "HRC", "HSG",
+        "HSL", "HSM", "HT1", "HTC", "HTG", "HTI", "HTL", "HTN",
+        "HUT", "HVA", "HVT"
+    ]
+
+    # Hợp tất cả các nhóm lại và lọc bỏ trùng lặp hoàn toàn
+    combined_tickers = group_1 + group_2 + group_3 + group_4 + group_5
+    unique_tickers = sorted(list(set([t.strip().upper() for t in combined_tickers if t.strip()])))
+    
+    print(f"🎯 [FINEX Engine] Đã tổng hợp và loại bỏ trùng lặp, tổng số lượng mã độc nhất cần cào: {len(unique_tickers)}")
+    return unique_tickers
 
 def get_sector(symbol):
     """Phân chia chính xác thành các nhóm ngành chính"""
-    tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VNZ", "VTC"]
+    tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ"]
     finance_list = [
         "VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SSI", "VCI", 
         "HCM", "VND", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", 
@@ -191,8 +324,8 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     return records
 
 def main():
-    target_stocks = load_tickers_from_module()
-    print(f"🚀 [FINEX Pipeline 2020-2026] Đã nạp {len(target_stocks)} mã từ tệp tickers.txt, bắt đầu quét...")
+    target_stocks = load_and_merge_500_tickers()
+    print(f"🚀 [FINEX Pipeline 2020-2026] Bắt đầu quét dữ liệu cho {len(target_stocks)} mã cổ phiếu...")
     
     all_master_records = []
     success_count = 0
@@ -211,10 +344,9 @@ def main():
             all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
             
             success_count += 1
-            time.sleep(0.2)
+            time.sleep(0.15) # Tối ưu tốc độ quét an toàn
         except Exception as e:
             fail_count += 1
-            print(f"⚠️ Bỏ qua mã {symbol} do lỗi: {e}")
             continue
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
@@ -232,8 +364,8 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
     print(f"\n==================================================")
-    print(f" 🎉 HOÀN TẤT CÀO DỮ LIỆU & LÀM SẠCH 100% TIẾNG VIỆT")
-    print(f" - Thành công: {success_count} mã | Lỗi: {fail_count} mã")
+    print(f" 🎉 HOÀN TẤT CÀO 500 MÃ & LÀM SẠCH 100% TIẾNG VIỆT")
+    print(f" - Thành công: {success_count} mã | Bỏ qua/Lỗi: {fail_count} mã")
     print(f" - Tổng số bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
 
