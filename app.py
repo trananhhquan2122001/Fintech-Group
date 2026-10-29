@@ -31,8 +31,6 @@ def load_database():
         if os.path.exists(path) and os.path.getsize(path) > 0:
             try:
                 df_load = pd.read_csv(path, low_memory=False)
-                # Giữ nguyên chữ hoa/thường hoặc chuẩn hóa khoảng trắng thừa
-                df_load.columns = [str(c).strip() for c in df_load.columns]
                 return df_load
             except Exception:
                 continue
@@ -46,11 +44,13 @@ df = load_database()
 if df.empty:
     st.warning("⚠️ Hiện chưa tìm thấy file cơ sở dữ liệu tổng hợp (`vietnam_stock_database_tong_hop.csv`). Hãy kiểm tra lại thư mục `data/` trên kho GitHub!")
 else:
-    # Khớp chính xác với tên các cột tiếng Việt thực tế trong file CSV của bạn
-    ticker_col = 'mã chứng khoán' if 'mã chứng khoán' in df.columns else next((c for c in df.columns if 'mã' in c), None)
-    period_col = 'năm' if 'năm' in df.columns else next((c for c in df.columns if 'kỳ' in c or 'năm' in c), None)
-    metric_col = 'chỉ tiêu tiếng việt' if 'chỉ tiêu tiếng việt' in df.columns else next((c for c in df.columns if 'chỉ tiêu' in c), None)
-    value_col = 'giá trị' if 'giá trị' in df.columns else next((c for c in df.columns if 'giá trị' in c), None)
+    # Tạo từ điển tra cứu tên cột không phân biệt chữ hoa/thường
+    col_map = {c.strip().lower(): c for c in df.columns}
+    
+    ticker_col = col_map.get('mã chứng khoán')
+    period_col = col_map.get('năm') or col_map.get('ngày kỳ')
+    metric_col = col_map.get('chỉ tiêu tiếng việt')
+    value_col = col_map.get('giá trị')
 
     if not ticker_col:
         st.error(f"❌ Không tìm thấy cột mã chứng khoán. Các cột hiện có: {list(df.columns)}")
