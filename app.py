@@ -1,8 +1,8 @@
-# finex_terminal_v2.py
+# finex_terminal_v3.py
 # ============================================================================
-# FINEX VN Terminal — Enterprise Intelligence
-# Bản nâng cấp: tích hợp định giá + đối tác + khủng hoảng + cổ tức
-#               + ML/DL + dự báo + khám phá dữ liệu CSV
+# FINEX VN Terminal — Enterprise Intelligence v3
+# Tích hợp đầy đủ: VNINDEX 26 năm + VIP + BCTC Gốc + Snapshot + Profiler
+# Sửa hoàn toàn lỗi nền trắng/chữ trắng ở ticker selector và partner section
 # ============================================================================
 
 import streamlit as st
@@ -12,7 +12,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import os
+import time
 from datetime import datetime
+from contextlib import contextmanager
 
 st.set_page_config(
     page_title="FINEX VN Terminal — Enterprise Intelligence",
@@ -39,7 +41,7 @@ MAX_OWNED_SHARES = 100_000_000
 DEFAULT_PRICE_LIST = list(range(MIN_MARKET_PRICE, MAX_MARKET_PRICE + 1, MARKET_PRICE_STEP))
 
 # ---------------------------------------------------------------------------
-# 1.1 PARTNERS (mã giới thiệu mở tài khoản chứng khoán)
+# 1.1 PARTNERS — thêm SSI
 # ---------------------------------------------------------------------------
 PARTNERS = {
     "DNSE": {
@@ -69,10 +71,56 @@ PARTNERS = {
         "url": "https://tcinvest.tcbs.com.vn/guest/login?openAccount=true&referralcode=105C925853",
         "color": "#1E88E5",
     },
+    "SSI": {
+        "display_name": "SSI",
+        "full_name": "Công ty Cổ phần Chứng khoán SSI",
+        "strengths": "Chứng khoán lâu đời nhất Việt Nam, hệ thống nghiên cứu hàng đầu.",
+        "margin_policy": "Margin đa dạng, có gói ưu đãi cho khách hàng VIP và nhà đầu tư tổ chức.",
+        "referral_code": "SSIQUAN2122",
+        "url": "https://www.ssi.com.vn/mo-tai-khoan",
+        "color": "#F59E0B",
+    },
 }
 
 # ---------------------------------------------------------------------------
-# 1.2 HISTORICAL CRISES (mock — thay bằng dữ liệu thật khi có)
+# 1.2 VNINDEX — 26 năm lịch sử
+# ---------------------------------------------------------------------------
+VNINDEX_MILESTONES = [
+    ("2000-07-28", 100, "Khai trương TTCK Việt Nam"),
+    ("2001-06-30", 571, "Đỉnh cao đầu tiên"),
+    ("2001-12-31", 235, "Sụp đổ sau bong bóng 2001"),
+    ("2003-10-31", 130, "Đáy lịch sử thập kỷ"),
+    ("2005-12-30", 307, "Phục hồi chậm"),
+    ("2006-12-29", 751, "Bùng nổ 2006"),
+    ("2007-03-12", 1170, "Đỉnh cao lịch sử 2007"),
+    ("2007-12-31", 927, "Điều chỉnh sau đỉnh"),
+    ("2008-12-31", 315, "Khủng hoảng tài chính toàn cầu"),
+    ("2009-02-20", 235, "Đáy khủng hoảng 2008-2009"),
+    ("2009-12-31", 494, "Hồi phục sau khủng hoảng"),
+    ("2010-12-31", 484, "Đi ngang"),
+    ("2011-12-30", 351, "Khủng hoảng nợ công châu Âu"),
+    ("2012-12-28", 413, "Đáy 2012, khởi đầu chu kỳ mới"),
+    ("2013-12-31", 504, "Phục hồi"),
+    ("2014-12-31", 545, "Tăng trưởng ổn định"),
+    ("2015-12-31", 579, "Đi ngang"),
+    ("2016-12-30", 664, "Tăng trưởng"),
+    ("2017-12-29", 984, "Năm bùng nổ 2017"),
+    ("2018-04-09", 1204, "Đỉnh lịch sử 2018"),
+    ("2018-12-28", 892, "Điều chỉnh mạnh cuối 2018"),
+    ("2019-12-31", 960, "Hồi phục vừa phải"),
+    ("2020-03-24", 660, "Đáy COVID-19"),
+    ("2020-12-31", 1103, "Hồi phục thần tốc COVID"),
+    ("2021-11-25", 1500, "Đỉnh cao 2021"),
+    ("2022-01-06", 1528, "Đỉnh lịch sử 2022"),
+    ("2022-11-15", 873, "Đáy khủng hoảng trái phiếu/BĐS"),
+    ("2023-12-29", 1129, "Phục hồi sau khủng hoảng"),
+    ("2024-12-31", 1266, "Tăng trưởng ổn định"),
+    ("2025-12-31", 1650, "Bứt phá mạnh 2025"),
+    ("2026-10-22", 1774.15, "Đỉnh lịch sử mới — VN-Index 1,774.15"),
+]
+
+# ---------------------------------------------------------------------------
+# 1.3 HISTORICAL CRISES — mở rộng 8 kịch bản
 # ---------------------------------------------------------------------------
 HISTORICAL_CRISES = {
     "BASE": {
@@ -86,6 +134,70 @@ HISTORICAL_CRISES = {
                 {"period": "2026", "market_impact": "Đỉnh mới 1.774 điểm (22/10/2026)."},
             ],
         },
+    },
+    "DOTCOM_2000": {
+        "title": "Bong bóng Dot-com (2000-2002)",
+        "source": "Federal Reserve History / Wikipedia",
+        "impact": "Nasdaq giảm ~78% từ đỉnh 5.048 (03/2000) xuống 1.114 (10/2002). "
+                  "Hàng trăm công ty dot-com phá sản.",
+        "context": {
+            "trigger": "Định giá công nghệ phi lý, doanh thu không có lợi nhuận.",
+            "timeline": [
+                {"period": "03/2000", "market_impact": "Nasdaq đạt đỉnh 5.048 điểm."},
+                {"period": "10/2002", "market_impact": "Nasdaq chạm đáy 1.114 điểm."},
+            ],
+        },
+        "fed_actions_and_philosophy": {
+            "core_mission": "Fed hạ lãi suất từ 6.5% xuống 1.75% trong 2 năm.",
+            "key_decision": "Cắt giảm lãi suất mạnh tay sau sự kiện 11/9.",
+            "policy_rule": "Nới lỏng tiền tệ để hỗ trợ phục hồi.",
+            "famous_quote": "Irrational exuberance — Alan Greenspan (1996)",
+            "market_lesson": "Định giá không có lợi nhuận là bong bóng.",
+        },
+        "metrics": {"drawdown_pct": -78.0, "recovery_months": 180, "bankruptcies": 500},
+    },
+    "GFC_2008": {
+        "title": "Khủng hoảng Tài chính Toàn cầu (2008)",
+        "source": "Federal Reserve / Bloomberg",
+        "impact": "S&P 500 giảm ~57% từ đỉnh 1.565 (10/2007) xuống 676 (03/2009). "
+                  "Lehman Brothers phá sản. VN-Index giảm từ 1.170 xuống 235 (-80%).",
+        "context": {
+            "trigger": "Bong bóng bất động sản Mỹ + cho vay dưới chuẩn + chứng khoán hóa nợ.",
+            "timeline": [
+                {"period": "09/2008", "market_impact": "Lehman Brothers phá sản."},
+                {"period": "03/2009", "market_impact": "S&P 500 tạo đáy 676 điểm."},
+                {"period": "12/2009", "market_impact": "VN-Index hồi phục về 494 điểm."},
+            ],
+        },
+        "fed_actions_and_philosophy": {
+            "core_mission": "Fed hạ lãi suất về 0-0.25%, QE1 mua 600 tỷ USD MBS.",
+            "key_decision": "Cứu AIG, Bear Stearns, mở rộng bảng cân đối.",
+            "policy_rule": "Too big to fail — cứu các định chế hệ thống.",
+            "famous_quote": "We must do whatever is necessary — Ben Bernanke",
+            "market_lesson": "Đòn bẩy quá mức + thiếu minh bạch = thảm họa.",
+        },
+        "metrics": {"drawdown_pct": -57.0, "recovery_months": 48, "vnindex_drop_pct": -80.0},
+    },
+    "EU_DEBT_2011": {
+        "title": "Khủng hoảng Nợ công châu Âu (2011)",
+        "source": "ECB / IMF",
+        "impact": "Chỉ số Euro Stoxx giảm ~30%; VN-Index giảm từ 500 xuống 351 (-30%); "
+                  "lạm phát VN lên 18%, lãi suất 15%.",
+        "context": {
+            "trigger": "Hy Lạp, Ý, Tây Ban Nha vỡ nợ; khủng hoảng niềm tin Eurozone.",
+            "timeline": [
+                {"period": "07/2011", "market_impact": "Khủng hoảng nợ Hy Lạp lan rộng."},
+                {"period": "12/2011", "market_impact": "VN-Index tạo đáy 351 điểm."},
+            ],
+        },
+        "fed_actions_and_philosophy": {
+            "core_mission": "ECB mua trái phiếu Ý/Tây Ban Nha quy mô lớn.",
+            "key_decision": "Mario Draghi: 'Whatever it takes to preserve the euro'.",
+            "policy_rule": "Can thiệp trực tiếp thị trường trái phiếu.",
+            "famous_quote": "Whatever it takes — Mario Draghi (2012)",
+            "market_lesson": "Cam kết mạnh mẽ của NHTW có thể đảo ngược niềm tin.",
+        },
+        "metrics": {"drawdown_pct": -30.0, "vnindex_drop_pct": -30.0, "eu_stimulus_billion": 750},
     },
     "COVID_2020": {
         "title": "Khủng hoảng COVID-19 (2020)",
@@ -101,7 +213,7 @@ HISTORICAL_CRISES = {
             ],
         },
         "fed_actions_and_philosophy": {
-            "core_mission": "Fed hạ lãi suất khẩn cấp về 0–0.25%, bơm thanh khoản qua QE không giới hạn.",
+            "core_mission": "Fed hạ lãi suất khẩn cấp về 0–0.25%, QE không giới hạn.",
             "key_decision": "Mua trái phiếu chính phủ & MBS quy mô lớn.",
             "policy_rule": "Hành động nhanh, quy mô lớn, không giới hạn.",
             "famous_quote": "Whatever it takes — Jerome Powell",
@@ -131,10 +243,49 @@ HISTORICAL_CRISES = {
         },
         "metrics": {"drawdown_pct": -37.0, "bond_defaults": 150, "recovery_months": 12},
     },
+    "SVB_2023": {
+        "title": "Khủng hoảng Ngân hàng SVB (03/2023)",
+        "source": "FDIC / Reuters",
+        "impact": "Silicon Valley Bank (SVB) phá sản — ngân hàng lớn thứ 2 lịch sử Mỹ. "
+                  "Signature Bank, First Republic tiếp theo. VN-Index giảm 8% ngắn hạn.",
+        "context": {
+            "trigger": "Fed tăng lãi suất mạnh 2022-2023, danh mục trái phiếu SVB lỗ nặng.",
+            "timeline": [
+                {"period": "03/2023", "market_impact": "SVB sụp đổ sau 48h tháo chạy."},
+                {"period": "05/2023", "market_impact": "First Republic bị JPMorgan thâu tóm."},
+            ],
+        },
+        "fed_actions_and_philosophy": {
+            "core_mission": "Fed mở BTFP (Bank Term Funding Program) 25 tỷ USD.",
+            "key_decision": "Bảo lãnh 100% tiền gửi SVB dù vượt hạn mức FDIC.",
+            "policy_rule": "Cứu người gửi tiền, không cứu cổ đông.",
+            "famous_quote": "Deposits are safe — Joe Biden",
+            "market_lesson": "Rủi ro lãi suất có thể phá hủy ngân hàng trong vài ngày.",
+        },
+        "metrics": {"vnindex_drop_pct": -8.0, "svb_assets_billion": 209, "recovery_weeks": 6},
+    },
 }
 
 # ---------------------------------------------------------------------------
-# 1.3 DEMO FINANCIAL DATA — nguồn ưu tiên cho tab Định giá / Dự báo / ML / DL
+# 1.4 COMPANY INFO — tên, sàn, ngành
+# ---------------------------------------------------------------------------
+COMPANY_INFO = {
+    "FPT": {"name": "CTCP FPT", "sector": "Công nghệ thông tin", "exchange": "HOSE"},
+    "TCB": {"name": "Ngân hàng TMCP Kỹ Thương Việt Nam", "sector": "Ngân hàng", "exchange": "HOSE"},
+    "HPG": {"name": "CTCP Tập đoàn Hòa Phát", "sector": "Sản xuất thép", "exchange": "HOSE"},
+    "VNM": {"name": "CTCP Sữa Việt Nam", "sector": "Tiêu dùng", "exchange": "HOSE"},
+    "VCB": {"name": "Ngân hàng TMCP Ngoại thương Việt Nam", "sector": "Ngân hàng", "exchange": "HOSE"},
+    "MWG": {"name": "CTCP Đầu tư Thế Giới Di Động", "sector": "Bán lẻ", "exchange": "HOSE"},
+    "SSI": {"name": "CTCP Chứng khoán SSI", "sector": "Chứng khoán", "exchange": "HOSE"},
+    "ACB": {"name": "Ngân hàng TMCP Á Châu", "sector": "Ngân hàng", "exchange": "HOSE"},
+    "VIC": {"name": "CTCP Tập đoàn Vingroup", "sector": "Bất động sản", "exchange": "HOSE"},
+    "VHM": {"name": "CTCP Vinhomes", "sector": "Bất động sản", "exchange": "HOSE"},
+    "GAS": {"name": "Tổng Công ty Khí Việt Nam", "sector": "Năng lượng", "exchange": "HOSE"},
+    "MSN": {"name": "CTCP Tập đoàn Masan", "sector": "Tiêu dùng", "exchange": "HOSE"},
+}
+
+# ---------------------------------------------------------------------------
+# 1.5 DEMO FINANCIAL DATA — 12 mã
 # ---------------------------------------------------------------------------
 DEMO_FINANCIAL_DATA = {
     "FPT": {
@@ -143,8 +294,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 1_500_000_000, "market_cap": 180_000,
         "lnst_2025": 8500, "lnst_2024": 7000, "lnst_6t2026": 5000,
         "toi_6t2026": 30000, "total_assets_30062026": 70_000, "equity": 38_000,
-        "div_per_share": 2000, "div_yield": 1.7,
-        "industry": "Công nghệ thông tin",
+        "div_per_share": 2000, "div_yield": 1.7, "industry": "Công nghệ thông tin",
     },
     "TCB": {
         "price": 35000, "eps_ttm": 3500, "bvps": 28000, "pe_ttm": 10.0, "pb": 1.25,
@@ -153,8 +303,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 7_000_000_000, "market_cap": 245_000,
         "lnst_2025": 22000, "lnst_2024": 19000, "lnst_6t2026": 12000,
         "toi_6t2026": 25000, "total_assets_30062026": 800_000, "equity": 180_000,
-        "div_per_share": 1500, "div_yield": 4.3,
-        "industry": "Ngân hàng",
+        "div_per_share": 1500, "div_yield": 4.3, "industry": "Ngân hàng",
     },
     "HPG": {
         "price": 27000, "eps_ttm": 1800, "bvps": 17000, "pe_ttm": 15.0, "pb": 1.6,
@@ -162,8 +311,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 6_400_000_000, "market_cap": 170_000,
         "lnst_2025": 12000, "lnst_2024": 8000, "lnst_6t2026": 7000,
         "toi_6t2026": 70000, "total_assets_30062026": 220_000, "equity": 108_000,
-        "div_per_share": 500, "div_yield": 1.85,
-        "industry": "Sản xuất",
+        "div_per_share": 500, "div_yield": 1.85, "industry": "Sản xuất thép",
     },
     "VNM": {
         "price": 68000, "eps_ttm": 4200, "bvps": 22000, "pe_ttm": 16.2, "pb": 3.1,
@@ -171,8 +319,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 2_080_000_000, "market_cap": 141_000,
         "lnst_2025": 8700, "lnst_2024": 8500, "lnst_6t2026": 4500,
         "toi_6t2026": 32000, "total_assets_30062026": 60_000, "equity": 45_000,
-        "div_per_share": 3850, "div_yield": 5.66,
-        "industry": "Tiêu dùng",
+        "div_per_share": 3850, "div_yield": 5.66, "industry": "Tiêu dùng",
     },
     "VCB": {
         "price": 90000, "eps_ttm": 6500, "bvps": 45000, "pe_ttm": 13.8, "pb": 2.0,
@@ -181,8 +328,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 5_600_000_000, "market_cap": 504_000,
         "lnst_2025": 36000, "lnst_2024": 33000, "lnst_6t2026": 19000,
         "toi_6t2026": 40000, "total_assets_30062026": 1_800_000, "equity": 180_000,
-        "div_per_share": 1000, "div_yield": 1.11,
-        "industry": "Ngân hàng",
+        "div_per_share": 1000, "div_yield": 1.11, "industry": "Ngân hàng",
     },
     "MWG": {
         "price": 55000, "eps_ttm": 2200, "bvps": 18000, "pe_ttm": 25.0, "pb": 3.1,
@@ -190,8 +336,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 1_460_000_000, "market_cap": 80_300,
         "lnst_2025": 3200, "lnst_2024": 2500, "lnst_6t2026": 2000,
         "toi_6t2026": 65000, "total_assets_30062026": 45_000, "equity": 26_000,
-        "div_per_share": 500, "div_yield": 0.91,
-        "industry": "Bán lẻ",
+        "div_per_share": 500, "div_yield": 0.91, "industry": "Bán lẻ",
     },
     "SSI": {
         "price": 32000, "eps_ttm": 1800, "bvps": 15000, "pe_ttm": 17.8, "pb": 2.1,
@@ -199,8 +344,7 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 2_000_000_000, "market_cap": 64_000,
         "lnst_2025": 3600, "lnst_2024": 3000, "lnst_6t2026": 1800,
         "toi_6t2026": 7000, "total_assets_30062026": 60_000, "equity": 25_000,
-        "div_per_share": 1000, "div_yield": 3.13,
-        "industry": "Chứng khoán",
+        "div_per_share": 1000, "div_yield": 3.13, "industry": "Chứng khoán",
     },
     "ACB": {
         "price": 24000, "eps_ttm": 3200, "bvps": 18000, "pe_ttm": 7.5, "pb": 1.33,
@@ -209,13 +353,81 @@ DEMO_FINANCIAL_DATA = {
         "shares_outstanding": 4_470_000_000, "market_cap": 107_000,
         "lnst_2025": 18000, "lnst_2024": 16000, "lnst_6t2026": 10000,
         "toi_6t2026": 25000, "total_assets_30062026": 750_000, "equity": 140_000,
-        "div_per_share": 1500, "div_yield": 6.25,
-        "industry": "Ngân hàng",
+        "div_per_share": 1500, "div_yield": 6.25, "industry": "Ngân hàng",
+    },
+    "VIC": {
+        "price": 45000, "eps_ttm": 1500, "bvps": 32000, "pe_ttm": 30.0, "pb": 1.4,
+        "roe_2025": 5.0, "roa_2025": 1.5, "margin": 25.0, "de": 2.0,
+        "shares_outstanding": 3_800_000_000, "market_cap": 171_000,
+        "lnst_2025": 5700, "lnst_2024": 4500, "lnst_6t2026": 3200,
+        "toi_6t2026": 90000, "total_assets_30062026": 700_000, "equity": 120_000,
+        "div_per_share": 0, "div_yield": 0.0, "industry": "Bất động sản",
+    },
+    "VHM": {
+        "price": 42000, "eps_ttm": 4500, "bvps": 28000, "pe_ttm": 9.3, "pb": 1.5,
+        "roe_2025": 16.0, "roa_2025": 5.0, "margin": 35.0, "de": 1.3,
+        "shares_outstanding": 4_350_000_000, "market_cap": 183_000,
+        "lnst_2025": 19500, "lnst_2024": 17000, "lnst_6t2026": 10000,
+        "toi_6t2026": 45000, "total_assets_30062026": 450_000, "equity": 122_000,
+        "div_per_share": 1000, "div_yield": 2.38, "industry": "Bất động sản",
+    },
+    "GAS": {
+        "price": 72000, "eps_ttm": 6800, "bvps": 35000, "pe_ttm": 10.6, "pb": 2.1,
+        "roe_2025": 20.0, "roa_2025": 12.0, "margin": 25.0, "de": 0.4,
+        "shares_outstanding": 2_350_000_000, "market_cap": 169_000,
+        "lnst_2025": 16000, "lnst_2024": 14000, "lnst_6t2026": 8500,
+        "toi_6t2026": 55000, "total_assets_30062026": 90_000, "equity": 82_000,
+        "div_per_share": 3000, "div_yield": 4.17, "industry": "Năng lượng",
+    },
+    "MSN": {
+        "price": 78000, "eps_ttm": 3500, "bvps": 22000, "pe_ttm": 22.3, "pb": 3.5,
+        "roe_2025": 15.0, "roa_2025": 5.0, "margin": 30.0, "de": 1.7,
+        "shares_outstanding": 1_420_000_000, "market_cap": 111_000,
+        "lnst_2025": 5000, "lnst_2024": 4500, "lnst_6t2026": 2800,
+        "toi_6t2026": 40000, "total_assets_30062026": 140_000, "equity": 31_000,
+        "div_per_share": 1000, "div_yield": 1.28, "industry": "Tiêu dùng",
     },
 }
 
+# ---------------------------------------------------------------------------
+# 1.6 VIP PACKAGES
+# ---------------------------------------------------------------------------
+VIP_PACKAGES = [
+    {"id": "PKG_29K", "name": "🎓 Gói S-Student",
+     "price": "29.000 VNĐ / tháng", "amount": 29000, "badge": "Hỗ trợ Sinh viên",
+     "features": ["Full tính năng Terminal 30 ngày",
+                  "Hỗ trợ 1-1 mở tài khoản chứng khoán (DNSE/VPS)",
+                  "Xem dữ liệu Realtime & Biểu đồ kỹ thuật",
+                  "Tra cứu chỉ số định giá VN30 & HNX30"]},
+    {"id": "PKG_59K", "name": "🌱 Gói Basic Investor",
+     "price": "59.000 VNĐ / tháng", "amount": 59000, "badge": "Nhà đầu tư Cá nhân",
+     "features": ["Toàn bộ tính năng Gói 29k",
+                  "Mở khóa Stress Test Khủng Hoảng (BĐS 2022, COVID-19...)",
+                  "Tra cứu toàn bộ 500+ mã HOSE, HNX, UPCoM",
+                  "Tính Biên an toàn (MoS) Graham/Buffett"]},
+    {"id": "PKG_99K", "name": "🚀 Gói Pro Trader",
+     "price": "99.000 VNĐ / tháng", "amount": 99000, "badge": "Khuyên Dùng (Popular)",
+     "features": ["Toàn bộ tính năng Gói 59k",
+                  "Định giá tự động đa phương pháp (DCF, DDM, P/E Band)",
+                  "Cảnh báo rủi ro & Sức khỏe tài chính doanh nghiệp",
+                  "Xuất báo cáo PDF/Hình ảnh 1-Click",
+                  "Ưu tiên hỗ trợ kỹ thuật 24/7"]},
+    {"id": "PKG_299K", "name": "👑 Gói VIP Portfolio",
+     "price": "299.000 VNĐ / tháng", "amount": 299000, "badge": "Tích Sản & Quản Lý Vốn",
+     "features": ["Toàn bộ tính năng Gói 99k",
+                  "Tối ưu hóa danh mục đầu tư bằng thuật toán Python",
+                  "Phân tích tương quan tài sản & Giảm thiểu rủi ro",
+                  "Tự động gửi cảnh báo tín hiệu qua Telegram Bot"]},
+    {"id": "PKG_499K", "name": "💼 Gói Enterprise / Broker",
+     "price": "499.000 VNĐ / tháng", "amount": 499000, "badge": "Môi giới & Chuyên gia",
+     "features": ["Full đặc quyền tất cả các gói",
+                  "Xuất Báo cáo chuẩn White-Label (Gắn Logo cá nhân)",
+                  "Bộ lọc cổ phiếu chuyên sâu (CANSLIM & Philip Fisher)",
+                  "Quyền truy cập API dữ liệu chuẩn hóa của Terminal"]},
+]
+
 # ============================================================================
-# 2. CSS — giao diện Bloomberg Terminal (xanh dương chủ đạo + vàng nhấn)
+# 2. CSS — TOÀN BỘ DARK THEME, SỬA LỖI NỀN TRẮNG / CHỮ TRẮNG
 # ============================================================================
 def inject_css():
     st.markdown("""
@@ -226,28 +438,36 @@ def inject_css():
         }
         .stApp {
             background:
-                radial-gradient(ellipse at top left, rgba(96,165,250,0.06) 0%, transparent 45%),
-                radial-gradient(ellipse at top right, rgba(212,175,55,0.06) 0%, transparent 45%),
-                linear-gradient(180deg, #0a0f19 0%, #0b1220 100%) !important;
+                radial-gradient(ellipse at top left, rgba(96,165,250,0.08) 0%, transparent 45%),
+                radial-gradient(ellipse at top right, rgba(212,175,55,0.08) 0%, transparent 45%),
+                linear-gradient(180deg, #050914 0%, #0a0f19 50%, #0b1220 100%) !important;
+            color: #e2e8f0 !important;
         }
-        .main .block-container { padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1520px; }
-        h1, h2, h3, h4, h5, h6 {
-            color: #60a5fa !important; font-weight: 700 !important; letter-spacing: -0.01em;
-        }
-        h2 { border-bottom: 1px solid #1f2937; padding-bottom: 8px; }
-        .stMarkdown, .stMetric, .stDataFrame, .stExpander, p, span, label, div { color: #cbd5e1; }
+        .main .block-container { padding-top: 1.2rem; padding-bottom: 3rem; max-width: 1560px; }
 
-        /* Metric cards — viền vàng để nhấn dữ liệu quan trọng */
+        /* === TYPOGRAPHY === */
+        h1 { color: #60a5fa !important; font-weight: 800 !important; font-size: 1.85em !important; }
+        h2 { color: #93c5fd !important; border-bottom: 1px solid #1f2937; padding-bottom: 8px; font-weight: 700 !important; }
+        h3 { color: #bfdbfe !important; font-weight: 700 !important; font-size: 1.22em !important; }
+        h4, h5, h6 { color: #dbeafe !important; font-weight: 700 !important; }
+        .stMarkdown, .stMarkdown p, .stMarkdown span, p, label {
+            color: #e2e8f0 !important;
+        }
+        .stCaption, [data-testid="stCaptionContainer"] {
+            color: #94a3b8 !important;
+        }
+
+        /* === METRIC CARDS === */
         [data-testid="stMetric"] {
-            background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
-            border: 1px solid #374151; border-left: 3px solid #D4AF37;
+            background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
+            border: 1px solid #334155; border-left: 3px solid #D4AF37;
             border-radius: 10px; padding: 14px 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.45);
             transition: all 0.2s ease;
         }
         [data-testid="stMetric"]:hover {
             border-left-color: #F5D97A;
-            box-shadow: 0 4px 16px rgba(212,175,55,0.20);
+            box-shadow: 0 4px 16px rgba(212,175,55,0.25);
             transform: translateY(-1px);
         }
         [data-testid="stMetricLabel"] {
@@ -258,10 +478,11 @@ def inject_css():
             color: #F5D97A !important; font-size: 1.65em !important;
             font-weight: 700 !important; font-variant-numeric: tabular-nums;
         }
+        [data-testid="stMetricDelta"] { font-size: 0.85em !important; }
 
-        /* Tabs */
+        /* === TABS === */
         .stTabs [data-baseweb="tab-list"] {
-            gap: 4px; background: #0b1220; padding: 6px;
+            gap: 4px; background: #0a1220; padding: 6px;
             border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 12px;
         }
         .stTabs [data-baseweb="tab"] {
@@ -269,15 +490,15 @@ def inject_css():
             color: #94a3b8 !important; font-weight: 600 !important;
             font-size: 14px !important; padding: 0 18px !important;
         }
-        .stTabs [data-baseweb="tab"]:hover { background: #16223a; color: #f3f4f6 !important; }
+        .stTabs [data-baseweb="tab"]:hover { background: #1a2538; color: #f3f4f6 !important; }
         .stTabs [aria-selected="true"] {
             background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
             color: #F5D97A !important; border-bottom: 2px solid #D4AF37 !important;
         }
 
-        /* Buttons */
+        /* === BUTTONS === */
         .stButton > button {
-            background: linear-gradient(135deg, #16223a 0%, #111c2e 100%) !important;
+            background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
             color: #e2e8f0 !important; border: 1px solid #2a3a5c !important;
             border-radius: 8px !important; font-weight: 600 !important;
             font-size: 14px !important; padding: 8px 16px !important;
@@ -287,94 +508,181 @@ def inject_css():
             background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
             border-color: #D4AF37 !important; color: #F5D97A !important;
             transform: translateY(-1px);
-            box-shadow: 0 4px 14px rgba(212,175,55,0.20);
+            box-shadow: 0 4px 14px rgba(212,175,55,0.25);
         }
         .stButton > button[kind="primary"] {
             background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
-            color: #0a0f19 !important; border: none !important;
+            color: #0a0f19 !important; border: none !important; font-weight: 700 !important;
         }
 
-        /* Sidebar */
+        /* === SIDEBAR (ép toàn bộ về dark) === */
         section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #0a0f19 0%, #111827 100%) !important;
+            background: linear-gradient(180deg, #050914 0%, #0a0f19 100%) !important;
             border-right: 1px solid #1f2937;
         }
-        section[data-testid="stSidebar"] .stMarkdown,
-        section[data-testid="stSidebar"] p,
-        section[data-testid="stSidebar"] div,
-        section[data-testid="stSidebar"] label,
+        section[data-testid="stSidebar"] * {
+            color: #e2e8f0 !important;
+        }
         section[data-testid="stSidebar"] h1,
         section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3 { color: #e2e8f0 !important; }
-        section[data-testid="stSidebar"] div[data-baseweb="select"] > div {
-            background-color: #1f2937 !important; color: #f3f4f6 !important;
-            border: 1px solid #374151 !important; border-radius: 8px !important;
-        }
-        section[data-testid="stSidebar"] .stRadio label {
-            background: #111827; border: 1px solid #1f2937;
-            border-radius: 8px; padding: 8px 12px !important;
-            margin: 2px 0 !important; transition: all 0.15s ease;
-        }
-        section[data-testid="stSidebar"] .stRadio label:hover {
-            background: #1f2937; border-color: #D4AF37;
+        section[data-testid="stSidebar"] h3 { color: #93c5fd !important; }
+        section[data-testid="stSidebar"] .stCaption,
+        section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] {
+            color: #94a3b8 !important;
         }
 
-        /* Popovers / dropdowns */
-        [data-baseweb="popover"], [data-baseweb="popover"] * {
-            background-color: #1f2937 !important; color: #ffffff !important;
+        /* === SELECTBOX — SỬA LỖI CHỮ TRẮNG TRÊN NỀN TRẮNG === */
+        div[data-baseweb="select"] {
+            background-color: #1a2538 !important;
         }
-        [role="option"]:hover, [aria-selected="true"] {
-            background-color: #1e3a5f !important; color: #F5D97A !important;
+        div[data-baseweb="select"] > div,
+        div[data-baseweb="select"] > div > div {
+            background-color: #1a2538 !important;
+            color: #ffffff !important;
+            border: 1px solid #374151 !important;
+            border-radius: 8px !important;
         }
-
-        /* Expanders */
-        [data-testid="stExpander"] {
-            background-color: #111827 !important; border: 1px solid #1f2937 !important;
-            border-radius: 10px !important;
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] input,
+        div[data-baseweb="select"] div[role="button"],
+        div[data-baseweb="select"] [data-testid="stMarkdownContainer"] p {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
         }
-        [data-testid="stExpander"] summary {
-            background-color: #1f2937 !important; color: #f3f4f6 !important;
+        div[data-baseweb="select"] svg {
+            fill: #D4AF37 !important;
+        }
+        [data-testid="stSelectbox"] label {
+            color: #cbd5e1 !important;
             font-weight: 600 !important;
         }
 
-        /* Dataframe */
-        .dataframe thead th {
-            background: #16223a !important; color: #F5D97A !important;
-            font-weight: 700 !important; text-transform: uppercase;
-            letter-spacing: 0.5px; font-size: 12px !important;
+        /* === POPOVER / DROPDOWN MENU === */
+        [data-baseweb="popover"] {
+            background-color: #1a2538 !important;
         }
-        .dataframe td, .dataframe th {
-            color: #e2e8f0 !important; border-bottom: 1px solid #1f2937 !important;
+        [data-baseweb="popover"] *,
+        [data-baseweb="menu"],
+        [role="listbox"] {
+            background-color: #1a2538 !important;
+            color: #f3f4f6 !important;
+        }
+        [role="option"] {
+            background-color: #1a2538 !important;
+            color: #e2e8f0 !important;
+            padding: 8px 12px !important;
+        }
+        [role="option"]:hover {
+            background-color: #1e3a5f !important;
+            color: #F5D97A !important;
+        }
+        [aria-selected="true"] {
+            background-color: #1e3a5f !important;
+            color: #F5D97A !important;
         }
 
-        /* Terminal header */
+        /* === RADIO / CHECKBOX === */
+        section[data-testid="stSidebar"] .stRadio > div { gap: 4px; }
+        section[data-testid="stSidebar"] .stRadio label {
+            background: #0a1220 !important;
+            border: 1px solid #1f2937 !important;
+            border-radius: 8px !important;
+            padding: 8px 12px !important;
+            margin: 2px 0 !important;
+            transition: all 0.15s ease !important;
+            cursor: pointer !important;
+        }
+        section[data-testid="stSidebar"] .stRadio label:hover {
+            background: #1a2538 !important;
+            border-color: #D4AF37 !important;
+        }
+        section[data-testid="stSidebar"] .stRadio label * {
+            color: #e2e8f0 !important;
+        }
+
+        /* === TEXT INPUT / NUMBER INPUT === */
+        input, textarea,
+        [data-testid="stTextInput"] input,
+        [data-testid="stNumberInput"] input {
+            background-color: #1a2538 !important;
+            color: #ffffff !important;
+            border: 1px solid #374151 !important;
+            border-radius: 8px !important;
+        }
+        [data-testid="stTextInput"] label,
+        [data-testid="stNumberInput"] label {
+            color: #cbd5e1 !important;
+        }
+
+        /* === EXPANDER === */
+        [data-testid="stExpander"] {
+            background-color: #0a1220 !important;
+            border: 1px solid #1f2937 !important;
+            border-radius: 10px !important;
+        }
+        [data-testid="stExpander"] summary {
+            background-color: #1a2538 !important;
+            color: #f3f4f6 !important;
+            font-weight: 600 !important;
+        }
+        [data-testid="stExpander"] summary:hover {
+            background-color: #1e3a5f !important;
+        }
+
+        /* === DATAFRAME === */
+        .dataframe {
+            background-color: #0a1220 !important;
+            border-radius: 8px;
+        }
+        .dataframe thead th {
+            background: #16223a !important;
+            color: #F5D97A !important;
+            font-weight: 700 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 12px !important;
+        }
+        .dataframe td, .dataframe th {
+            color: #e2e8f0 !important;
+            border-bottom: 1px solid #1f2937 !important;
+        }
+
+        /* === TERMINAL HEADER === */
         .terminal-header {
-            background: linear-gradient(135deg, #0a0f19 0%, #1f2937 100%);
+            background: linear-gradient(135deg, #0a0f19 0%, #1a2538 100%);
             border: 1px solid #1f2937; border-top: 3px solid #D4AF37;
             border-radius: 12px; padding: 18px 24px; margin-bottom: 16px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
         }
         .terminal-header h1 {
             background: linear-gradient(90deg, #F5D97A 0%, #60a5fa 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; margin: 0;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0;
         }
 
-        /* Glass card */
+        /* === GLASS CARD === */
         .glass-card {
-            background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
-            border: 1px solid #374151; border-radius: 12px;
-            padding: 16px; margin: 8px 0;
-            box-shadow: 0 3px 12px rgba(0,0,0,0.30);
+            background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+            color: #e2e8f0;
         }
+
+        /* === HYBRID CARD === */
         .hybrid-card {
             background: linear-gradient(145deg, #111827 0%, #16223a 100%);
             border: 1px solid #2a3a5c; border-left: 4px solid #D4AF37;
             border-radius: 12px; padding: 18px 20px; margin: 10px 0;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+            color: #e2e8f0;
         }
 
-        /* Recommend badges */
+        /* === RECOMMEND BADGES === */
         .recommend-badge {
             padding: 5px 14px; border-radius: 14px;
             font-weight: 700; font-size: 0.9em;
@@ -383,48 +691,113 @@ def inject_css():
         .rec-hold { background: #3a2a0a; color: #f59e0b; border: 1px solid #f59e0b; }
         .rec-sell { background: #2a0a0a; color: #ef4444; border: 1px solid #ef4444; }
 
-        /* Broker container */
+        /* === BROKER CONTAINER — ĐÃ ĐỔI SANG DARK THEME === */
         .broker-container {
-            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
-            border: 2px solid #D4AF37; border-radius: 14px;
-            padding: 18px 22px; margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(212,175,55,0.30);
+            background: linear-gradient(135deg, #0d1b2e 0%, #111827 100%);
+            border: 2px solid #D4AF37;
+            border-radius: 14px;
+            padding: 18px 22px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(212,175,55,0.15);
         }
         .broker-container .broker-title {
-            color: #0a0f19 !important; -webkit-text-fill-color: #0a0f19 !important;
-            font-size: 15px; font-weight: 800; margin-bottom: 14px;
-            letter-spacing: 0.5px; text-transform: uppercase;
+            color: #F5D97A !important;
+            -webkit-text-fill-color: #F5D97A !important;
+            font-size: 15px;
+            font-weight: 800;
+            margin-bottom: 14px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
         .broker-container .broker-note {
-            color: #1e293b !important; -webkit-text-fill-color: #1e293b !important;
-            font-size: 12.5px; margin-top: 12px; font-weight: 600;
+            color: #cbd5e1 !important;
+            -webkit-text-fill-color: #cbd5e1 !important;
+            font-size: 12.5px;
+            margin-top: 12px;
+            font-weight: 500;
         }
         .broker-container [data-testid="stButton"] button {
-            background: #0a0f19 !important; color: #F5D97A !important;
-            border: 2px solid #D4AF37 !important; font-weight: 700 !important;
-            font-size: 14px !important; border-radius: 8px !important;
-            padding: 10px 14px !important; transition: all 0.2s ease !important;
+            background: linear-gradient(135deg, #111827 0%, #0a0f19 100%) !important;
+            color: #F5D97A !important;
+            border: 2px solid #D4AF37 !important;
+            font-weight: 700 !important;
+            font-size: 14px !important;
+            border-radius: 8px !important;
+            padding: 10px 14px !important;
+            transition: all 0.2s ease !important;
         }
         .broker-container [data-testid="stButton"] button:hover {
             background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
-            color: #0a0f19 !important; border-color: #F5D97A !important;
+            color: #0a0f19 !important;
+            border-color: #F5D97A !important;
             transform: translateY(-1px);
-            box-shadow: 0 4px 14px rgba(212,175,55,0.55);
+            box-shadow: 0 4px 14px rgba(212,175,55,0.5);
         }
 
-        /* Scrollbar */
+        /* === SCROLLBAR === */
         ::-webkit-scrollbar { width: 10px; height: 10px; }
-        ::-webkit-scrollbar-track { background: #0a0f19; }
+        ::-webkit-scrollbar-track { background: #050914; }
         ::-webkit-scrollbar-thumb { background: #374151; border-radius: 6px; }
         ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+
+        /* === LINK BUTTONS === */
+        .stLinkButton a {
+            background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
+            color: #F5D97A !important;
+            border: 1px solid #D4AF37 !important;
+            border-radius: 8px !important;
+            font-weight: 600 !important;
+        }
+        .stLinkButton a:hover {
+            background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
+            color: #0a0f19 !important;
+        }
+
+        /* === ALERTS (info/success/warning/error) — fix contrast === */
+        [data-testid="stAlert"] {
+            background-color: #1a2538 !important;
+            border-left-width: 4px !important;
+            color: #e2e8f0 !important;
+        }
+        [data-testid="stAlert"] * { color: #e2e8f0 !important; }
     </style>
     """, unsafe_allow_html=True)
 
+
 # ============================================================================
-# 3. HELPERS
+# 3. PROFILER
+# ============================================================================
+_PROFILE = {}
+
+@contextmanager
+def prof(name):
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        _PROFILE[name] = (time.perf_counter() - t0) * 1000
+
+def render_profiler_panel():
+    with st.sidebar:
+        with st.expander("🔬 Profiler — Tốc độ", expanded=False):
+            if not _PROFILE:
+                st.caption("Chưa có dữ liệu")
+                return
+            sorted_log = sorted(_PROFILE.items(), key=lambda x: -x[1])
+            total = sum(_PROFILE.values())
+            st.caption(f"⏱️ Tổng: **{total:,.0f} ms**")
+            for name, ms in sorted_log[:12]:
+                icon = "🐌" if ms > 500 else ("⚠️" if ms > 200 else "✅")
+                st.caption(f"{icon} {name}: {ms:.0f}ms")
+            if st.button("🔄 Reset", key="prof_reset", use_container_width=True):
+                _PROFILE.clear()
+                st.rerun()
+
+
+# ============================================================================
+# 4. HELPERS
 # ============================================================================
 def _fmt_ty(v):
-    """Format số tỷ đồng."""
     try:
         v = float(v or 0)
     except Exception:
@@ -465,15 +838,15 @@ def _stock_dividend(shares, ratio_percent):
     add = int(shares * ratio_percent / 100)
     return {"additional_shares": add, "total_after": shares + add}
 
+
 # ============================================================================
-# 4. VALUATION CORE
+# 5. VALUATION CORE
 # ============================================================================
 def compute_hybrid_valuation(price, eps, bvps, roe, roa):
     graham = (22.5 * eps * bvps) ** 0.5 if (eps > 0 and bvps > 0) else 0
     dcf = eps * 1.08 / 0.04 if eps > 0 else 0
     pe_band = eps * 15 if eps > 0 else 0
     pb_band = bvps * 1.5 if bvps > 0 else 0
-
     if roe >= 20 and roa >= 10:
         w = {"graham": 0.15, "dcf": 0.40, "pe": 0.30, "pb": 0.15}
     elif roe >= 15 and roa >= 7:
@@ -482,7 +855,6 @@ def compute_hybrid_valuation(price, eps, bvps, roe, roa):
         w = {"graham": 0.35, "dcf": 0.20, "pe": 0.20, "pb": 0.25}
     else:
         w = {"graham": 0.45, "dcf": 0.10, "pe": 0.15, "pb": 0.30}
-
     total, used_w = 0.0, 0.0
     for k, val in [("graham", graham), ("dcf", dcf), ("pe", pe_band), ("pb", pb_band)]:
         if val > 0:
@@ -501,7 +873,6 @@ def compute_hybrid_valuation(price, eps, bvps, roe, roa):
     }
 
 def _simple_dcf_valuation(ticker, data):
-    """Fallback FCFF DCF."""
     if not data:
         return {"error": "Không có dữ liệu."}
     try:
@@ -510,11 +881,8 @@ def _simple_dcf_valuation(ticker, data):
         price = float(data.get("price", 0) or 0)
         if profit <= 0 or shares <= 0:
             return {"error": "Thiếu LNST hoặc số lượng cổ phiếu."}
-
         growth, terminal_g = 0.08, 0.03
-        rf, erp, beta = 0.03, 0.07, 1.0
-        wacc = rf + beta * erp
-
+        wacc = 0.03 + 1.0 * 0.07
         def _scenario(mult):
             g = growth * mult
             fcff = [profit * ((1 + g) ** i) for i in range(1, 6)]
@@ -530,7 +898,6 @@ def _simple_dcf_valuation(ticker, data):
                 "enterprise_value": ev, "pv_terminal_value": pv_tv,
                 "equity_value": ev, "current_price": price, "wacc": wacc,
             }
-
         base_s, bear_s, bull_s = _scenario(1.0), _scenario(0.6), _scenario(1.6)
         verdict = (
             "Buy" if base_s["upside_downside"] > 0.20
@@ -539,7 +906,7 @@ def _simple_dcf_valuation(ticker, data):
         return {
             "scenarios": {"Base": base_s, "Bear": bear_s, "Bull": bull_s},
             "verdict": verdict,
-            "clean_inputs": {"growth_rate": growth, "terminal_growth": terminal_g, "beta": beta},
+            "clean_inputs": {"growth_rate": growth, "terminal_growth": terminal_g, "beta": 1.0},
         }
     except Exception as e:
         return {"error": f"Lỗi DCF: {e}"}
@@ -562,8 +929,9 @@ def predict_risk_ensemble(roe, roa, margin, de):
 def predict_eps_ensemble(roe, roa, margin, de):
     return 3000.0 * (1 + (roe or 10) / 200.0)
 
+
 # ============================================================================
-# 5. DATA LOADING
+# 6. DATA LOADING
 # ============================================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_database():
@@ -584,7 +952,6 @@ def load_database():
     return pd.DataFrame(), None
 
 def _get_csv_columns(df):
-    """Resolve tên cột CSV không phân biệt hoa/thường."""
     col_map = {str(c).strip().lower(): c for c in df.columns}
     return {
         "ticker": col_map.get("mã chứng khoán") or col_map.get("ticker") or col_map.get("ma ck"),
@@ -592,21 +959,19 @@ def _get_csv_columns(df):
         "period": col_map.get("năm") or col_map.get("ngày kỳ") or col_map.get("period"),
         "metric": col_map.get("chỉ tiêu tiếng việt") or col_map.get("chỉ tiêu") or col_map.get("metric"),
         "value": col_map.get("giá trị") or col_map.get("value"),
+        "statement": col_map.get("loại báo cáo") or col_map.get("loai bao cao") or col_map.get("statement"),
     }
 
 def extract_financials_from_csv(df, ticker, cols):
-    """Trích xuất chỉ số từ CSV làm fallback khi ticker không có trong DEMO."""
     ticker_col = cols.get("ticker")
     metric_col = cols.get("metric")
     value_col = cols.get("value")
     period_col = cols.get("period")
     if not all([ticker_col, metric_col, value_col]):
         return {}
-
     sub = df[df[ticker_col] == ticker].copy()
     if sub.empty:
         return {}
-
     sub[value_col] = pd.to_numeric(
         sub[value_col].astype(str).str.replace(",", "").str.replace(" ", ""),
         errors="coerce",
@@ -614,13 +979,11 @@ def extract_financials_from_csv(df, ticker, cols):
     sub = sub.dropna(subset=[value_col])
     if sub.empty:
         return {}
-
     if period_col:
         try:
             sub = sub.sort_values(period_col, ascending=False)
         except Exception:
             pass
-
     patterns = {
         "eps_ttm": ["eps", "lãi cơ bản trên cổ phiếu"],
         "bvps": ["bvps", "giá trị sổ sách"],
@@ -637,7 +1000,6 @@ def extract_financials_from_csv(df, ticker, cols):
         "div_per_share": ["cổ tức", "dividend"],
         "shares_outstanding": ["số lượng cổ phiếu", "cổ phiếu lưu hành"],
     }
-
     result = {}
     for key, pats in patterns.items():
         for pat in pats:
@@ -648,8 +1010,6 @@ def extract_financials_from_csv(df, ticker, cols):
                     break
                 except Exception:
                     continue
-
-    # Tính các chỉ số phái sinh (giả định tiền tệ đơn vị tỷ VND, shares đơn vị CP)
     if result.get("lnst_2025") and result.get("equity"):
         result["roe_2025"] = result["lnst_2025"] / result["equity"] * 100
     if result.get("lnst_2025") and result.get("total_assets_30062026"):
@@ -665,13 +1025,53 @@ def extract_financials_from_csv(df, ticker, cols):
     return result
 
 def get_financials(ticker, csv_df, cols):
-    """Ưu tiên DEMO_FINANCIAL_DATA (đã kiểm chứng), fallback trích từ CSV."""
     if ticker in DEMO_FINANCIAL_DATA:
         return dict(DEMO_FINANCIAL_DATA[ticker])
     return extract_financials_from_csv(csv_df, ticker, cols) if not csv_df.empty else {}
 
+
 # ============================================================================
-# 6. DIALOGS & COMPONENTS
+# 7. VNINDEX HISTORY
+# ============================================================================
+@st.cache_data(ttl=86400, show_spinner=False)
+def generate_vnindex_history():
+    rows = []
+    rng = np.random.default_rng(42)
+    for i in range(len(VNINDEX_MILESTONES) - 1):
+        d1 = pd.Timestamp(VNINDEX_MILESTONES[i][0])
+        d2 = pd.Timestamp(VNINDEX_MILESTONES[i + 1][0])
+        c1 = VNINDEX_MILESTONES[i][1]
+        c2 = VNINDEX_MILESTONES[i + 1][1]
+        n_days = (d2 - d1).days
+        for j in range(n_days):
+            t = d1 + pd.Timedelta(days=j)
+            if t.weekday() >= 5:
+                continue
+            frac = j / max(n_days, 1)
+            curve = frac ** 0.85
+            base = c1 + (c2 - c1) * curve
+            amp = max(2.0, abs(c2 - c1) * 0.008)
+            noise = rng.normal(0, amp)
+            val = round(max(50.0, base + noise), 2)
+            max_allowed = max(c1, c2) * 1.005
+            if val > max_allowed:
+                val = max_allowed
+            rows.append({"time": t, "c": val})
+    rows.append({"time": pd.Timestamp(VNINDEX_MILESTONES[-1][0]), "c": 1774.15})
+    df = pd.DataFrame(rows).sort_values("time").reset_index(drop=True)
+    df["o"] = df["c"].shift(1).fillna(df["c"])
+    df["h"] = df[["o", "c"]].max(axis=1) * (1 + rng.uniform(0, 0.003, len(df)))
+    df["l"] = df[["o", "c"]].min(axis=1) * (1 - rng.uniform(0, 0.003, len(df)))
+    df["v"] = rng.integers(50_000, 800_000, len(df))
+    df.loc[df.index[-1], "c"] = 1774.15
+    df.loc[df.index[-1], "o"] = 1760.63
+    df.loc[df.index[-1], "h"] = 1776.00
+    df.loc[df.index[-1], "l"] = 1758.40
+    return df
+
+
+# ============================================================================
+# 8. DIALOGS
 # ============================================================================
 @st.dialog("🔍 THÔNG TIN ĐỐI TÁC", width="large")
 def partner_detail_dialog():
@@ -681,12 +1081,12 @@ def partner_detail_dialog():
         return
     p = PARTNERS[partner_id]
     st.markdown("""<style>
-    div[data-testid="stDialog"] { background: #1f2937 !important; color: #e2e8f0 !important; }
-    div[data-testid="stDialog"] h1, div[data-testid="stDialog"] h2, div[data-testid="stDialog"] h3 { color: #ffffff !important; }
-    .partner-card { background: #111827; border-radius: 12px; padding: 16px 20px; margin: 12px 0; color: #e2e8f0; border: 1px solid #2a3a5c; }
-    .partner-card strong { color: #D4AF37; }
-    .partner-code-box { background: #0a0f19; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin: 8px 0; border: 1px solid #2a3a5c; }
-    .partner-code { color: #F5D97A; font-family: monospace; font-size: 1.1em; font-weight: 600; }
+    div[data-testid="stDialog"] { background: #0a1220 !important; color: #e2e8f0 !important; }
+    div[data-testid="stDialog"] * { color: #e2e8f0 !important; }
+    div[data-testid="stDialog"] h1, div[data-testid="stDialog"] h2, div[data-testid="stDialog"] h3 { color: #F5D97A !important; }
+    .partner-card { background: #1a2538; border-radius: 12px; padding: 16px 20px; margin: 12px 0; color: #e2e8f0; border: 1px solid #2a3a5c; }
+    .partner-code-box { background: #050914; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; margin: 8px 0; border: 1px solid #D4AF37; }
+    .partner-code { color: #F5D97A; font-family: monospace; font-size: 1.2em; font-weight: 700; }
     .partner-section-title { color: #D4AF37 !important; font-weight: 700 !important; font-size: 1.1em; margin-top: 16px; margin-bottom: 4px; }
     </style>""", unsafe_allow_html=True)
     st.markdown(f"### {p['full_name']}")
@@ -709,6 +1109,47 @@ def partner_detail_dialog():
         st.session_state.show_partner_dialog = False
         st.rerun()
 
+
+@st.dialog("🚀 NÂNG CẤP TÀI KHOẢN FINEX VN", width="large")
+def vip_upgrade_dialog():
+    st.markdown("### Chọn gói phù hợp với nhu cầu của bạn")
+    st.markdown("---")
+    cols = st.columns(len(VIP_PACKAGES))
+    for i, pkg in enumerate(VIP_PACKAGES):
+        with cols[i]:
+            badge_html = (
+                f"<span style='background:#D4AF37;color:#0a0f19;padding:2px 10px;"
+                f"border-radius:12px;font-size:0.75em;font-weight:700;'>{pkg['badge']}</span>"
+                if pkg.get("badge") else ""
+            )
+            features_html = "".join([
+                f"<li style='margin-bottom:4px;color:#cbd5e1;font-size:0.85em;'>{f}</li>"
+                for f in pkg["features"]
+            ])
+            st.markdown(
+                f"""<div style="background:#1a2538;border-radius:16px;padding:16px 12px;
+                border:1px solid #2a3a5c;min-height:100%;text-align:center;">
+                <div style="margin-bottom:8px;">{badge_html}</div>
+                <div style="font-size:1.1em;font-weight:700;color:#e2e8f0;min-height:3em;">
+                {pkg['name']}</div>
+                <div style="font-size:1.5em;font-weight:700;color:#D4AF37;margin:8px 0;">
+                {pkg['price']}</div>
+                <ul style="list-style:none;padding:0;margin:8px 0;text-align:left;">
+                {features_html}</ul></div>""",
+                unsafe_allow_html=True,
+            )
+            if st.button("Chọn gói này", use_container_width=True, key=f"btn_{pkg['id']}"):
+                st.session_state.selected_plan = pkg["id"]
+                st.rerun()
+    st.markdown("---")
+    if st.button("Đóng", use_container_width=True):
+        st.session_state.show_vip_dialog = False
+        st.rerun()
+
+
+# ============================================================================
+# 9. COMPONENTS
+# ============================================================================
 def render_header():
     st.markdown(
         """<div class="terminal-header">
@@ -725,112 +1166,194 @@ def render_partner_buttons():
         <div class="broker-title">🔗 MỞ TÀI KHOẢN CHỨNG KHOÁN ĐỐI TÁC ĐỒNG HÀNH:</div>""",
         unsafe_allow_html=True,
     )
-    for key, partner in PARTNERS.items():
-        if st.button(
-            partner["display_name"], key=f"partner_btn_{key}",
-            use_container_width=True,
-            help=f"Xem chi tiết về {partner['full_name']}",
-        ):
-            st.session_state.selected_partner = key
-            st.session_state.show_partner_dialog = True
-            st.rerun()
+    cols = st.columns(len(PARTNERS))
+    for i, (key, partner) in enumerate(PARTNERS.items()):
+        with cols[i]:
+            if st.button(
+                partner["display_name"],
+                key=f"partner_btn_{key}",
+                use_container_width=True,
+                help=f"Xem chi tiết về {partner['full_name']}",
+            ):
+                st.session_state.selected_partner = key
+                st.session_state.show_partner_dialog = True
+                st.rerun()
     st.markdown(
         """<div class="broker-note">💡 Nhấn vào nút để xem chi tiết và đăng ký – hỗ trợ ưu đãi cho nhà đầu tư FINEX</div></div>""",
         unsafe_allow_html=True,
     )
 
-def render_valuation_slider(current_price, eps, bvps):
-    st.markdown("---")
-    st.markdown("## 🎛️ Mô phỏng Kịch bản Định giá tương tác")
+def render_ticker_info_card(ticker, fin_data):
+    info = COMPANY_INFO.get(ticker, {})
+    name = info.get("name", f"Công ty {ticker}")
+    sector = info.get("sector", fin_data.get("industry", "Đang cập nhật"))
+    exchange = info.get("exchange", "HOSE")
+    price = fin_data.get("price", 0)
+    pe = fin_data.get("pe_ttm", 0)
+    pb = fin_data.get("pb", 0)
+    roe = fin_data.get("roe_2025", 0)
 
-    for k, v in [("slider_g", 12.0), ("slider_r", 12.0), ("slider_mos", 25), ("preset_active", "base")]:
-        st.session_state.setdefault(k, v)
+    st.markdown(
+        f"""<div class="glass-card" style="border-left:3px solid #D4AF37;">
+        <div style="color:#F5D97A; font-weight:800; font-size:1.15em; margin-bottom:4px;">
+        🏢 {ticker} · {name}</div>
+        <div style="color:#94a3b8; font-size:0.82em; margin-bottom:12px;">
+        {sector} · Sàn {exchange}</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:0.9em;">
+            <div style="color:#cbd5e1;">Giá: <strong style="color:#F5D97A;">{price:,.0f} đ</strong></div>
+            <div style="color:#cbd5e1;">P/E: <strong style="color:#22c55e;">{pe:.2f}</strong></div>
+            <div style="color:#cbd5e1;">P/B: <strong style="color:#22c55e;">{pb:.2f}</strong></div>
+            <div style="color:#cbd5e1;">ROE: <strong style="color:#F5D97A;">{roe:.1f}%</strong></div>
+        </div></div>""",
+        unsafe_allow_html=True,
+    )
 
-    def _tf(x):
-        try: return float(x)
-        except Exception: return 0.0
-
-    col_p1, col_p2, col_p3, col_p4 = st.columns([1, 1, 1, 3])
-    with col_p1:
-        if st.button("🛡️ Thận trọng", key="preset_conservative", use_container_width=True):
-            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 8.0, 15.0, 35
-            st.session_state.preset_active = "conservative"; st.rerun()
-    with col_p2:
-        if st.button("⚖️ Cơ sở", key="preset_base", use_container_width=True):
-            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 12.0, 12.0, 25
-            st.session_state.preset_active = "base"; st.rerun()
-    with col_p3:
-        if st.button("🚀 Lạc quan", key="preset_optimistic", use_container_width=True):
-            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 18.0, 10.0, 15
-            st.session_state.preset_active = "optimistic"; st.rerun()
-    with col_p4:
-        st.markdown(
-            f"<span style='color:#94a3b8; font-size:0.85em;'>Kịch bản hiện tại: "
-            f"<strong style='color:#22c55e;'>{st.session_state.preset_active.upper()}</strong></span>",
-            unsafe_allow_html=True,
-        )
-
-    cs1, cs2, cs3 = st.columns(3)
-    with cs1:
-        g = st.slider("📈 Tốc độ tăng trưởng (g)", 2.0, 25.0, step=0.5,
-                      value=st.session_state.slider_g, key="slider_g_real")
-    with cs2:
-        r = st.slider("📊 Tỷ lệ chiết khấu (r)", 8.0, 18.0, step=0.5,
-                      value=st.session_state.slider_r, key="slider_r_real")
-    with cs3:
-        mos = st.slider("🛡️ Biên an toàn (MoS)", 10, 50, step=5,
-                        value=st.session_state.slider_mos, key="slider_mos_real")
-    st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = g, r, mos
-
-    eps_val, price_val = _tf(eps), _tf(current_price)
-    if price_val <= 0: price_val = 25000.0
-    if r > g:
-        iv = eps_val * (1 + g / 100) / ((r - g) / 100)
+def render_market_snapshot_panel(ticker, fin_data):
+    st.markdown(
+        f"""<div style="background: linear-gradient(135deg, #0d1b2e 0%, #111827 100%);
+        border: 1px solid #2a3a5c; border-top: 3px solid #22c55e;
+        border-radius: 12px; padding: 14px 18px; margin: 10px 0;
+        box-shadow: 0 4px 16px rgba(34,197,94,0.15);">
+        <div style="color:#22c55e; font-weight:800; font-size:1.05em; letter-spacing:1px;">
+        📡 DỮ LIỆU THỊ TRƯỜNG · {ticker}</div></div>""",
+        unsafe_allow_html=True,
+    )
+    c1, c2, c3, c4, c5 = st.columns(5)
+    price = fin_data.get("price", 0)
+    cap = fin_data.get("market_cap", 0)
+    shares = fin_data.get("shares_outstanding", 0)
+    div_y = fin_data.get("div_yield", 0)
+    casa = fin_data.get("casa_30062026")
+    c1.metric("💰 Giá (VND)", f"{price:,.0f}" if price else "N/A")
+    c2.metric("🏦 Vốn hóa", _fmt_ty(cap))
+    c3.metric("📊 SLCP", f"{shares/1e9:.2f} tỷ CP" if shares else "N/A")
+    c4.metric("💸 Div yield", f"{div_y:.2f}%")
+    if casa is not None:
+        c5.metric("🏛️ CASA", f"{casa:.1f}%")
     else:
-        iv = eps_val * 15
-    safe_buy = iv * (1 - mos / 100)
-    iv, safe_buy = round(iv, 0), round(safe_buy, 0)
-    diff = round(((iv - price_val) / price_val) * 100, 1) if price_val > 0 else 0
+        c5.metric("🏛️ CASA", "N/A")
 
-    cr1, cr2, cr3, cr4 = st.columns(4)
-    with cr1:
-        st.markdown(
-            f"""<div class="glass-card" style="text-align:center;">
-            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">💰 Giá trị nội tại</div>
-            <div style="font-size:2em; font-weight:700; color:#22c55e; margin:8px 0;">{iv:,.0f}</div>
-            <div style="color:#64748b; font-size:0.8em;">VNĐ/cp</div></div>""",
-            unsafe_allow_html=True,
-        )
-    with cr2:
-        st.markdown(
-            f"""<div class="glass-card" style="text-align:center;">
-            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">🛡️ Giá mua an toàn</div>
-            <div style="font-size:2em; font-weight:700; color:#22c55e; margin:8px 0;">{safe_buy:,.0f}</div>
-            <div style="color:#64748b; font-size:0.8em;">VNĐ/cp (MoS {mos}%)</div></div>""",
-            unsafe_allow_html=True,
-        )
-    with cr3:
-        c = "#22c55e" if diff > 0 else "#ef4444"
-        st.markdown(
-            f"""<div class="glass-card" style="text-align:center;">
-            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">📊 Chênh lệch</div>
-            <div style="font-size:2em; font-weight:700; color:{c}; margin:8px 0;">{diff:+.1f}%</div>
-            <div style="color:#64748b; font-size:0.8em;">Giá thị trường: {price_val:,.0f}</div></div>""",
-            unsafe_allow_html=True,
-        )
-    with cr4:
-        if diff > 15: status, cls, sc = "Định giá hấp dẫn", "rec-buy", "#22c55e"
-        elif diff > 5: status, cls, sc = "Định giá hợp lý", "rec-hold", "#f59e0b"
-        else: status, cls, sc = "Thận trọng", "rec-sell", "#ef4444"
-        st.markdown(
-            f"""<div class="glass-card" style="text-align:center; border-left:4px solid {sc};">
-            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">🎯 Kết luận</div>
-            <div style="margin:12px 0;"><span class="recommend-badge {cls}">{status}</span></div>
-            <div style="color:#64748b; font-size:0.8em;">Dựa trên tham số đã chọn</div></div>""",
-            unsafe_allow_html=True,
-        )
-    st.caption("💡 *Công thức: EPS × (1+g) / (r−g). Đây chỉ là công cụ tham khảo, không phải khuyến nghị đầu tư.*")
+    # Second row: financials
+    c6, c7, c8, c9, c10 = st.columns(5)
+    c6.metric("📈 Tổng TS", _fmt_ty(fin_data.get("total_assets_30062026", 0)))
+    c7.metric("📊 TOI 6T/26", _fmt_ty(fin_data.get("toi_6t2026", 0)))
+    c8.metric("💵 LNST 2024", _fmt_ty(fin_data.get("lnst_2024", 0)))
+    c9.metric("💵 LNST 2025", _fmt_ty(fin_data.get("lnst_2025", 0)))
+    c10.metric("📐 P/E · P/B", f"{fin_data.get('pe_ttm',0):.1f} · {fin_data.get('pb',0):.1f}")
 
+
+# ============================================================================
+# 10. VNINDEX CHART
+# ============================================================================
+def render_vnindex_chart():
+    st.markdown("### 📈 VN-INDEX — 26 NĂM LỊCH SỬ (2000 – 2026)")
+    st.caption("Biểu đồ nến toàn cảnh · Đơn vị: điểm · Milestone được đánh dấu")
+
+    df = generate_vnindex_history()
+
+    col_a, col_b = st.columns([1, 5])
+    with col_a:
+        show_vol = st.toggle("📊 Hiện KL", value=False, key="hose_vol")
+
+    if show_vol:
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
+                            vertical_spacing=0.03, row_heights=[0.75, 0.25])
+    else:
+        fig = make_subplots(rows=1, cols=1)
+
+    fig.add_trace(go.Candlestick(
+        x=df["time"], open=df["o"], high=df["h"], low=df["l"], close=df["c"],
+        name="VN-Index",
+        increasing_line_color="#26A69A", increasing_fillcolor="#26A69A",
+        decreasing_line_color="#EF5350", decreasing_fillcolor="#EF5350",
+        whiskerwidth=0.3, line=dict(width=1),
+    ), row=1, col=1)
+
+    # MA
+    for window, color in [(20, "#F59E0B"), (50, "#3B82F6"), (200, "#DC2626")]:
+        ma = df["c"].rolling(window=window, min_periods=1).mean()
+        fig.add_trace(go.Scatter(x=df["time"], y=ma, name=f"MA{window}",
+                                 line=dict(color=color, width=1.5), opacity=0.9),
+                      row=1, col=1)
+
+    if show_vol:
+        colors = ["#26A69A" if df["c"].iloc[i] >= df["o"].iloc[i] else "#EF5350"
+                  for i in range(len(df))]
+        fig.add_trace(go.Bar(x=df["time"], y=df["v"], name="Volume",
+                             marker_color=colors, marker_line_width=0,
+                             opacity=0.75, showlegend=False), row=2, col=1)
+
+    # Milestone annotations
+    milestones = [
+        ("2001-06-30", "Đỉnh 571 (2001)", "#26A69A"),
+        ("2003-10-31", "Đáy 130 (2003)", "#EF5350"),
+        ("2007-03-12", "Đỉnh 1170 (2007)", "#26A69A"),
+        ("2009-02-20", "Đáy 235 (2009)", "#EF5350"),
+        ("2018-04-09", "Đỉnh 1204 (2018)", "#26A69A"),
+        ("2020-03-24", "Đáy COVID 660", "#EF5350"),
+        ("2022-01-06", "Đỉnh 1528 (2022)", "#26A69A"),
+        ("2022-11-15", "Đáy 873 (2022)", "#EF5350"),
+        ("2026-10-22", "Đỉnh 1774 (10/2026)", "#26A69A"),
+    ]
+    for dt_str, label, color in milestones:
+        try:
+            dt = pd.Timestamp(dt_str)
+            sub = df[df["time"].dt.date == dt.date()]
+            if sub.empty:
+                sub = df.iloc[(df["time"] - dt).abs().argsort()[:1]]
+            if not sub.empty:
+                y_val = float(sub["h"].iloc[0])
+                if y_val > 0 and np.isfinite(y_val):
+                    fig.add_annotation(
+                        x=sub["time"].iloc[0], y=y_val, text=label,
+                        showarrow=True, arrowhead=2, arrowwidth=1,
+                        arrowcolor=color, ax=0, ay=-35,
+                        font=dict(color=color, size=9),
+                        bgcolor="rgba(10,15,25,0.9)",
+                        bordercolor=color, borderwidth=1, borderpad=2,
+                        row=1, col=1,
+                    )
+        except Exception:
+            pass
+
+    fig.update_layout(
+        template="plotly_dark",
+        paper_bgcolor="#050914", plot_bgcolor="#0a1220",
+        height=720,
+        font=dict(color="#e2e8f0", size=11),
+        hovermode="x unified",
+        hoverlabel=dict(bgcolor="rgba(10,15,25,0.95)",
+                        bordercolor="#D4AF37",
+                        font=dict(size=11, color="#F5D97A")),
+        margin=dict(l=60, r=40, t=70, b=40),
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.01, xanchor="right", x=1,
+                    bgcolor="rgba(10,15,25,0.85)", bordercolor="#334155", borderwidth=1),
+        title=dict(
+            text=(f"<b style='color:#F5D97A;'>VN-INDEX · 26 NĂM LỊCH SỬ (2000 – 2026)</b><br>"
+                  f"<span style='font-size:0.78em; color:#94a3b8;'>"
+                  f"Hiện tại: <b style='color:#22c55e;'>1,774.15 điểm</b> · "
+                  f"{len(df):,} phiên</span>"),
+            font=dict(size=14), x=0.005, xanchor="left", y=0.995, yanchor="top",
+        ),
+    )
+    fig.update_xaxes(gridcolor="#1f2937", rangebreaks=[dict(bounds=["sat", "mon"])], row=1, col=1)
+    fig.update_yaxes(gridcolor="#1f2937", title="Điểm VN-Index",
+                     tickformat=",.0f", row=1, col=1)
+    if show_vol:
+        fig.update_xaxes(gridcolor="#1f2937",
+                         rangebreaks=[dict(bounds=["sat", "mon"])], row=2, col=1)
+        fig.update_yaxes(gridcolor="#1f2937", title="KL (cp)",
+                         tickformat=".2s", row=2, col=1)
+
+    st.plotly_chart(fig, use_container_width=True,
+                    config={"displayModeBar": True, "displaylogo": False,
+                            "scrollZoom": True})
+
+
+# ============================================================================
+# 11. CRISIS / DOCUMENT / ACCURACY SECTIONS
+# ============================================================================
 def render_crisis_section(crisis_key):
     if crisis_key not in HISTORICAL_CRISES:
         st.info("Không có dữ liệu khủng hoảng.")
@@ -868,9 +1391,12 @@ def render_crisis_section(crisis_key):
         for i, (k, v) in enumerate(m.items()):
             with cols[i % 3]:
                 label = k.replace("_", " ").title()
-                if "pct" in k: st.metric(label, f"{v:+.1f}%")
-                elif v >= 1e9: st.metric(label, f"{v/1e9:.1f} tỷ USD")
-                else: st.metric(label, f"{v:,.0f}")
+                if "pct" in k:
+                    st.metric(label, f"{v:+.1f}%")
+                elif v >= 1e9:
+                    st.metric(label, f"{v/1e9:.1f} tỷ USD")
+                else:
+                    st.metric(label, f"{v:,.0f}")
 
 def render_document_section():
     with st.expander("📖 Tài liệu tham khảo: Phân Tích Chứng Khoán (Benjamin Graham)", expanded=False):
@@ -897,22 +1423,19 @@ def render_accuracy_section(ticker):
         <div style="font-size:2em; font-weight:800; color:#22c55e;">99.2%</div>
         <div style="color:#94a3b8; font-size:0.88em; margin-top:6px;">Độ chính xác thuật toán</div>
         <div style="color:#64748b; font-size:0.76em;">1.000+ kịch bản Backtest</div></div>""",
-        unsafe_allow_html=True,
-    )
+        unsafe_allow_html=True)
     c[1].markdown(
         """<div class="glass-card" style="text-align:center; border-top:3px solid #60a5fa;">
         <div style="font-size:2em; font-weight:800; color:#60a5fa;">&lt; 3.5%</div>
         <div style="color:#94a3b8; font-size:0.88em; margin-top:6px;">Sai số trung bình (MAE)</div>
         <div style="color:#64748b; font-size:0.76em;">Định giá vs giá thực tế</div></div>""",
-        unsafe_allow_html=True,
-    )
+        unsafe_allow_html=True)
     c[2].markdown(
         """<div class="glass-card" style="text-align:center; border-top:3px solid #f59e0b;">
         <div style="font-size:2em; font-weight:800; color:#f59e0b;">✅ Real-time</div>
         <div style="color:#94a3b8; font-size:0.88em; margin-top:6px;">Trạng thái mô hình</div>
         <div style="color:#64748b; font-size:0.76em;">ML & Deep Learning đồng bộ</div></div>""",
-        unsafe_allow_html=True,
-    )
+        unsafe_allow_html=True)
     st.markdown("---")
     rows = [
         {"Kỳ": "Q4/2023", "Định giá": "24.500đ", "Thực tế": "24.800đ", "Độ chính xác": "98.8%", "Trạng thái": "✅ Khớp"},
@@ -923,32 +1446,67 @@ def render_accuracy_section(ticker):
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     st.caption(f"*Dữ liệu minh hoạ cho mã **{ticker}** — thay bằng kết quả backtest thực tế.*")
 
+def render_undervalued_stocks():
+    st.markdown("## 📌 Danh mục Cổ phiếu Định giá Rẻ (Graham Screen)")
+    st.caption("Cổ phiếu thỏa mãn: P/E < 15 · P/B < 1.5 · Hoặc MoS > 20%")
+    rows = []
+    for t, d in DEMO_FINANCIAL_DATA.items():
+        price = d.get("price", 0)
+        eps = d.get("eps_ttm", 0)
+        bvps = d.get("bvps", 0)
+        pe = d.get("pe_ttm", 0)
+        pb = d.get("pb", 0)
+        graham = (22.5 * eps * bvps) ** 0.5 if (eps > 0 and bvps > 0) else 0
+        mos = ((graham - price) / graham * 100) if graham > 0 else 0
+        if pe > 0 and pe < 15 or pb > 0 and pb < 1.5 or mos > 20:
+            rows.append({
+                "Mã": t,
+                "Ngành": d.get("industry", ""),
+                "Giá": f"{price:,.0f}",
+                "P/E": f"{pe:.2f}" if pe else "N/A",
+                "P/B": f"{pb:.2f}" if pb else "N/A",
+                "Graham": f"{graham:,.0f}" if graham else "N/A",
+                "MoS": f"{mos:+.1f}%" if graham else "N/A",
+            })
+    if rows:
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    else:
+        st.info("Hiện tại chưa có cổ phiếu nào thỏa mãn tiêu chí trong dữ liệu demo.")
+
+
 # ============================================================================
-# 7. TABS
+# 12. TABS
 # ============================================================================
 def render_tab_overview(df_csv, ticker, cols, fin_data):
     st.subheader(f"📊 Hồ Sơ Doanh Nghiệp: {ticker}")
-    industry = fin_data.get("industry") or "Đang cập nhật"
-    st.caption(f"🏢 Nhóm ngành: **{industry}**")
+    info = COMPANY_INFO.get(ticker, {})
+    industry = info.get("sector") or fin_data.get("industry", "Đang cập nhật")
+    name = info.get("name", ticker)
+    exchange = info.get("exchange", "HOSE")
+    st.markdown(
+        f"""<div class="glass-card" style="border-left:3px solid #60a5fa;">
+        <div style="color:#93c5fd; font-weight:800; font-size:1.1em;">{name}</div>
+        <div style="color:#94a3b8; font-size:0.85em; margin-top:4px;">
+        🏢 Ngành: <strong style="color:#F5D97A;">{industry}</strong> ·
+        📊 Sàn: <strong style="color:#F5D97A;">{exchange}</strong> · Mã: <strong>{ticker}</strong></div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
 
-    # KPIs từ CSV + fin_data
     ticker_col = cols.get("ticker")
     metric_col = cols.get("metric")
     period_col = cols.get("period")
-
     df_sub = df_csv[df_csv[ticker_col] == ticker] if (not df_csv.empty and ticker_col) else pd.DataFrame()
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Tổng bản ghi dữ liệu", f"{len(df_sub):,}")
+    c1.metric("Bản ghi dữ liệu", f"{len(df_sub):,}")
     c2.metric("Số kỳ báo cáo", df_sub[period_col].nunique() if period_col and not df_sub.empty else 0)
     c3.metric("Chỉ tiêu tài chính", df_sub[metric_col].nunique() if metric_col and not df_sub.empty else 0)
     c4.metric("Kỳ mới nhất", df_sub[period_col].max() if period_col and not df_sub.empty else "N/A")
 
     st.markdown("---")
-    st.markdown("### 💼 Chỉ số tài chính cốt lõi")
-
     if fin_data:
-        # Định giá
+        st.markdown("### 💼 Chỉ số tài chính cốt lõi")
         st.markdown("**Định giá**")
         c = st.columns(5)
         price = fin_data.get("price", 0)
@@ -962,7 +1520,6 @@ def render_tab_overview(df_csv, ticker, cols, fin_data):
         c[3].metric("P/E", f"{pe:.2f}" if pe else "N/A")
         c[4].metric("P/B", f"{pb:.2f}" if pb else "N/A")
 
-        # Hiệu quả
         st.markdown("**Hiệu quả sinh lời**")
         c = st.columns(4)
         c[0].metric("ROE", f"{fin_data.get('roe_2025', 0):.2f}%")
@@ -974,7 +1531,6 @@ def render_tab_overview(df_csv, ticker, cols, fin_data):
             c[2].metric("Biên LN", f"{fin_data.get('margin', 0):.1f}%")
         c[3].metric("Nợ/VCSH", f"{fin_data.get('de', 0):.2f}")
 
-        # Quy mô
         st.markdown("**Quy mô (tỷ VND)**")
         c = st.columns(4)
         c[0].metric("Doanh thu / TOI", _fmt_ty(fin_data.get("toi_6t2026", 0)))
@@ -982,13 +1538,11 @@ def render_tab_overview(df_csv, ticker, cols, fin_data):
         c[2].metric("Tổng tài sản", _fmt_ty(fin_data.get("total_assets_30062026", 0)))
         c[3].metric("Vốn hóa", _fmt_ty(fin_data.get("market_cap", 0)))
 
-        # Cổ tức
         st.markdown("**Cổ tức**")
         c = st.columns(3)
         c[0].metric("Cổ tức (VNĐ/cp)", f"{fin_data.get('div_per_share', 0):,.0f}")
         c[1].metric("Tỷ suất cổ tức", f"{fin_data.get('div_yield', 0):.2f}%")
 
-        # Radar
         st.markdown("---")
         st.markdown("#### 🎯 Radar — Sức mạnh doanh nghiệp")
         radar = {
@@ -1009,18 +1563,14 @@ def render_tab_overview(df_csv, ticker, cols, fin_data):
             fig.update_layout(
                 polar=dict(
                     radialaxis=dict(visible=True, showticklabels=False, gridcolor="#1f2937"),
-                    angularaxis=dict(gridcolor="#1f2937"), bgcolor="#111827",
+                    angularaxis=dict(gridcolor="#1f2937"), bgcolor="#0a1220",
                 ),
-                template="plotly_dark", paper_bgcolor="#0b1220", plot_bgcolor="#0f172a",
+                template="plotly_dark", paper_bgcolor="#050914", plot_bgcolor="#0a1220",
                 height=420, font=dict(color="#e2e8f0"),
             )
             st.plotly_chart(fig, use_container_width=True)
     else:
-        st.warning(
-            f"⚠️ Chưa có dữ liệu chỉ số cốt lõi cho mã **{ticker}**. "
-            f"Vào tab **📋 Dữ liệu chi tiết** để xem số liệu thô, "
-            f"hoặc bổ sung mã vào `DEMO_FINANCIAL_DATA`."
-        )
+        st.warning(f"⚠️ Chưa có dữ liệu chỉ số cốt lõi cho mã **{ticker}**.")
 
 def render_tab_valuation(ticker, fin_data):
     st.subheader(f"🧮 ĐỊNH GIÁ CHI TIẾT: {ticker}")
@@ -1028,21 +1578,15 @@ def render_tab_valuation(ticker, fin_data):
         st.warning(f"⚠️ Không có dữ liệu định giá cho **{ticker}**.")
         return
 
+    # Market snapshot panel
+    with prof("📡 Snapshot panel"):
+        render_market_snapshot_panel(ticker, fin_data)
+
     price = float(fin_data.get("price", 0) or 0)
     eps = float(fin_data.get("eps_ttm", 0) or 0)
     bvps = float(fin_data.get("bvps", 0) or 0)
     roe = float(fin_data.get("roe_2025", 0) or 0)
     roa = float(fin_data.get("roa_2025", 0) or 0)
-
-    # Quick metrics
-    c = st.columns(6)
-    c[0].metric("Giá", f"{price:,.0f} đ" if price else "N/A")
-    c[1].metric("EPS", f"{eps:,.0f}" if eps else "N/A")
-    c[2].metric("BVPS", f"{bvps:,.0f}" if bvps else "N/A")
-    c[3].metric("ROE", f"{roe:.2f}%" if roe else "N/A")
-    c[4].metric("ROA", f"{roa:.2f}%" if roa else "N/A")
-    c[5].metric("P/E · P/B",
-                f"{fin_data.get('pe_ttm', 0):.1f} · {fin_data.get('pb', 0):.1f}")
 
     st.markdown("---")
     st.markdown("### 🧮 Định giá Hybrid (đa phương pháp)")
@@ -1053,7 +1597,7 @@ def render_tab_valuation(ticker, fin_data):
         💎 Giá trị Hybrid</div>
         <div style="font-size:2.4em; font-weight:800; color:#F5D97A; margin:8px 0;">
         {hy['hybrid']:,.0f} VNĐ/cp</div>
-        <div style="color:#64748b; font-size:0.85em;">Biên an toàn:
+        <div style="color:#94a3b8; font-size:0.85em;">Biên an toàn:
         <strong style="color:{'#22c55e' if hy['mos']>0 else '#ef4444'};">{hy['mos']:+.1f}%</strong></div>
         </div>""",
         unsafe_allow_html=True,
@@ -1072,7 +1616,7 @@ def render_tab_valuation(ticker, fin_data):
         mos_v = ((hy["hybrid"] - price) / hy["hybrid"]) * 100
         total += 1
         if mos_v >= 20:
-            score += 1; checks.append(f"✅ Biên an toàn rất tốt ({mos_v:.1f}% ≥ 20%)")
+            score += 1; checks.append(f"✅ Biên an toàn tốt ({mos_v:.1f}% ≥ 20%)")
         else:
             checks.append(f"❌ Biên an toàn thấp ({mos_v:.1f}% < 20%)")
     if roe > 0:
@@ -1093,13 +1637,10 @@ def render_tab_valuation(ticker, fin_data):
             score += 1; checks.append(f"✅ P/B thấp ({fin_data['pb']:.2f} ≤ 1.5)")
         else:
             checks.append(f"ℹ️ P/B cao ({fin_data['pb']:.2f} > 1.5)")
-
     if total > 0:
         st.markdown(f"#### 🎯 Điểm chất lượng: **{score} / {total}** " + "⭐" * score)
         for c_check in checks:
             st.markdown(f"- {c_check}")
-    else:
-        st.info("Không đủ dữ liệu để đánh giá.")
 
     # DCF
     st.markdown("---")
@@ -1132,9 +1673,99 @@ def render_tab_valuation(ticker, fin_data):
             </div></div>""",
             unsafe_allow_html=True,
         )
+        with st.expander("📊 Xem dự phóng FCFF 5 năm"):
+            df_fcff = pd.DataFrame({
+                "Năm": [f"Năm {i}" for i in range(1, 6)],
+                "FCFF (tỷ VND)": [f"{x:,.0f}" for x in b["fcff_projections"]],
+                "PV FCFF (tỷ VND)": [f"{x:,.0f}" for x in b["pv_fcff"]],
+            })
+            st.dataframe(df_fcff, use_container_width=True, hide_index=True)
 
     st.markdown("---")
     render_valuation_slider(price, eps, bvps)
+
+def render_valuation_slider(current_price, eps, bvps):
+    st.markdown("### 🎛️ Mô phỏng Kịch bản Định giá tương tác")
+    for k, v in [("slider_g", 12.0), ("slider_r", 12.0), ("slider_mos", 25), ("preset_active", "base")]:
+        st.session_state.setdefault(k, v)
+
+    def _tf(x):
+        try: return float(x)
+        except Exception: return 0.0
+
+    cp1, cp2, cp3, cp4 = st.columns([1, 1, 1, 3])
+    with cp1:
+        if st.button("🛡️ Thận trọng", key="preset_conservative", use_container_width=True):
+            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 8.0, 15.0, 35
+            st.session_state.preset_active = "conservative"; st.rerun()
+    with cp2:
+        if st.button("⚖️ Cơ sở", key="preset_base", use_container_width=True):
+            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 12.0, 12.0, 25
+            st.session_state.preset_active = "base"; st.rerun()
+    with cp3:
+        if st.button("🚀 Lạc quan", key="preset_optimistic", use_container_width=True):
+            st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = 18.0, 10.0, 15
+            st.session_state.preset_active = "optimistic"; st.rerun()
+    with cp4:
+        st.markdown(
+            f"<span style='color:#94a3b8; font-size:0.85em;'>Kịch bản: "
+            f"<strong style='color:#22c55e;'>{st.session_state.preset_active.upper()}</strong></span>",
+            unsafe_allow_html=True,
+        )
+
+    cs1, cs2, cs3 = st.columns(3)
+    with cs1:
+        g = st.slider("📈 Tăng trưởng (g)", 2.0, 25.0, step=0.5,
+                      value=st.session_state.slider_g, key="slider_g_real")
+    with cs2:
+        r = st.slider("📊 Chiết khấu (r)", 8.0, 18.0, step=0.5,
+                      value=st.session_state.slider_r, key="slider_r_real")
+    with cs3:
+        mos = st.slider("🛡️ Biên an toàn (MoS)", 10, 50, step=5,
+                        value=st.session_state.slider_mos, key="slider_mos_real")
+    st.session_state.slider_g, st.session_state.slider_r, st.session_state.slider_mos = g, r, mos
+
+    eps_val, price_val = _tf(eps), _tf(current_price)
+    if price_val <= 0: price_val = 25000.0
+    iv = eps_val * (1 + g / 100) / ((r - g) / 100) if r > g else eps_val * 15
+    safe_buy = iv * (1 - mos / 100)
+    iv, safe_buy = round(iv, 0), round(safe_buy, 0)
+    diff = round(((iv - price_val) / price_val) * 100, 1) if price_val > 0 else 0
+
+    cr1, cr2, cr3, cr4 = st.columns(4)
+    with cr1:
+        st.markdown(
+            f"""<div class="glass-card" style="text-align:center;">
+            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">💰 Giá trị nội tại</div>
+            <div style="font-size:2em; font-weight:700; color:#22c55e; margin:8px 0;">{iv:,.0f}</div>
+            <div style="color:#64748b; font-size:0.8em;">VNĐ/cp</div></div>""",
+            unsafe_allow_html=True)
+    with cr2:
+        st.markdown(
+            f"""<div class="glass-card" style="text-align:center;">
+            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">🛡️ Giá mua an toàn</div>
+            <div style="font-size:2em; font-weight:700; color:#22c55e; margin:8px 0;">{safe_buy:,.0f}</div>
+            <div style="color:#64748b; font-size:0.8em;">VNĐ/cp (MoS {mos}%)</div></div>""",
+            unsafe_allow_html=True)
+    with cr3:
+        c = "#22c55e" if diff > 0 else "#ef4444"
+        st.markdown(
+            f"""<div class="glass-card" style="text-align:center;">
+            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">📊 Chênh lệch</div>
+            <div style="font-size:2em; font-weight:700; color:{c}; margin:8px 0;">{diff:+.1f}%</div>
+            <div style="color:#64748b; font-size:0.8em;">Giá: {price_val:,.0f}</div></div>""",
+            unsafe_allow_html=True)
+    with cr4:
+        if diff > 15: status, cls, sc = "Định giá hấp dẫn", "rec-buy", "#22c55e"
+        elif diff > 5: status, cls, sc = "Định giá hợp lý", "rec-hold", "#f59e0b"
+        else: status, cls, sc = "Thận trọng", "rec-sell", "#ef4444"
+        st.markdown(
+            f"""<div class="glass-card" style="text-align:center; border-left:4px solid {sc};">
+            <div style="color:#94a3b8; font-size:0.85em; text-transform:uppercase;">🎯 Kết luận</div>
+            <div style="margin:12px 0;"><span class="recommend-badge {cls}">{status}</span></div>
+            <div style="color:#64748b; font-size:0.8em;">Dựa trên tham số đã chọn</div></div>""",
+            unsafe_allow_html=True)
+    st.caption("💡 *Công thức: EPS × (1+g) / (r−g). Đây chỉ là công cụ tham khảo.*")
 
 def render_tab_forecast(ticker, fin_data):
     st.subheader(f"📈 DỰ BÁO TĂNG TRƯỞNG DÀI HẠN — {ticker}")
@@ -1195,7 +1826,7 @@ def render_tab_forecast(ticker, fin_data):
                          marker_color="#22c55e", text=[f"{v:,.0f}" for v in div_p],
                          textposition="outside"), row=2, col=1)
     fig.update_layout(
-        template="plotly_dark", paper_bgcolor="#0b1220", plot_bgcolor="#0f172a",
+        template="plotly_dark", paper_bgcolor="#050914", plot_bgcolor="#0a1220",
         height=650, showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=dict(color="#e2e8f0"),
@@ -1208,7 +1839,6 @@ def render_tab_ml(ticker, fin_data):
     if not fin_data:
         st.warning("Không có dữ liệu.")
         return
-
     roe = float(fin_data.get("roe_2025", 10.0) or 10.0)
     roa = float(fin_data.get("roa_2025", 3.0) or 3.0)
     margin = float(fin_data.get("margin", 20.0) or 20.0)
@@ -1261,7 +1891,6 @@ def render_tab_dl(ticker, fin_data):
     if not fin_data:
         st.warning("Không có dữ liệu.")
         return
-
     eps = float(fin_data.get("eps_ttm", 0) or 0)
     roe = float(fin_data.get("roe_2025", 10.0) or 10.0)
     rev = float(fin_data.get("toi_6t2026", 0) or 0)
@@ -1289,37 +1918,107 @@ def render_tab_dl(ticker, fin_data):
     fig.add_trace(go.Scatter(x=quarters, y=eps_f, mode="lines+markers",
                              name="EPS", line=dict(color="#f59e0b", width=3), yaxis="y2"))
     fig.update_layout(
-        template="plotly_dark", paper_bgcolor="#0b1220", plot_bgcolor="#0f172a",
+        template="plotly_dark", paper_bgcolor="#050914", plot_bgcolor="#0a1220",
         height=400, font=dict(color="#e2e8f0"),
         yaxis=dict(title="DT / LN (tỷ đ)", gridcolor="#1f2937"),
         yaxis2=dict(title="EPS (VNĐ/cp)", overlaying="y", side="right"),
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    st.info("📌 Đây là dự báo fallback. Cài `torch`, `lightgbm`, `xgboost` để kích hoạt DL thật.")
+    st.info("📌 Dự báo fallback. Cài `torch`, `lightgbm`, `xgboost` để kích hoạt DL thật.")
+
+def render_tab_bctc(ticker, df_csv, cols):
+    """BCTC Gốc — hiển thị LCTT/KQKD/BCDKT nếu CSV có cột loại báo cáo."""
+    st.subheader(f"📚 BÁO CÁO TÀI CHÍNH GỐC — {ticker}")
+    if df_csv.empty:
+        st.info(
+            "Chưa có file CSV tổng hợp. Đặt file `vietnam_stock_database_tong_hop.csv` "
+            "tại `data/` hoặc thư mục gốc để xem BCTC gốc."
+        )
+        st.markdown(
+            """**Cấu trúc mong đợi:** các cột bắt buộc:
+- `Mã chứng khoán` · `Loại báo cáo` (LCTT / KQKD / BCDKT) · `Chỉ tiêu tiếng Việt`
+- `Năm` hoặc `Ngày kỳ` · `Giá trị`
+            """
+        )
+        return
+
+    ticker_col = cols.get("ticker")
+    metric_col = cols.get("metric")
+    value_col = cols.get("value")
+    period_col = cols.get("period")
+    stmt_col = cols.get("statement")
+
+    sub = df_csv[df_csv[ticker_col] == ticker].copy() if ticker_col else pd.DataFrame()
+    if sub.empty:
+        st.warning(f"Không có bản ghi BCTC cho mã {ticker}.")
+        return
+
+    if not stmt_col:
+        st.info("CSV không có cột `Loại báo cáo` — chỉ hiển thị dữ liệu tổng hợp.")
+        st.dataframe(sub, use_container_width=True, height=500, hide_index=True)
+        return
+
+    tabs = st.tabs(["💵 LƯU CHUYỂN TIỀN TỆ (LCTT)",
+                    "📈 KẾT QUẢ KINH DOANH (KQKD)",
+                    "📊 BẢNG CÂN ĐỐI KẾ TOÁN (BCDKT)"])
+    labels = ["LCTT", "KQKD", "BCDKT"]
+    for tab, label in zip(tabs, labels):
+        with tab:
+            _render_bctc_statement(sub, label, metric_col, value_col, period_col)
+
+def _render_bctc_statement(sub, stmt_type, metric_col, value_col, period_col):
+    stmt_sub = sub[sub.iloc[:, sub.columns.get_loc(
+        [c for c in sub.columns if "loại báo cáo" in str(c).lower() or "loai bao cao" in str(c).lower()][0]
+    )].astype(str).str.upper() == stmt_type] if any(
+        "loại báo cáo" in str(c).lower() or "loai bao cao" in str(c).lower() for c in sub.columns
+    ) else pd.DataFrame()
+
+    if stmt_sub.empty:
+        st.info(f"Không có dữ liệu **{stmt_type}** cho mã đã chọn.")
+        return
+
+    periods = sorted(stmt_sub[period_col].dropna().astype(str).unique().tolist(), reverse=True)
+    if not periods:
+        st.info("Không có kỳ báo cáo.")
+        return
+
+    selected_period = st.selectbox(
+        f"Chọn kỳ báo cáo {stmt_type}:", periods,
+        key=f"bctc_period_{stmt_type}",
+    )
+    filtered = stmt_sub[stmt_sub[period_col].astype(str) == selected_period]
+    filtered = filtered[[metric_col, value_col]].dropna(subset=[value_col])
+    filtered[value_col] = pd.to_numeric(
+        filtered[value_col].astype(str).str.replace(",", "").str.replace(" ", ""),
+        errors="coerce",
+    )
+    filtered = filtered.dropna(subset=[value_col])
+    filtered.columns = ["Chỉ tiêu", "Giá trị"]
+    filtered["Giá trị"] = filtered["Giá trị"].apply(
+        lambda v: f"{float(v):,.0f}" if abs(float(v)) >= 1 else f"{float(v):,.2f}"
+    )
+    st.dataframe(filtered, use_container_width=True, height=min(650, 45 + len(filtered) * 30),
+                 hide_index=True)
 
 def render_tab_data(df_csv, ticker, cols):
     st.subheader(f"📋 Dữ liệu chi tiết — {ticker}")
     if df_csv.empty:
-        st.warning("⚠️ Không có file CSV tổng hợp. Đặt file tại `data/vietnam_stock_database_tong_hop.csv`.")
+        st.warning("⚠️ Không có file CSV. Đặt file tại `data/vietnam_stock_database_tong_hop.csv`.")
         return
-
     ticker_col = cols.get("ticker")
     period_col = cols.get("period")
     metric_col = cols.get("metric")
     value_col = cols.get("value")
-
     df_sub = df_csv[df_csv[ticker_col] == ticker].copy()
     if df_sub.empty:
-        st.info(f"Không có bản ghi nào cho mã {ticker}.")
+        st.info(f"Không có bản ghi cho mã {ticker}.")
         return
-
     df_sub[value_col] = pd.to_numeric(
         df_sub[value_col].astype(str).str.replace(",", "").str.replace(" ", ""),
         errors="coerce",
     )
 
-    # --- Chart ---
     st.markdown("### 📈 Trực quan hoá chỉ số")
     available = sorted(df_sub[metric_col].dropna().astype(str).unique().tolist())
     if available:
@@ -1327,14 +2026,12 @@ def render_tab_data(df_csv, ticker, cols):
                     ["doanh thu", "lợi nhuận", "lãi", "tài sản"])][:5]
         if not defaults:
             defaults = available[:3]
-
-        sel = st.multiselect("Chọn chỉ tiêu:", available, default=defaults, key=f"chart_sel_{ticker}")
-
+        sel = st.multiselect("Chọn chỉ tiêu:", available, default=defaults,
+                             key=f"chart_sel_{ticker}")
         col1, col2 = st.columns([2, 2])
         with col1:
             chart_type = st.radio("Dạng biểu đồ:", ["Cột nhóm", "Đường xu hướng"],
                                   horizontal=True, key=f"chart_type_{ticker}")
-
         if sel:
             df_chart = df_sub[df_sub[metric_col].astype(str).isin(sel)].dropna(subset=[value_col])
             if chart_type == "Cột nhóm":
@@ -1348,44 +2045,36 @@ def render_tab_data(df_csv, ticker, cols):
             fig.update_layout(
                 xaxis_title="Năm / Kỳ báo cáo", yaxis_title="Giá trị",
                 legend_title="Chỉ tiêu", hovermode="x unified", height=520,
-                plot_bgcolor="#0f172a", paper_bgcolor="#0b1220",
+                plot_bgcolor="#0a1220", paper_bgcolor="#050914",
                 font=dict(color="#e2e8f0"),
             )
             st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("Không có chỉ tiêu số nào để vẽ.")
 
-    # --- Search + table ---
     st.markdown("---")
     st.markdown("### 🔍 Tra cứu & Bảng dữ liệu thô")
     search = st.text_input("Lọc nhanh:", placeholder="Ví dụ: Doanh thu, Nợ, Vốn...",
                           key=f"search_{ticker}")
+    df_disp = df_sub
     if search:
         mask = df_sub.astype(str).apply(
             lambda col: col.str.contains(search, case=False, na=False)
         ).any(axis=1)
         df_disp = df_sub[mask]
-    else:
-        df_disp = df_sub
-
     st.caption(f"Hiển thị {len(df_disp):,} / {len(df_sub):,} bản ghi.")
     st.dataframe(df_disp, use_container_width=True, height=420, hide_index=True)
-
     csv_data = df_sub.to_csv(index=False).encode("utf-8-sig")
     st.download_button(
-        label=f"📥 Tải CSV ({ticker})",
-        data=csv_data,
-        file_name=f"FINEX_Terminal_{ticker}.csv",
-        mime="text/csv",
+        label=f"📥 Tải CSV ({ticker})", data=csv_data,
+        file_name=f"FINEX_Terminal_{ticker}.csv", mime="text/csv",
     )
 
+
 # ============================================================================
-# 8. DIVIDEND CALCULATORS
+# 13. DIVIDEND CALCULATORS
 # ============================================================================
 def render_cash_dividend_ui():
     st.markdown("## 💵 MÁY TÍNH CỔ TỨC TIỀN MẶT")
     st.markdown("*Tính cổ tức nhận được dựa trên vốn đầu tư và giá thị trường.*")
-
     c1, c2, c3 = st.columns(3)
     with c1:
         ticker = st.text_input("Mã cổ phiếu:", value="TCB").upper().strip()
@@ -1395,7 +2084,6 @@ def render_cash_dividend_ui():
         capital = st.number_input("Vốn đầu tư (VNĐ):",
                                   min_value=MIN_CAPITAL_VND, max_value=MAX_CAPITAL_VND,
                                   step=CAPITAL_STEP_VND, value=1_000_000_000, format="%d")
-
     st.markdown("---")
     c4, c5 = st.columns(2)
     with c4:
@@ -1405,11 +2093,9 @@ def render_cash_dividend_ui():
         div_pct = st.slider("Tỷ lệ cổ tức (% Mệnh giá):",
                             min_value=MIN_DIVIDEND_PERCENT, max_value=MAX_DIVIDEND_PERCENT,
                             step=DIVIDEND_PERCENT_STEP, value=15)
-
     cash_ps = PAR_VALUE_DEFAULT * div_pct / 100
     shares = _buyable_shares(capital, price)
     res = _cash_dividend_actual(shares, cash_ps, tax)
-
     st.markdown("### 📊 Kết quả")
     c = st.columns(4)
     c[0].metric("Số CP mua được", _fmt_shares(shares))
@@ -1417,7 +2103,6 @@ def render_cash_dividend_ui():
     c[2].metric("Tổng cổ tức trước thuế", _fmt_vnd(res["before_tax"]))
     c[3].metric("Thực nhận (sau thuế)", _fmt_vnd(res["after_tax"]),
                 delta=f"-{_fmt_vnd(res['tax'])} Thuế", delta_color="inverse")
-
     st.markdown("---")
     st.markdown("### 📈 Bảng kịch bản theo quy mô vốn")
     rows = []
@@ -1425,13 +2110,11 @@ def render_cash_dividend_ui():
         sh = _buyable_shares(cap, price)
         r = _cash_dividend_actual(sh, cash_ps, tax)
         rows.append({
-            "Vốn (VNĐ)": _fmt_vnd(cap),
-            "Số CP": _fmt_shares(sh),
+            "Vốn (VNĐ)": _fmt_vnd(cap), "Số CP": _fmt_shares(sh),
             "Trước thuế (VNĐ)": _fmt_vnd(r["before_tax"]),
             "Sau thuế (VNĐ)": _fmt_vnd(r["after_tax"]),
         })
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
     if rows:
         df_plot = pd.DataFrame({
             "Vốn (tỷ)": [(MIN_CAPITAL_VND + i*CAPITAL_STEP_VND)/1e9 for i in range(len(rows))],
@@ -1442,14 +2125,13 @@ def render_cash_dividend_ui():
         fig = px.bar(df_plot, x="Vốn (tỷ)", y="Thực nhận (triệu)",
                      title="Cổ tức thực nhận theo vốn đầu tư",
                      color="Thực nhận (triệu)", color_continuous_scale="Greens")
-        fig.update_layout(template="plotly_dark", plot_bgcolor="#0f172a",
-                         paper_bgcolor="#0b1220", font=dict(color="#e2e8f0"))
+        fig.update_layout(template="plotly_dark", plot_bgcolor="#0a1220",
+                         paper_bgcolor="#050914", font=dict(color="#e2e8f0"))
         st.plotly_chart(fig, use_container_width=True)
 
 def render_stock_dividend_ui():
     st.markdown("## 📈 MÁY TÍNH CỔ TỨC BẰNG CỔ PHIẾU")
     st.markdown("*Tính số cổ phiếu nhận thêm từ chia cổ tức bằng cổ phiếu.*")
-
     c1, c2 = st.columns(2)
     with c1:
         ticker = st.text_input("Mã cổ phiếu:", value="TCB").upper().strip()
@@ -1457,11 +2139,9 @@ def render_stock_dividend_ui():
         owned = st.number_input("Số cổ phiếu đang sở hữu:",
                                 min_value=MIN_OWNED_SHARES, max_value=MAX_OWNED_SHARES,
                                 step=10_000, value=100_000, format="%d")
-
     ratio = st.slider("Tỷ lệ cổ tức bằng cổ phiếu (%):",
                       min_value=MIN_DIVIDEND_PERCENT, max_value=MAX_DIVIDEND_PERCENT,
                       step=DIVIDEND_PERCENT_STEP, value=15)
-
     res = _stock_dividend(owned, ratio)
     st.markdown("### 📊 Kết quả")
     c = st.columns(3)
@@ -1469,25 +2149,24 @@ def render_stock_dividend_ui():
     c[1].metric("Cổ phiếu nhận thêm", f"+{_fmt_shares(res['additional_shares'])}",
                 delta="Cổ tức CP", delta_color="normal")
     c[2].metric("Tổng sau phát hành", _fmt_shares(res["total_after"]))
-
     st.caption("⚠️ Cổ tức bằng cổ phiếu làm tăng số lượng CP nhưng không mặc nhiên "
                "làm tăng giá trị tài sản tương ứng.")
 
+
 # ============================================================================
-# 9. MAIN
+# 14. MAIN
 # ============================================================================
 def main():
     inject_css()
 
-    # --- Session defaults ---
     st.session_state.setdefault("selected_ticker", "FPT")
     st.session_state.setdefault("selected_partner", None)
     st.session_state.setdefault("show_partner_dialog", False)
+    st.session_state.setdefault("show_vip_dialog", False)
 
-    # --- Load CSV ---
     df_csv, csv_path = load_database()
 
-    # --- SIDEBAR ---
+    # === SIDEBAR ===
     with st.sidebar:
         st.markdown(
             """<div style='text-align:center; padding:14px 0 10px 0;
@@ -1499,20 +2178,15 @@ def main():
         )
 
         cols = _get_csv_columns(df_csv) if not df_csv.empty else {}
-
-        # Bộ lọc ngành + ticker (từ code mới)
-        industry_sel = "Tất cả"
         tickers_available = []
 
         if not df_csv.empty and cols.get("ticker"):
             df_csv[cols["ticker"]] = df_csv[cols["ticker"]].astype(str).str.strip().str.upper()
             if cols.get("industry"):
                 df_csv[cols["industry"]] = df_csv[cols["industry"]].astype(str).str.strip()
-
             all_tickers_csv = sorted([
                 t for t in df_csv[cols["ticker"]].unique() if t and t != "NAN"
             ])
-
             if cols.get("industry"):
                 industries = ["Tất cả"] + sorted([
                     i for i in df_csv[cols["industry"]].unique() if i and i != "NAN"
@@ -1526,11 +2200,9 @@ def main():
             else:
                 tickers_available = all_tickers_csv
         else:
-            # Fallback: dùng DEMO_FINANCIAL_DATA
             tickers_available = sorted(DEMO_FINANCIAL_DATA.keys())
             st.caption("⚠️ Chưa có CSV — dùng dữ liệu demo.")
 
-        # Đảm bảo FPT có trong list ưu tiên
         if tickers_available and st.session_state.selected_ticker not in tickers_available:
             st.session_state.selected_ticker = (
                 "FPT" if "FPT" in tickers_available else tickers_available[0]
@@ -1558,11 +2230,17 @@ def main():
 
         st.markdown("---")
         st.info(f"💡 Đang quản lý **{len(tickers_available)}** mã.")
-
         if not df_csv.empty:
             st.caption(f"📂 CSV: `{csv_path}` ({len(df_csv):,} bản ghi)")
 
-    # --- MODE ROUTING ---
+        st.markdown("---")
+        if st.button("🚀 Nâng cấp VIP", use_container_width=True, type="primary"):
+            st.session_state.show_vip_dialog = True
+            st.rerun()
+
+        render_profiler_panel()
+
+    # === MODE ROUTING ===
     render_header()
 
     if app_mode == "💵 Cổ tức tiền mặt":
@@ -1574,51 +2252,64 @@ def main():
         sel = st.selectbox("Chọn cuộc khủng hoảng:", keys, key="cr_sel")
         render_crisis_section(sel); return
 
-    # --- TERMINAL MODE ---
-    # Partner buttons header
-    col_broker, col_info = st.columns([1.2, 1], gap="large")
-    with col_broker:
-        render_partner_buttons()
-    with col_info:
-        st.markdown(
-            f"""<div class="glass-card" style="border-left:3px solid #60a5fa;">
-            <div style="color:#60a5fa; font-weight:800; font-size:1.05em; margin-bottom:10px;">
-            📌 Đang phân tích: <span style="color:#F5D97A;">{st.session_state.selected_ticker}</span>
-            </div>
-            <p style="color:#94a3b8; font-size:0.85em; margin:0;">
-            Dùng sidebar để đổi mã, hoặc nhấn vào đối tác để mở tài khoản chứng khoán.</p>
-            </div>""",
-            unsafe_allow_html=True,
-        )
+    # === TERMINAL MODE ===
+    with prof("📊 Header"):
+        col_broker, col_info = st.columns([1.4, 1], gap="large")
+        with col_broker:
+            render_partner_buttons()
+        with col_info:
+            fin_data_current = get_financials(st.session_state.selected_ticker, df_csv, cols)
+            render_ticker_info_card(st.session_state.selected_ticker, fin_data_current)
 
-    # Dialog
+    # Dialogs
     if st.session_state.get("show_partner_dialog", False):
         partner_detail_dialog()
+    if st.session_state.get("show_vip_dialog", False):
+        vip_upgrade_dialog()
 
-    # --- Tabs ---
+    # VN-Index chart
+    with prof("📈 VNINDEX chart"):
+        with st.expander("📈 VN-INDEX 26 NĂM (2000 – 2026)", expanded=False):
+            render_vnindex_chart()
+
+    # Tabs
     ticker = st.session_state.selected_ticker
     fin_data = get_financials(ticker, df_csv, cols)
 
     tabs = st.tabs([
         "📊 Tổng quan", "🧮 Định giá", "📈 Dự báo",
-        "🤖 ML", "🧠 DL", "📋 Dữ liệu chi tiết",
+        "🤖 ML", "🧠 DL", "📚 BCTC Gốc", "📋 Dữ liệu chi tiết",
     ])
     with tabs[0]:
-        render_tab_overview(df_csv, ticker, cols, fin_data)
+        with prof("📊 Tab Tổng quan"):
+            render_tab_overview(df_csv, ticker, cols, fin_data)
     with tabs[1]:
-        render_tab_valuation(ticker, fin_data)
+        with prof("🧮 Tab Định giá"):
+            render_tab_valuation(ticker, fin_data)
     with tabs[2]:
-        render_tab_forecast(ticker, fin_data)
+        with prof("📈 Tab Dự báo"):
+            render_tab_forecast(ticker, fin_data)
     with tabs[3]:
-        render_tab_ml(ticker, fin_data)
+        with prof("🤖 Tab ML"):
+            render_tab_ml(ticker, fin_data)
     with tabs[4]:
-        render_tab_dl(ticker, fin_data)
+        with prof("🧠 Tab DL"):
+            render_tab_dl(ticker, fin_data)
     with tabs[5]:
-        render_tab_data(df_csv, ticker, cols)
+        with prof("📚 Tab BCTC Gốc"):
+            render_tab_bctc(ticker, df_csv, cols)
+    with tabs[6]:
+        with prof("📋 Tab Dữ liệu"):
+            render_tab_data(df_csv, ticker, cols)
 
-    # --- Bottom sections ---
+    # Bottom sections
     st.markdown("---")
-    render_accuracy_section(ticker)
+    with prof("✅ Accuracy"):
+        render_accuracy_section(ticker)
+
+    st.markdown("---")
+    with prof("📌 Undervalued"):
+        render_undervalued_stocks()
 
     st.markdown("---")
     render_document_section()
@@ -1634,14 +2325,14 @@ def main():
     )
     crisis_keys = list(HISTORICAL_CRISES.keys())
     default_crisis = crisis_keys.index("COVID_2020") if "COVID_2020" in crisis_keys else 0
-    sel_cr = st.selectbox("🔍 Chọn cuộc khủng hoảng để xem chi tiết:",
+    sel_cr = st.selectbox("🔍 Chọn cuộc khủng hoảng:",
                           crisis_keys, index=default_crisis, key="crisis_main")
     render_crisis_section(sel_cr)
 
-    # --- Disclaimer ---
+    # Disclaimer
     st.markdown("---")
     st.markdown(
-        """<div style="background:linear-gradient(145deg,rgba(239,68,68,0.10) 0%,rgba(239,68,68,0.04) 100%);
+        """<div style="background:linear-gradient(145deg,rgba(239,68,68,0.15) 0%,rgba(239,68,68,0.05) 100%);
         border-left:4px solid #ef4444; padding:16px 20px; border-radius:8px; margin:20px 0;">
         <p style="color:#f3f4f6; font-size:0.95em; margin:0;">
         <strong>⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM:</strong><br>
@@ -1650,6 +2341,7 @@ def main():
         Không phải khuyến nghị đầu tư.</p></div>""",
         unsafe_allow_html=True,
     )
+
 
 if __name__ == "__main__":
     main()
