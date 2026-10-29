@@ -11,16 +11,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Tinh chỉnh CSS giao diện cho sang trọng, hiện đại
-st.markdown("""
-    <style>
-        .main { background-color: #0e1117; }
-        .stMetric { background-color: #161b22; padding: 15px; border-radius: 10px; border: 1px solid #30363d; }
-        h1 { color: #58a6ff; font-weight: 700; }
-        h3 { color: #c9d1d9; }
-    </style>
-""", unsafe_allow_html=True)
-
 st.title("🏛️ FINEX VN Terminal — Enterprise Financial Intelligence")
 st.markdown("Hệ thống khai thác, trực quan hóa và định giá tự động cơ sở dữ liệu tài chính doanh nghiệp Việt Nam.")
 st.markdown("---")
@@ -30,7 +20,6 @@ st.markdown("---")
 # ============================================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def load_database():
-    # Danh sách các đường dẫn dự phòng để tìm file dữ liệu linh hoạt
     possible_paths = [
         "data/vietnam_stock_database_tong_hop.csv",
         "vietnam_stock_database_tong_hop.csv",
@@ -42,8 +31,8 @@ def load_database():
         if os.path.exists(path) and os.path.getsize(path) > 0:
             try:
                 df_load = pd.read_csv(path, low_memory=False)
-                # Chuẩn hóa tên cột thành chữ thường để dễ xử lý
-                df_load.columns = [str(c).strip().lower() for c in df_load.columns]
+                # Giữ nguyên chữ hoa/thường hoặc chuẩn hóa khoảng trắng thừa
+                df_load.columns = [str(c).strip() for c in df_load.columns]
                 return df_load
             except Exception:
                 continue
@@ -57,14 +46,14 @@ df = load_database()
 if df.empty:
     st.warning("⚠️ Hiện chưa tìm thấy file cơ sở dữ liệu tổng hợp (`vietnam_stock_database_tong_hop.csv`). Hãy kiểm tra lại thư mục `data/` trên kho GitHub!")
 else:
-    # Tự động nhận diện các cột quan trọng
-    ticker_col = next((c for c in ['ticker', 'ma', 'symbol', 'ma_ck', 'ma_chung_khoan'] if c in df.columns), None)
-    period_col = next((c for c in ['period', 'ky', 'nam', 'quy', 'ky_bao_cao', 'year'] if c in df.columns), None)
-    metric_col = next((c for c in ['metric_name', 'chi_tieu', 'chi_tieu_ten', 'item'] if c in df.columns), None)
-    value_col = next((c for c in ['value', 'gia_tri', 'so_tien'] if c in df.columns), None)
+    # Khớp chính xác với tên các cột tiếng Việt thực tế trong file CSV của bạn
+    ticker_col = 'mã chứng khoán' if 'mã chứng khoán' in df.columns else next((c for c in df.columns if 'mã' in c), None)
+    period_col = 'năm' if 'năm' in df.columns else next((c for c in df.columns if 'kỳ' in c or 'năm' in c), None)
+    metric_col = 'chỉ tiêu tiếng việt' if 'chỉ tiêu tiếng việt' in df.columns else next((c for c in df.columns if 'chỉ tiêu' in c), None)
+    value_col = 'giá trị' if 'giá trị' in df.columns else next((c for c in df.columns if 'giá trị' in c), None)
 
     if not ticker_col:
-        st.error(f"❌ Không tìm thấy cột mã chứng khoán trong cơ sở dữ liệu. Các cột hiện có: {list(df.columns)}")
+        st.error(f"❌ Không tìm thấy cột mã chứng khoán. Các cột hiện có: {list(df.columns)}")
     else:
         # Làm sạch mã chứng khoán
         df[ticker_col] = df[ticker_col].astype(str).str.strip().str.upper()
@@ -72,18 +61,16 @@ else:
 
         # --- SIDEBAR: BỘ LỌC & TÌM KIẾM MÃ THÔNG MINH ---
         st.sidebar.header("🔍 Tra Cứu Doanh Nghiệp")
-        
-        # Chọn mã có sẵn (mặc định ưu tiên FPT nếu có)
         default_idx = all_tickers.index("FPT") if "FPT" in all_tickers else 0
         selected_ticker = st.sidebar.selectbox("🎯 Chọn hoặc gõ mã chứng khoán:", all_tickers, index=default_idx)
         
         st.sidebar.markdown("---")
-        st.sidebar.info(f"💡 **Trạng thái kết nối:** Đã sẵn sàng `{len(all_tickers)}` mã doanh nghiệp trong hệ thống.")
+        st.sidebar.info(f"💡 **Trạng thái:** Đã tải `{len(all_tickers)}` mã doanh nghiệp.")
 
         # Lọc dữ liệu theo mã được chọn
         df_sub = df[df[ticker_col] == selected_ticker]
 
-        # --- MAIN DISPLAY: KHU VỰC HIỂN THỊ CHÍNH ---
+        # --- MAIN DISPLAY ---
         st.subheader(f"📊 Hồ sơ tài chính doanh nghiệp: **{selected_ticker}**")
         
         # Thẻ thông tin nhanh (KPI Metrics)
@@ -92,21 +79,20 @@ else:
             st.metric(label="Tổng số bản ghi dữ liệu", value=f"{len(df_sub):,}")
         with col2:
             unique_periods = df_sub[period_col].nunique() if period_col else 0
-            st.metric(label="Số kỳ báo cáo theo dõi", value=unique_periods)
+            st.metric(label="Số năm/kỳ báo cáo theo dõi", value=unique_periods)
         with col3:
             unique_metrics = df_sub[metric_col].nunique() if metric_col else 0
             st.metric(label="Chỉ tiêu tài chính khai thác", value=unique_metrics)
 
         st.markdown("")
 
-        # --- KHU VỰC VẼ BIỂU ĐỒ TRỰC QUAN SÁNG TẠO ---
+        # --- BIỂU ĐỒ TRỰC QUAN ---
         if not df_sub.empty and period_col and metric_col and value_col:
             st.markdown("### 📈 Trực Quan Hóa Chỉ Số Tài Chính")
             
             # Chuyển đổi dữ liệu giá trị sang kiểu số an toàn
-            df_sub[value_col] = pd.to_numeric(df_sub[value_col], errors='coerce')
+            df_sub[value_col] = pd.to_numeric(df_sub[value_col].astype(str).str.replace(',', ''), errors='coerce')
             
-            # Bộ lọc chỉ tiêu bên trong biểu đồ để người dùng tùy biến xem
             available_metrics = sorted(df_sub[metric_col].dropna().unique())
             default_selection = available_metrics[:5] if len(available_metrics) >= 5 else available_metrics
             
@@ -119,7 +105,6 @@ else:
             if selected_metrics:
                 df_chart = df_sub[df_sub[metric_col].isin(selected_metrics)]
                 
-                # Tùy chọn kiểu biểu đồ
                 chart_type = st.radio(
                     "🎨 Kiểu hiển thị biểu đồ:", 
                     ["Cột nhóm (Bar Chart)", "Đường xu hướng (Line Chart)"], 
@@ -148,7 +133,7 @@ else:
                     )
                 
                 fig.update_layout(
-                    xaxis_title="Kỳ / Năm báo cáo",
+                    xaxis_title="Năm / Kỳ báo cáo",
                     yaxis_title="Giá trị (VND / Tỷ lệ)",
                     legend_title="Chỉ tiêu",
                     hovermode="x unified",
@@ -158,15 +143,13 @@ else:
             else:
                 st.info("👈 Vui lòng chọn ít nhất một chỉ tiêu tài chính ở trên để vẽ biểu đồ.")
 
-        # --- KHU VỰC BẢNG DỮ LIỆU CHI TIẾT ---
+        # --- BẢNG DỮ LIỆU CHI TIẾT ---
         st.markdown("---")
         st.markdown(f"### 📋 Bảng Dữ Liệu Chi Tiết Của {selected_ticker}")
         
-        # Thêm ô lọc nhanh dữ liệu trong bảng
         search_query = st.text_input("🔍 Lọc nhanh từ khóa trong bảng dữ liệu:", placeholder="Nhập tên chỉ tiêu cần tìm...")
         
         if search_query:
-            # Lọc theo từ khóa bất kỳ trong các cột chữ
             mask = df_sub.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
             df_display = df_sub[mask]
         else:
@@ -174,7 +157,7 @@ else:
 
         st.dataframe(df_display, use_container_width=True, height=400)
 
-        # Nút tải xuống file CSV của riêng mã đang chọn
+        # Nút tải xuống
         csv_data = df_sub.to_csv(index=False).encode('utf-8')
         st.download_button(
             label=f"📥 Tải xuống dữ liệu CSV của {selected_ticker}",
