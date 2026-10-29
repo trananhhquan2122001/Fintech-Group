@@ -1,6 +1,22 @@
-streamlit>=1.40.0
-pandas>=2.2.3
-numpy>=1.26.4
-plotly>=5.24.0
-openpyxl>=3.1.5
-requests>=2.32.0
+# FINEX VN Terminal — v59 SaaS
+# Bộ thư viện đồng bộ với app.py hiện tại.
+# Giới hạn major versions để giảm nguy cơ phát sinh lỗi tương thích khi deploy.
+
+streamlit>=1.40.0,<2.0.0
+pandas>=2.2.3,<3.0.0
+numpy>=1.26.4,<2.0.0
+plotly>=5.24.0,<7.0.0
+openpyxl>=3.1.5,<4.0.0
+requests>=2.32.0,<3.0.0
+
+# app.py import `websocket` nên tên package cài đặt đúng là websocket-client.
+websocket-client>=1.8.0,<2.0.0
+
+# PostgreSQL: app.py dùng try/except nên có thể chạy khi thiếu driver,
+# nhưng cần package này nếu muốn bật chức năng kết nối DB cổ tức.
+psycopg2-binary>=2.9.9,<3.0.0
+
+# Các mô-đun tùy chọn của dự án (ví dụ backtest/ML/DL) có thể cần cài riêng:
+# vectorbt
+# torch
+# transformers
