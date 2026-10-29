@@ -1,10 +1,10 @@
 name: Financial Data Scraper Pipeline
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Cho phép bấm nút chạy thủ công bất cứ lúc nào trên web
   schedule:
-    # Lịch chạy tự động: Vào 12:00 trưa hàng ngày / thứ Bảy (Giờ UTC)
-    - cron: '0 12 * * *'
+    # Đã sửa lại đúng 12:00 trưa giờ Việt Nam (5:00 UTC)
+    - cron: '0 5 * * *'
 
 jobs:
   run-scraper:
