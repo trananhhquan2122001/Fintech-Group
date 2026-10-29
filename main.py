@@ -169,7 +169,7 @@ def translate_metric(metric_original):
     if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): return vie_v
-    
+     
     lower_key = cleaned_key.lower()
     if 'shares' in lower_key: return 'Số lượng cổ phiếu / Khối lượng niêm yết'
     if 'revenue' in lower_key or 'sales' in lower_key: return 'Doanh thu'
@@ -212,17 +212,17 @@ def main():
     target_stocks = load_500_tickers()
     all_master_records = []
     success_count, fail_count = 0, 0
-    
+     
     # Chia batch 50 mã, có cơ chế checkpoint an toàn
     batch_size = 50
     for i in range(0, len(target_stocks), batch_size):
         batch = target_stocks[i:i+batch_size]
         print(f"🔄 [FINEX Pipeline] Đang cào batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
-        
+         
         for symbol in batch:
             try:
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
-                
+                 
                 # Cào toàn diện đủ 3 BCTC (Cả Năm và Quý)
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
@@ -230,7 +230,7 @@ def main():
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
-                
+                 
                 success_count += 1
                 time.sleep(0.06)
             except Exception:
@@ -241,13 +241,13 @@ def main():
 
     print("\n💾 Đang kết xuất đồng thời tệp Excel & CSV nguyên bản cho FINEX Terminal...")
     os.makedirs('data', exist_ok=True)
-    
+     
     # Xuất file Excel chuẩn cấu trúc
     df_master.to_excel('vietnam_stock_database.xlsx', index=False, engine='openpyxl')
-    
+     
     # Xuất file CSV tổng hợp
     df_master.to_csv('data/vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
-    
+     
     print(f"==================================================")
     print(f" 🎉 HOÀN TẤT TOÀN BỘ QUY TRÌNH QUY MÔ 500 MÃ!")
     print(f" - Doanh nghiệp thành công: {success_count} | Lỗi/Bỏ qua: {fail_count}")
