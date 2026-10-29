@@ -1,138 +1,121 @@
 # ============================================================================
-# FINEX VN Terminal — app.py [v59-LIGHT-FAST-COMPLETE]
-# Tối ưu tốc độ khởi động — Giao diện biểu đồ & Định giá mượt mà
+# FINEX VN Terminal — app.py [v60-ULTRA-CLEAN]
+# Chỉ đọc trực tiếp 3 file CSV gốc từ GitHub — Giao diện mượt mà, không rườm rà
 # ============================================================================
 
 import streamlit as st
-import plotly.express as px
 import pandas as pd
-import numpy as np
+import plotly.express as px
 import os
-from decimal import Decimal
 
-# Cấu hình trang
+# Cấu hình giao diện Streamlit
 st.set_page_config(
-    page_title="FINEX VN Terminal - Công Nghệ Định Giá Doanh Nghiệp", 
+    page_title="FINEX VN Terminal", 
     page_icon="📈", 
     layout="wide", 
     initial_sidebar_state="expanded"
 )
 
-# ============================================================================
-# 1. HÀM ĐỌC & TẢI DỮ LIỆU TỐC ĐỘ CAO
-# ============================================================================
-def _resolve_csv_paths():
-    _HERE = os.path.dirname(os.path.abspath(__file__))
-    _PARENT = os.path.dirname(_HERE)
-    _GP = os.path.dirname(_PARENT)
-    _filenames = {
-        'cong_nghe': 'du_lieu_cong_nghe.csv', 
-        'ngan_hang_va_tai_chinh': 'du_lieu_ngan_hang_va_tai_chinh.csv', 
-        'san_xuat_va_khac': 'du_lieu_san_xuat_va_khac.csv'
-    }
-    _bases = [_PARENT, _HERE, _GP, os.path.join(_PARENT, "du_lieu"), os.path.join(_HERE, "du_lieu"), os.getcwd(), os.path.join(os.getcwd(), "du_lieu"), "/app", "/app/du_lieu"]
-    result = {}
-    for key, fname in _filenames.items():
-        found = None
-        for base in _bases:
-            path = os.path.join(base, fname)
-            try:
-                if os.path.isfile(path) and os.path.getsize(path) > 0:
-                    found = os.path.abspath(path)
-                    break
-            except OSError:
-                continue
-        result[key] = found
-    return result
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_all_data_cached():
-    paths = _resolve_csv_paths()
-    dfs = []
-    for key, path in paths.items():
-        if path:
-            try:
-                df_sub = pd.read_csv(path, low_memory=False)
-                if not df_sub.empty:
-                    dfs.append(df_sub)
-            except Exception:
-                pass
-    if dfs:
-        full_df = pd.concat(dfs, ignore_index=True)
-        # Chuẩn hóa tên cột cơ bản nếu có
-        full_df.columns = [str(c).strip().lower() for c in full_df.columns]
-        return full_df
-    return pd.DataFrame()
-
-long_df = load_all_data_cached()
-
-# ============================================================================
-# 2. GIAO DIỆN STREAMLIT CHÍNH (UI)
-# ============================================================================
-st.title("🏛️ FINEX VN Terminal - Hệ Thống Dữ Liệu & Định Giá 500 Mã Cổ Phiếu")
+st.title("🏛️ FINEX VN Terminal - Quản Trị Dữ Liệu Cổ Phiếu")
 st.markdown("---")
 
-if long_df.empty:
-    st.warning("⚠️ Hiện chưa tìm thấy dữ liệu thô trong các file CSV. Vui lòng kiểm tra lại quá trình cào dữ liệu trên GitHub!")
+# ============================================================================
+# 1. HÀM TÌM VÀ ĐỌC TRỰC TIẾP 3 FILE CSV TRÊN GITHUB
+# ============================================================================
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_raw_csv_data():
+    _HERE = os.path.dirname(os.path.abspath(__file__))
+    _PARENT = os.path.dirname(_HERE)
+    
+    # 3 file CSV gốc theo đúng tên bạn đang lưu trên GitHub
+    file_names = [
+        'du_lieu_cong_nghe.csv', 
+        'du_lieu_ngan_hang_va_tai_chinh.csv', 
+        'du_lieu_san_xuat_va_khac.csv'
+    ]
+    
+    search_dirs = [_PARENT, _HERE, os.getcwd(), "/app", "/app/du_lieu"]
+    
+    all_dfs = []
+    for fname in file_names:
+        found_path = None
+        for d in search_dirs:
+            path = os.path.join(d, fname)
+            if os.path.isfile(path) and os.path.getsize(path) > 0:
+                found_path = path
+                break
+        
+        if found_path:
+            try:
+                df_temp = pd.read_csv(found_path, low_memory=False)
+                if not df_temp.empty:
+                    all_dfs.append(df_temp)
+            except Exception:
+                pass
+                
+    if all_dfs:
+        combined = pd.concat(all_dfs, ignore_index=True)
+        # Chuẩn hóa toàn bộ tên cột về dạng chữ thường, không dấu/khoảng trắng thừa
+        combined.columns = [str(c).strip().lower() for c in combined.columns]
+        return combined
+        
+    return pd.DataFrame()
+
+# Tải dữ liệu vào bộ nhớ đệm
+df_master = load_raw_csv_data()
+
+# ============================================================================
+# 2. XÂY DỰNG GIAO DIỆN TRỰC QUAN
+# ============================================================================
+if df_master.empty:
+    st.error("❌ Không tìm thấy hoặc không đọc được 3 file CSV gốc trên GitHub. Vui lòng kiểm tra lại vị trí các file CSV!")
 else:
-    # Tìm cột mã chứng khoán (ticker / ma_chung_khoan / ...)
-    ticker_col = next((c for c in ['ticker', 'ma_chung_khoan', 'ma', 'symbol'] if c in long_df.columns), None)
+    # Tự động nhận diện cột mã chứng khoán
+    ticker_col = next((c for c in ['ticker', 'ma', 'symbol', 'ma_ck', 'ma_chung_khoan'] if c in df_master.columns), None)
     
     if not ticker_col:
-        st.error("❌ Không tìm thấy cột mã chứng khoán trong dữ liệu.")
+        st.error(f"❌ Dữ liệu CSV không chứa cột mã chứng khoán hợp lệ. Các cột hiện có: {list(df_master.columns)}")
     else:
-        # Làm sạch danh sách mã
-        long_df[ticker_col] = long_df[ticker_col].astype(str).str.strip().str.upper()
-        all_tickers = sorted([t for t in long_df[ticker_col].unique() if t and t != 'NAN'])
-
-        # Sidebar lựa chọn
-        st.sidebar.header("🔍 Bộ Lọc & Tra Cứu")
-        default_idx = all_tickers.index("FPT") if "FPT" in all_tickers else 0
-        selected_ticker = st.sidebar.selectbox("Chọn mã chứng khoán:", all_tickers, index=default_idx)
+        # Làm sạch mã chứng khoán
+        df_master[ticker_col] = df_master[ticker_col].astype(str).str.strip().str.upper()
+        tickers_list = sorted([t for t in df_master[ticker_col].unique() if t and t != 'NAN'])
         
-        # Menu chức năng
-        nav_mode = st.sidebar.radio("Chọn chức năng:", ["📊 Biểu đồ Tài chính", "📋 Dữ liệu Chi Tiết"])
-
-        # Lọc dữ liệu theo mã chọn
-        sub_df = long_df[long_df[ticker_col] == selected_ticker]
-
-        if nav_mode == "📊 Biểu đồ Tài chính":
-            st.subheader(f"📌 Trực quan hóa dữ liệu tài chính: {selected_ticker}")
+        # --- Sidebar ---
+        st.sidebar.header("🔍 Tra Cứu Cổ Phiếu")
+        default_index = tickers_list.index("FPT") if "FPT" in tickers_list else 0
+        selected_ticker = st.sidebar.selectbox("Chọn mã chứng khoán:", tickers_list, index=default_index)
+        
+        # Lọc dữ liệu theo mã người dùng chọn
+        df_ticker = df_master[df_master[ticker_col] == selected_ticker]
+        
+        # --- Main Screen ---
+        st.subheader(f"📊 Dữ liệu chi tiết mã: **{selected_ticker}**")
+        st.info(f"Tổng số bản ghi tìm thấy: **{len(df_ticker):,}** dòng.")
+        
+        if not df_ticker.empty:
+            # Hiển thị bảng dữ liệu thô
+            st.markdown("### 📋 Bảng số liệu gốc")
+            st.dataframe(df_ticker, use_container_width=True)
             
-            if not sub_df.empty:
-                # Tìm cột chứa chỉ tiêu và giá trị
-                metric_col = next((c for c in ['metric_name', 'chi_tieu', 'chi_tieu_ten'] if c in sub_df.columns), None)
-                period_col = next((c for c in ['period', 'ky', 'nam', 'quy'] if c in sub_df.columns), None)
-                val_col = next((c for c in ['value', 'gia_tri'] if c in sub_df.columns), None)
-
-                if metric_col and period_col and val_col:
-                    # Hiển thị biểu đồ cột trực quan
-                    st.markdown("### 📈 Biến động các chỉ tiêu tài chính qua các kỳ")
-                    
-                    # Chuyển đổi giá trị số an toàn
-                    sub_df[val_col] = pd.to_numeric(sub_df[val_col], errors='coerce')
-                    
-                    fig = px.bar(
-                        sub_df.dropna(subset=[val_col]), 
-                        x=period_col, 
-                        y=val_col, 
-                        color=metric_col, 
-                        barmode='group',
-                        title=f"Biểu đồ chỉ số tài chính - {selected_ticker}"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.info("Cấu trúc bảng dữ liệu không đủ các trường chuẩn để vẽ biểu đồ tự động.")
-                
+            # Tự động vẽ biểu đồ nếu có cột kỳ báo cáo (period) và giá trị (value)
+            period_col = next((c for c in ['period', 'ky', 'nam', 'quy', 'ky_bao_cao'] if c in df_ticker.columns), None)
+            metric_col = next((c for c in ['metric_name', 'chi_tieu', 'chi_tieu_ten'] if c in df_ticker.columns), None)
+            value_col = next((c for c in ['value', 'gia_tri'] if c in df_ticker.columns), None)
+            
+            if period_col and metric_col and value_col:
                 st.markdown("---")
-                st.markdown("### 🔍 Dữ liệu rút gọn của mã")
-                st.dataframe(sub_df.head(50), use_container_width=True)
-            else:
-                st.warning(f"Không có dữ liệu cho mã {selected_ticker}.")
-
-        elif nav_mode == "📋 Dữ liệu Chi Tiết":
-            st.subheader(f"📋 Bảng dữ liệu toàn diện của: {selected_ticker}")
-            if not sub_df.empty:
-                st.dataframe(sub_df, use_container_width=True)
-            else:
-                st.warning("Không tìm thấy dữ liệu thô.")
+                st.markdown(f"### 📈 Biểu đồ trực quan các chỉ tiêu của {selected_ticker}")
+                
+                df_ticker[value_col] = pd.to_numeric(df_ticker[value_col], errors='coerce')
+                
+                fig = px.bar(
+                    df_ticker.dropna(subset=[value_col]),
+                    x=period_col,
+                    y=value_col,
+                    color=metric_col,
+                    barmode='group',
+                    title=f"Biểu đồ chỉ số tài chính - {selected_ticker}"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning(f"Không có dữ liệu cho mã {selected_ticker}.")
