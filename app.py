@@ -1,976 +1,3 @@
-# giao_dien/man_hinh_chinh.py
-# ============================================================================
-# [v56.1-UI-REBUILD] TÍCH HỢP TOÀN DIỆN v54-DATA-PRIORITY + ĐẢO LAYOUT
-# [v57-DIVIDEND] TÍCH HỢP MODULE MÁY TÍNH CỔ TỨC
-# [v58-CSV9] TÍCH HỢP 9 FILE CSV GỐC: LCTT / KQKD / BCDKT × 3 NHÓM NGÀNH
-# [v58.1] NÂNG CẤP: đọc 9 CSV + hiển thị ĐẦY ĐỦ tickers còn thiếu trong 9 CSV
-# [v59-SAAS-DATA-EXPLORER] THÊM TAB KHÁM PHÁ CSV TỔNG HỢP + CTA KHÁCH HÀNG
-# [v60-UNIFIED-DATA] ⭐ ƯU TIÊN ĐỌC 100% TỪ vietnam_stock_database_tong_hop.csv
-#                    XÓA MỌI CẢNH BÁO THIẾU 9 FILE CSV —
-#                    9 CSV chỉ còn là nguồn backup im lặng (silent fallback).
-# ============================================================================
-import streamlit as st
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import plotly.express as px
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-import json
-import time
-import threading
-import websocket
-import requests
-import os
-import glob as _glob_v50
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
-from contextlib import contextmanager
-from decimal import Decimal, ROUND_FLOOR
-import math
-import re as _re_v51
-import io as _io
-
-# [v57-DIVIDEND] Thư viện PostgreSQL
-try:
-    import psycopg2
-    from psycopg2 import pool
-    _HAS_PSYCOPG2 = True
-except ImportError:
-    _HAS_PSYCOPG2 = False
-
-# ============================================================================
-# [v57-DIVIDEND] KHAI BÁO CẤU HÌNH CỔ TỨC
-# ============================================================================
-PAR_VALUE_DEFAULT = 10_000
-MIN_CAPITAL_VND = 1_000_000_000
-MAX_CAPITAL_VND = 100_000_000_000
-CAPITAL_STEP_VND = 1_000_000_000
-MIN_MARKET_PRICE = 15_000
-MAX_MARKET_PRICE = 150_000
-MARKET_PRICE_STEP = 5_000
-MIN_DIVIDEND_PERCENT = 5
-MAX_DIVIDEND_PERCENT = 100
-DIVIDEND_PERCENT_STEP = 5
-MIN_OWNED_SHARES = 50_000
-MAX_OWNED_SHARES = 100_000_000
-DEFAULT_PRICE_LIST = list(range(MIN_MARKET_PRICE, MAX_MARKET_PRICE + 1, MARKET_PRICE_STEP))
-DIVIDEND_RATIO_LIST = list(range(MIN_DIVIDEND_PERCENT, MAX_DIVIDEND_PERCENT + 1, DIVIDEND_PERCENT_STEP))
-
-
-@st.cache_resource(show_spinner=False)
-def _get_db_connection_pool():
-    if not _HAS_PSYCOPG2:
-        return None
-    db_host = st.secrets.get("DB_HOST", os.getenv("DB_HOST", "localhost"))
-    db_name = st.secrets.get("DB_NAME", os.getenv("DB_NAME", "fintech_group"))
-    db_user = st.secrets.get("DB_USER", os.getenv("DB_USER", "postgres"))
-    db_pass = st.secrets.get("DB_PASS", os.getenv("DB_PASS", ""))
-    db_port = st.secrets.get("DB_PORT", os.getenv("DB_PORT", "5432"))
-    try:
-        return psycopg2.pool.SimpleConnectionPool(
-            1, 10, host=db_host, database=db_name, user=db_user,
-            password=db_pass, port=db_port,
-        )
-    except Exception as e:
-        print(f"[Dividend DB] ⚠️ Lỗi kết nối PostgreSQL: {e}")
-        return None
-
-
-def _fetch_dividend_events(ticker: str, dividend_type: str):
-    pool_obj = _get_db_connection_pool()
-    if not pool_obj:
-        return None
-    conn = None
-    try:
-        conn = pool_obj.getconn()
-        with conn.cursor() as cursor:
-            query = """SELECT ticker, dividend_type, cash_per_share, stock_ratio_percent,
-                       record_date, payment_date, status, source, updated_at
-                       FROM dividend_events WHERE ticker = %s AND dividend_type = %s
-                       AND status = 'ACTIVE' ORDER BY record_date DESC LIMIT 1;"""
-            cursor.execute(query, (ticker.upper(), dividend_type.upper()))
-            result = cursor.fetchone()
-            if result:
-                columns = [desc[0] for desc in cursor.description]
-                return pd.DataFrame([result], columns=columns)
-            return None
-    except Exception:
-        return None
-    finally:
-        if conn:
-            pool_obj.putconn(conn)
-
-
-def _buyable_shares(capital_vnd: float, market_price: float) -> int:
-    if market_price <= 0 or capital_vnd < 0:
-        return 0
-    return int(Decimal(str(capital_vnd)) // Decimal(str(market_price)))
-
-
-def _cash_dividend_actual(shares: int, cash_per_share: float, tax_rate: float = 0) -> dict:
-    if shares <= 0 or cash_per_share <= 0:
-        return {"before_tax": 0, "tax": 0, "after_tax": 0}
-    before_tax = Decimal(str(shares)) * Decimal(str(cash_per_share))
-    tax = before_tax * Decimal(str(tax_rate)) / Decimal("100")
-    after_tax = before_tax - tax
-    return {"before_tax": float(before_tax), "tax": float(tax), "after_tax": float(after_tax)}
-
-
-def _cash_dividend_par(shares: int, dividend_percent: float,
-                       par_value: float = PAR_VALUE_DEFAULT, tax_rate: float = 0) -> dict:
-    if shares <= 0 or dividend_percent <= 0 or par_value <= 0:
-        return {"before_tax": 0, "tax": 0, "after_tax": 0, "cash_per_share": 0}
-    cash_per_share = Decimal(str(par_value)) * Decimal(str(dividend_percent)) / Decimal("100")
-    res = _cash_dividend_actual(shares, float(cash_per_share), tax_rate)
-    res["cash_per_share"] = float(cash_per_share)
-    return res
-
-
-def _capital_scenarios(market_price: float, cash_per_share: float, tax_rate: float = 0) -> pd.DataFrame:
-    if market_price <= 0:
-        return pd.DataFrame()
-    scenarios = []
-    for capital in range(MIN_CAPITAL_VND, MAX_CAPITAL_VND + 1, CAPITAL_STEP_VND):
-        shares = _buyable_shares(capital, market_price)
-        divs = _cash_dividend_actual(shares, cash_per_share, tax_rate)
-        scenarios.append({
-            "Vốn đầu tư (VNĐ)": capital,
-            "Giá thị trường (VNĐ)": market_price,
-            "Số cổ phiếu mua được": shares,
-            "Cổ tức mỗi CP (VNĐ)": cash_per_share,
-            "Tổng cổ tức trước thuế (VNĐ)": divs["before_tax"],
-            "Thuế TNCN (VNĐ)": divs["tax"],
-            "Tổng cổ tức sau thuế (VNĐ)": divs["after_tax"],
-        })
-    return pd.DataFrame(scenarios)
-
-
-def _stock_dividend(shares: int, ratio_percent: float) -> dict:
-    if shares <= 0 or ratio_percent <= 0:
-        return {"additional_shares": 0, "total_after": shares}
-    additional = int(Decimal(str(shares)) * Decimal(str(ratio_percent)) / Decimal("100"))
-    return {"additional_shares": additional, "total_after": shares + additional}
-
-
-def _stock_scenarios(shares: int) -> pd.DataFrame:
-    if shares <= 0:
-        return pd.DataFrame()
-    scenarios = []
-    for ratio in range(MIN_DIVIDEND_PERCENT, MAX_DIVIDEND_PERCENT + 1, DIVIDEND_PERCENT_STEP):
-        res = _stock_dividend(shares, ratio)
-        scenarios.append({
-            "Số cổ phiếu ban đầu": shares,
-            "Tỷ lệ cổ tức (%)": ratio,
-            "Số cổ phiếu nhận thêm": res["additional_shares"],
-            "Tổng số cổ phiếu sau phát hành": res["total_after"],
-        })
-    return pd.DataFrame(scenarios)
-
-
-def _format_vnd(value):
-    if value is None or pd.isna(value):
-        return "0"
-    try:
-        return f"{int(value):,}".replace(",", ".")
-    except Exception:
-        return "0"
-
-
-def _format_shares(value):
-    return _format_vnd(value)
-
-
-# ============================================================================
-# [v52-MARKET-SNAPSHOT + v56] IMPORT SNAPSHOT & v54 PRIORITY FUNCTIONS
-# ============================================================================
-try:
-    from du_lieu.doc_bctc_goc import (
-        LATEST_MARKET_SNAPSHOT, get_latest_market_snapshot, _apply_latest_market_snapshot,
-        get_financials_csv_first, get_snapshot_coverage_report, validate_snapshot,
-        get_price_freshness, get_shares_status, get_snapshot_as_of,
-        SNAPSHOT_PRICE_DATE, SNAPSHOT_BUILD_DATE, LATEST_FINANCIAL_SUPPLEMENT,
-        TICKER_ALIASES, REFERENCE_ONLY_MARKET_SNAPSHOT, _canonical_ticker,
-    )
-    _HAS_SNAPSHOT = True
-    print(f"[v56-SNAPSHOT] ✅ Imported LATEST_MARKET_SNAPSHOT ({len(LATEST_MARKET_SNAPSHOT)} mã)")
-except ImportError as _e:
-    _HAS_SNAPSHOT = False
-    LATEST_MARKET_SNAPSHOT, LATEST_FINANCIAL_SUPPLEMENT, TICKER_ALIASES, REFERENCE_ONLY_MARKET_SNAPSHOT = {}, {}, {}, {}
-    SNAPSHOT_PRICE_DATE, SNAPSHOT_BUILD_DATE = "2026-10-22", "2026-10-23"
-    print(f"[v56-SNAPSHOT] ⚠️ Không import được snapshot/v54: {_e}")
-
-    def get_latest_market_snapshot(ticker, include_reference=False):
-        return {}
-
-    def _apply_latest_market_snapshot(ticker, data, prioritize_csv_financials=True):
-        return data
-
-    def get_financials_csv_first(ticker, csv_df=None, use_supplement=True):
-        return {}
-
-    def get_snapshot_coverage_report():
-        return pd.DataFrame()
-
-    def validate_snapshot():
-        return []
-
-    def get_price_freshness(ticker):
-        return {}
-
-    def get_shares_status(ticker):
-        return {}
-
-    def get_snapshot_as_of(ticker=None):
-        return {}
-
-    def _canonical_ticker(ticker):
-        return str(ticker).strip().upper()
-
-
-# ============================================================================
-# [v47-FIX] SAFE DATAFRAME
-# ============================================================================
-def _safe_dataframe(data, **kwargs):
-    try:
-        st.dataframe(data, **kwargs)
-    except (ImportError, AttributeError, Exception):
-        try:
-            if data is None:
-                st.info("Không có dữ liệu"); return
-            if hasattr(data, "empty") and data.empty:
-                st.info("Không có dữ liệu để hiển thị"); return
-            try:
-                st.table(data); return
-            except Exception:
-                pass
-            if hasattr(data, "to_html"):
-                html = data.to_html(index=False, classes="df-table", escape=False, border=0)
-                st.markdown(html, unsafe_allow_html=True)
-            else:
-                st.write(data)
-        except Exception:
-            st.write(data)
-
-
-# ============================================================================
-# [v56-PYARROW-NUMPY-COMPAT] FALLBACK AN TOÀN CHO st.dataframe
-# ============================================================================
-_ST_DATAFRAME_ORIGINAL_V56 = st.dataframe
-
-
-def _st_dataframe_numpy_compat_v56(data=None, *args, **kwargs):
-    try:
-        return _ST_DATAFRAME_ORIGINAL_V56(data, *args, **kwargs)
-    except ImportError as _arrow_import_error:
-        _msg = str(_arrow_import_error).lower()
-        if "pyarrow" not in _msg and "numpy" not in _msg:
-            raise
-        try:
-            if data is None:
-                st.info("Không có dữ liệu"); return None
-            if isinstance(data, pd.DataFrame):
-                if data.empty:
-                    st.info("Không có dữ liệu để hiển thị"); return None
-                _html = data.to_html(index=False, classes="df-table", border=0,
-                                     escape=True, na_rep="—")
-                st.markdown("""<style>.df-table {width:100%; border-collapse:collapse; font-size:0.88rem;}
-.df-table th {text-align:left; padding:8px; border-bottom:1px solid #64748b;}
-.df-table td {padding:7px 8px; border-bottom:1px solid #334155;}
-.df-table tbody tr:hover {background-color:rgba(148,163,184,.10);}</style>""" + _html, unsafe_allow_html=True)
-                st.caption("Bảng đang dùng chế độ tương thích HTML vì PyArrow/NumPy trong môi trường chạy chưa tương thích.")
-                return None
-            st.write(data); return None
-        except Exception as _fallback_error:
-            st.error(f"Không thể hiển thị bảng do lỗi tương thích PyArrow/NumPy. Chi tiết fallback: {_fallback_error}")
-            return None
-
-
-st.dataframe = _st_dataframe_numpy_compat_v56
-
-
-# ============================================================================
-# 🔬 PROFILER
-# ============================================================================
-_SLOW_THRESHOLD = 500
-_WARN_THRESHOLD = 200
-PROFILE_ON = True
-
-
-def _prof_init():
-    if "profiler_log" not in st.session_state:
-        st.session_state["profiler_log"] = []
-    if "profiler_start" not in st.session_state:
-        st.session_state["profiler_start"] = time.perf_counter()
-
-
-@contextmanager
-def prof(name):
-    if not PROFILE_ON:
-        yield; return
-    t0 = time.perf_counter()
-    try:
-        yield
-    finally:
-        ms = (time.perf_counter() - t0) * 1000
-        if "profiler_log" not in st.session_state:
-            st.session_state["profiler_log"] = []
-        st.session_state["profiler_log"].append((name, ms))
-        flag = "🐌" if ms > _SLOW_THRESHOLD else ("⚠️" if ms > _WARN_THRESHOLD else "✅")
-        print(f"{flag} [PROF] {name}: {ms:,.0f} ms")
-
-
-def _prof_reset():
-    st.session_state["profiler_log"] = []
-    st.session_state["profiler_start"] = time.perf_counter()
-
-
-def render_profiler_panel():
-    _ensure_session_defaults_v56()
-    log = st.session_state.get("profiler_log", [])
-    start = st.session_state.get("profiler_start", time.perf_counter())
-    total = (time.perf_counter() - start) * 1000
-    with st.sidebar:
-        with st.expander("🔬 PROFILER — Tốc độ", expanded=False):
-            if not log:
-                st.info("Chưa có dữ liệu. Bấm tương tác để đo."); return
-            st.markdown(f"**⏱️ Tổng:** `{total:,.0f} ms` · **📊 Số block:** `{len(log)}`")
-            st.markdown("---")
-            sorted_log = sorted(log, key=lambda x: -x[1])
-            total_sum = sum(t for _, t in log)
-            st.markdown("**🏆 TOP 15 CHẬM NHẤT:**")
-            for name, ms in sorted_log[:15]:
-                pct = (ms / total_sum * 100) if total_sum > 0 else 0
-                if ms > _SLOW_THRESHOLD:
-                    color, icon = "#EF4444", "🐌"
-                elif ms > _WARN_THRESHOLD:
-                    color, icon = "#F59E0B", "⚠️"
-                else:
-                    color, icon = "#22C55E", "✅"
-                st.markdown(
-                    f"<div style='font-size:0.82em; padding:4px 8px; margin:2px 0; "
-                    f"background:#0F1829; border-left:3px solid {color}; border-radius:4px;'>"
-                    f"<span style='color:{color};'>{icon}</span> "
-                    f"<strong style='color:#E2E8F0;'>{name}</strong><br>"
-                    f"<span style='color:#94A3B8;'>{ms:,.0f} ms · {pct:.1f}%</span></div>",
-                    unsafe_allow_html=True)
-            st.markdown("---")
-            st.markdown(f"**📈 TỔNG: `{total_sum:,.0f} ms`**")
-            if st.button("🔄 Reset", use_container_width=True, key="prof_reset"):
-                _prof_reset(); st.rerun()
-
-
-st.set_page_config(
-    page_title="FINEX VN Terminal - Công Nghệ Định Giá Doanh Nghiệp",
-    page_icon="📈", layout="wide", initial_sidebar_state="expanded")
-_prof_init()
-
-
-# ============================================================================
-# ⭐ [v60-UNIFIED-DATA] HÀM TẢI DỮ LIỆU ƯU TIÊN TỪ CSV TỔNG HỢP
-# ============================================================================
-@st.cache_data(ttl=3600, show_spinner=False)
-def load_database():
-    """Khóa chặt các đường dẫn tiềm năng mà GitHub Actions đẩy lên."""
-    possible_paths = [
-        "data/vietnam_stock_database_tong_hop.csv",
-        "vietnam_stock_database_tong_hop.csv",
-        "../data/vietnam_stock_database_tong_hop.csv",
-        "du_lieu/vietnam_stock_database_tong_hop.csv",
-        "/app/data/vietnam_stock_database_tong_hop.csv",
-        "/app/vietnam_stock_database_tong_hop.csv",
-        "/content/data/vietnam_stock_database_tong_hop.csv",
-    ]
-    for path in possible_paths:
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            try:
-                df_load = pd.read_csv(path, low_memory=False)
-                print(f"[v60-UNIFIED] ✅ Đã nạp {len(df_load):,} dòng từ {path}")
-                return df_load
-            except Exception:
-                continue
-    print("[v60-UNIFIED] ⚠️ Chưa tìm thấy CSV tổng hợp → dùng snapshot/registry nội bộ")
-    return pd.DataFrame()
-
-
-df = load_database()
-
-
-# ============================================================================
-# [v60] MAPPING CỘT TIẾNG VIỆT AN TOÀN
-# ============================================================================
-_V60_LOADED = not df.empty
-_V60_TICKER_COL, _V60_PERIOD_COL, _V60_METRIC_COL, _V60_VALUE_COL = None, None, None, None
-
-if _V60_LOADED:
-    col_map = {str(c).strip().lower(): c for c in df.columns}
-    _V60_TICKER_COL = col_map.get("mã chứng khoán")
-    _V60_PERIOD_COL = col_map.get("năm") or col_map.get("ngày kỳ")
-    _V60_METRIC_COL = col_map.get("chỉ tiêu tiếng việt")
-    _V60_VALUE_COL = col_map.get("giá trị")
-
-    if _V60_TICKER_COL and _V60_METRIC_COL and _V60_VALUE_COL:
-        df[_V60_TICKER_COL] = df[_V60_TICKER_COL].astype(str).str.strip().str.upper()
-        V60_ALL_TICKERS = sorted([t for t in df[_V60_TICKER_COL].unique() if t and t != "NAN"])
-    else:
-        V60_ALL_TICKERS = []
-else:
-    V60_ALL_TICKERS = []
-
-print(f"[v60-REGISTRY] ✅ {len(V60_ALL_TICKERS)} tickers unique từ CSV tổng hợp")
-
-
-# ============================================================================
-# 1a. LOAD 3 CSV GỐC (giữ nguyên 100% - backup im lặng)
-# ============================================================================
-def _resolve_csv_paths():
-    _HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
-    _PARENT = os.path.dirname(_HERE)
-    _GP = os.path.dirname(_PARENT)
-    _filenames = {'cong_nghe': 'du_lieu_cong_nghe.csv',
-                  'ngan_hang_va_tai_chinh': 'du_lieu_ngan_hang_va_tai_chinh.csv',
-                  'san_xuat_va_khac': 'du_lieu_san_xuat_va_khac.csv'}
-    _bases = [_PARENT, _HERE, _GP,
-              os.path.join(_PARENT, "du_lieu"), os.path.join(_HERE, "du_lieu"),
-              os.getcwd(), os.path.join(os.getcwd(), "du_lieu"),
-              "/app", "/app/du_lieu", "/content", "/content/du_lieu",
-              "/workspace", "/workspace/du_lieu"]
-    result = {}
-    for key, fname in _filenames.items():
-        found = None
-        for base in _bases:
-            path = os.path.join(base, fname)
-            try:
-                if os.path.isfile(path) and os.path.getsize(path) > 0:
-                    found = os.path.abspath(path); break
-            except OSError:
-                continue
-        result[key] = found
-    return result
-
-
-_CSV_DB_PATHS = _resolve_csv_paths()
-_SECTOR_DEFAULT_BY_GROUP = {'cong_nghe': 'Công nghệ',
-                            'ngan_hang_va_tai_chinh': 'Ngân hàng & Tài chính',
-                            'san_xuat_va_khac': 'Sản xuất & Khác'}
-
-
-def _normalize_table_v50(df, tbl_name=None):
-    if df is None or df.empty:
-        return None
-    cols = set(df.columns)
-    if {'ticker', 'metric_name', 'period', 'value'}.issubset(cols):
-        return df[['ticker', 'metric_name', 'period', 'value']].copy()
-    ticker_aliases = ['ticker', 'ma', 'symbol', 'code', 'stock_code', 'ma_ck']
-    period_aliases = ['period', 'ky', 'quarter', 'year', 'quy', 'nam', 'ky_bao_cao']
-    metric_aliases = ['metric_name', 'metric', 'chi_tieu', 'chi_tieu_ten']
-    value_aliases = ['value', 'gia_tri', 'val']
-    ticker_col = next((c for c in ticker_aliases if c in cols), None)
-    period_col = next((c for c in period_aliases if c in cols), None)
-    metric_col = next((c for c in metric_aliases if c in cols), None)
-    value_col = next((c for c in value_aliases if c in cols), None)
-    if ticker_col and metric_col and value_col:
-        out = df.rename(columns={ticker_col: 'ticker', metric_col: 'metric_name', value_col: 'value'})
-        if period_col:
-            out = out.rename(columns={period_col: 'period'})
-        else:
-            out['period'] = '2026H1'
-        return out[['ticker', 'metric_name', 'period', 'value']]
-    if ticker_col is None and tbl_name is not None and str(tbl_name).isupper() and len(str(tbl_name)) <= 6:
-        df = df.copy(); df['ticker'] = str(tbl_name).upper(); ticker_col = 'ticker'; cols = set(df.columns)
-    if ticker_col is None:
-        return None
-    id_vars = [ticker_col]
-    if period_col:
-        id_vars.append(period_col)
-    value_vars = [c for c in df.columns if c not in id_vars and pd.api.types.is_numeric_dtype(df[c])]
-    if not value_vars:
-        return None
-    melted = df.melt(id_vars=id_vars, value_vars=value_vars, var_name='metric_name', value_name='value')
-    melted = melted.rename(columns={ticker_col: 'ticker'})
-    if period_col:
-        melted = melted.rename(columns={period_col: 'period'})
-    else:
-        melted['period'] = '2026H1'
-    return melted[['ticker', 'metric_name', 'period', 'value']]
-
-
-_PERIOD_PATTERN_V51 = _re_v51.compile(r'^(?:19|20)\d{2}(?:Q[1-4]|H[12])?$', _re_v51.IGNORECASE)
-_METRIC_COL_RAW_V51 = {'cột 1', 'cột1', 'cot 1', 'cot1', 'chỉ tiêu', 'chi tiêu', 'chỉ_tiêu', 'chi_tiêu',
-                       'unnamed: 0', 'unnamed:0', 'unnamed 0', 'unnamed_0', 'unnamed0',
-                       'metric', 'metric_name', 'chi_tieu', 'chi_tieu_ten'}
-
-
-def _is_period_column_v51(cn):
-    if cn is None:
-        return False
-    s = str(cn).strip()
-    if not s:
-        return False
-    s = s.replace(' ', '').replace('_', '').upper()
-    return bool(_PERIOD_PATTERN_V51.match(s))
-
-
-def _is_metric_column_v51(cn):
-    if cn is None:
-        return False
-    return str(cn).strip().lower() in _METRIC_COL_RAW_V51
-
-
-def _parse_vn_number_v51(value):
-    if value is None:
-        return None
-    if isinstance(value, (int, float, np.integer, np.floating)):
-        try:
-            v = float(value); return None if (np.isnan(v) or np.isinf(v)) else v
-        except Exception:
-            return None
-    s = str(value).strip()
-    if not s or s.lower() in ('na', 'n/a', 'none', 'nan', 'null', '-', '--', '—'):
-        return None
-    s = _re_v51.sub(r'[^\d,.\-]', '', s)
-    if not s or s == '-':
-        return None
-    is_neg = s.startswith('-')
-    if is_neg:
-        s = s[1:]
-    has_dot, has_comma = '.' in s, ',' in s
-    try:
-        if has_dot and has_comma:
-            ld, lc = s.rfind('.'), s.rfind(',')
-            if lc > ld:
-                norm = s[:lc].replace('.', '').replace(',', '') + '.' + s[lc+1:]
-            else:
-                norm = s[:ld].replace(',', '') + '.' + s[ld+1:]
-        elif has_comma:
-            parts = s.split(','); last = parts[-1]
-            norm = ''.join(parts[:-1]) + '.' + last if (len(parts) >= 2 and len(last) <= 2 and last.isdigit()) else s.replace(',', '')
-        elif has_dot:
-            if s.count('.') > 1:
-                norm = s.replace('.', '')
-            else:
-                parts = s.split('.'); norm = parts[0] + parts[1] if (len(parts) == 2 and len(parts[1]) == 3 and parts[1].isdigit() and parts[0].isdigit()) else s
-        else:
-            norm = s
-        v = float(norm); return -v if is_neg else v
-    except Exception:
-        return None
-
-
-def _wide_df_to_long_v51(df):
-    empty = pd.DataFrame(columns=['ticker', 'metric_name', 'period', 'value'])
-    if df is None or df.empty:
-        return empty
-    df = df.copy(); df.columns = [str(c).strip() for c in df.columns]; cols = list(df.columns)
-    ticker_col = None
-    for cand in cols:
-        if str(cand).strip().lower() in ('ticker', 'ma', 'mã', 'symbol', 'mã cp'):
-            ticker_col = cand; break
-    if ticker_col is None:
-        return empty
-    metric_cols = [c for c in cols if _is_metric_column_v51(c)]
-    if not metric_cols:
-        return empty
-    period_cols = [c for c in cols if _is_period_column_v51(c)]
-    if not period_cols:
-        return empty
-    df[ticker_col] = df[ticker_col].astype(str).str.strip().str.upper()
-    df[ticker_col] = df[ticker_col].replace({'': None, 'NAN': None, 'NONE': None, 'nan': None})
-    df[ticker_col] = df[ticker_col].ffill()
-    df = df[df[ticker_col].notna() & (df[ticker_col] != '') & (df[ticker_col] != 'NAN')].copy()
-    records = []
-    for _, row in df.iterrows():
-        ticker = str(row[ticker_col]).strip().upper()
-        if not ticker:
-            continue
-        metric_name = ''
-        for mc in metric_cols:
-            val = row.get(mc)
-            if pd.isna(val):
-                continue
-            s = str(val).strip()
-            if not s or s.lower() in ('na', 'n/a', 'none', 'nan', '-', '--', '—'):
-                continue
-            metric_name = s; break
-        if not metric_name:
-            continue
-        for pc in period_cols:
-            val = row.get(pc)
-            if pd.isna(val):
-                continue
-            if isinstance(val, str) and not val.strip():
-                continue
-            parsed = _parse_vn_number_v51(val)
-            if parsed is None:
-                continue
-            records.append({'ticker': ticker, 'metric_name': metric_name.lower().strip(),
-                            'period': str(pc).strip(), 'value': float(parsed)})
-    if not records:
-        return empty
-    out = pd.DataFrame(records)
-    out = out.drop_duplicates(subset=['ticker', 'metric_name', 'period'], keep='last')
-    return out.reset_index(drop=True)
-
-
-def _read_csv_multiencoding_v50(path):
-    if not path or not os.path.exists(path):
-        return pd.DataFrame()
-    try:
-        with open(path, 'rb') as f:
-            raw = f.read()
-    except Exception:
-        return pd.DataFrame()
-    if not raw:
-        return pd.DataFrame()
-    if raw.startswith(b'\xef\xbb\xbf'):
-        try:
-            return pd.read_csv(_io.StringIO(raw.decode('utf-8-sig')))
-        except Exception:
-            pass
-    for enc in ['utf-8', 'utf-8-sig', 'cp1258', 'cp1252', 'latin-1', 'iso-8859-1', 'windows-1252']:
-        try:
-            return pd.read_csv(_io.StringIO(raw.decode(enc)))
-        except (UnicodeDecodeError, LookupError):
-            continue
-        except Exception:
-            continue
-    try:
-        return pd.read_csv(_io.StringIO(raw.decode('utf-8', errors='replace')))
-    except Exception:
-        return pd.DataFrame()
-
-
-def _load_csv_db_to_df_v50(path):
-    empty = pd.DataFrame(columns=['ticker', 'metric_name', 'period', 'value'])
-    if not path or not os.path.exists(path):
-        return empty
-    with open(path, 'rb') as _fh:
-        _head = _fh.read(16)
-    if _head.startswith(b'SQLite format 3'):
-        return empty
-    try:
-        df = _read_csv_multiencoding_v50(path)
-    except Exception:
-        return empty
-    if df is None or df.empty:
-        return empty
-    original_cols = [str(c).strip() for c in df.columns]
-    lower_cols = {str(c).strip().lower() for c in original_cols}
-    has_long_cols = {'ticker', 'metric_name', 'period', 'value'}.issubset(lower_cols)
-    has_ticker = 'ticker' in lower_cols
-    has_period = any(_is_period_column_v51(c) for c in original_cols)
-    has_metric = any(_is_metric_column_v51(c) for c in original_cols)
-    if not has_long_cols and has_ticker and has_period and has_metric:
-        try:
-            norm = _wide_df_to_long_v51(df)
-        except Exception:
-            norm = empty
-        if not norm.empty:
-            norm['ticker'] = norm['ticker'].astype(str).str.strip().str.upper()
-            norm['metric_name'] = norm['metric_name'].astype(str).str.strip().str.lower()
-            norm['period'] = norm['period'].astype(str).str.strip()
-            norm['value'] = pd.to_numeric(norm['value'], errors='coerce')
-            norm = norm.dropna(subset=['value'])
-            norm = norm.drop_duplicates(subset=['ticker', 'metric_name', 'period'], keep='last')
-            return norm.reset_index(drop=True)
-    df.columns = [str(c).strip().lower() for c in df.columns]
-    norm = _normalize_table_v50(df, tbl_name=None)
-    if norm is None or norm.empty:
-        return empty
-    norm = norm.dropna(subset=['ticker', 'metric_name'])
-    norm['ticker'] = norm['ticker'].astype(str).str.strip().str.upper()
-    norm['metric_name'] = norm['metric_name'].astype(str).str.strip().str.lower()
-    norm['period'] = norm['period'].astype(str).str.strip()
-    norm['value'] = pd.to_numeric(norm['value'], errors='coerce')
-    norm = norm.dropna(subset=['value'])
-    norm = norm.drop_duplicates(subset=['ticker', 'metric_name', 'period'], keep='last')
-    return norm.reset_index(drop=True)
-
-
-_LONG_PERIOD_PRIORITY_V48 = ("2026H1", "2026", "2026Q1", "2025H2", "2025H1", "2025",
-                             "2024H2", "2024H1", "2024", "2023")
-
-_LONG_METRIC_ALIASES_V48 = {
-    "price": ("gia_thi_truong", "gia_co_phieu_hien_tai", "gia_co_phieu", "gia_hien_tai", "cp_hientai", "close"),
-    "shares": ("so_cp_luu_hanh", "so_co_phieu", "so_cp_hien_tai", "so_co_phieu_hien_tai",
-               "so_co_phieu_lich_su", "cp_hientai", "shares"),
-    "total_assets": ("tong_tai_san", "tong_tai_san_270", "tong_tai_san_co", "total_assets"),
-    "equity": ("von_chu_so_huu", "vcsh_400", "von_csh", "equity"),
-    "profit": ("lnst_cong_ty_me", "loi_nhuan_sau_thue", "loi_nhuan_sau_thue_60",
-               "lnst_cot_loi", "profit", "loi_nhuan_csh", "lnst_me", "loi_nhuan_csh_me"),
-    "profit_before_tax": ("loi_nhuan_truoc_thue", "loi_nhuan_truoc_thue_50", "profit_before_tax", "lntt"),
-    "revenue": ("doanh_thu_thuan", "doanh_thu_thuan_10", "thu_nhap_lai_thuan", "revenue", "toi", "nii"),
-    "market_cap": ("von_hoa_ty", "von_hoa_hien_tai_ty", "von_hoa_hien_tai", "market_cap", "von_hoa"),
-    "eps": ("eps_cong_ty_me", "eps_cty_me", "eps_tinh_toan", "eps_bao_cao", "eps", "eps_ttm", "eps_vnd"),
-    "bvps": ("bvps_huu_tinh", "bvps_huu_tinh_h1_2026", "bvps_huu_tinh_q1_2026",
-             "bvps_huu_hinh", "bvps", "bvps_vnd"),
-    "pe": ("pe", "pe_ttm", "p_e"), "pb": ("pb", "p_b"),
-    "roe": ("roe", "roe_pct", "roe_2025"), "roa": ("roa", "roa_pct", "roa_2025"),
-    "dividend": ("co_tuc_cp", "co_tuc", "co_tuc_tien_mat", "dividend_per_share", "dps", "div_per_share"),
-    "growth": ("tang_truong_lnst", "tang_truong_loi_nhuan", "growth", "growth_lnst_pct"),
-    "casa": ("casa", "casa_pct", "ty_le_casa", "casa_30062026"),
-}
-
-
-def _long_period_rank_v48(period):
-    p = str(period).strip().upper().replace(" ", "")
-    try:
-        return _LONG_PERIOD_PRIORITY_V48.index(p)
-    except ValueError:
-        return len(_LONG_PERIOD_PRIORITY_V48) + 1
-
-
-def _long_get_value_v48(sub, metric_aliases, periods=None):
-    if sub is None or sub.empty:
-        return None, None, None
-    aliases = {str(x).strip().lower() for x in metric_aliases}
-    tmp = sub[sub["_metric_norm"].isin(aliases)].copy()
-    if tmp.empty:
-        return None, None, None
-    if periods is not None:
-        wanted = {str(x).strip().upper() for x in periods}
-        tmp = tmp[tmp["_period_norm"].isin(wanted)]
-    if tmp.empty:
-        return None, None, None
-    tmp["_period_rank"] = tmp["_period_norm"].map(_long_period_rank_v48)
-    alias_rank = {str(name).strip().lower(): i for i, name in enumerate(metric_aliases)}
-    tmp["_metric_rank"] = tmp["_metric_norm"].map(alias_rank).fillna(len(alias_rank))
-    tmp = tmp.sort_values(["_period_rank", "_metric_rank"], kind="stable")
-    row = tmp.iloc[0]; val = row["value"]
-    try:
-        val_f = float(val) if val is not None else None
-    except (TypeError, ValueError):
-        val_f = _parse_vn_number_v51(val)
-    return val_f, str(row["metric_name"]), str(row["period"])
-
-
-def _detect_global_scale_v50(long_df, quiet=False):
-    if long_df is None or long_df.empty:
-        return 1.0
-    mask = long_df['metric_name'].astype(str).str.contains(r'tong_tai_san|total_assets',
-                                                           na=False, regex=True)
-    if not mask.any():
-        return 1.0
-    vals = pd.to_numeric(long_df.loc[mask, 'value'], errors='coerce').dropna()
-    vals = vals[vals > 0]
-    if len(vals) == 0:
-        return 1.0
-    max_val = float(vals.max())
-    if max_val >= 1e11:
-        return 1e-9
-    elif max_val >= 1e8:
-        return 1e-3
-    return 1.0
-
-
-def _build_fin_data_from_long_v50(long_df):
-    out = {}
-    if long_df is None or long_df.empty:
-        return out
-    for ticker in long_df['ticker'].dropna().unique():
-        t = _canonical_ticker(ticker)
-        if not t:
-            continue
-        sub = long_df[long_df['ticker'] == t].copy()
-        if sub.empty:
-            continue
-        ticker_scale = _detect_global_scale_v50(sub, quiet=True)
-        sub["_metric_norm"] = sub["metric_name"].astype(str).str.strip().str.lower()
-        sub["_period_norm"] = sub["period"].astype(str).str.strip().str.upper().str.replace(" ", "", regex=False)
-        field_periods = {
-            "price": ("2026H1", "2026", "2026Q1"),
-            "shares": ("2026H1", "2026", "2026Q1", "2025"),
-            "total_assets": ("2026H1", "2026Q1", "2026", "2025"),
-            "equity": ("2026H1", "2026Q1", "2026", "2025"),
-            "profit": ("2026H1", "2026Q1", "2026"),
-            "profit_before_tax": ("2026H1", "2026Q1", "2026"),
-            "revenue": ("2026H1", "2026Q1", "2026"),
-            "market_cap": ("2026H1", "2026", "2026Q1"),
-            "eps": ("2026H1", "2026", "2026Q1", "2025"),
-            "bvps": ("2026H1", "2026", "2026Q1", "2025"),
-            "pe": ("2026H1", "2026", "2026Q1", "2025"),
-            "pb": ("2026H1", "2026", "2026Q1", "2025"),
-            "roe": ("2026H1", "2026", "2026Q1", "2025"),
-            "roa": ("2026H1", "2026", "2026Q1", "2025"),
-            "dividend": ("2026H1", "2026", "2025", "2024"),
-            "growth": ("2025",),
-            "casa": ("2026H1", "2026", "2025"),
-        }
-        values = {}
-        for key, aliases in _LONG_METRIC_ALIASES_V48.items():
-            val, metric, period = _long_get_value_v48(sub, aliases, field_periods.get(key))
-            if val is not None:
-                values[key] = val
-
-        def money_ty(key):
-            v = values.get(key); return 0.0 if v is None else v * ticker_scale
-
-        d = {
-            "price": values.get("price", 0.0) if values.get("price", 0) > 0 else 0.0,
-            "eps_ttm": values.get("eps", 0.0), "pe_ttm": values.get("pe", 0.0),
-            "pb": values.get("pb", 0.0), "bvps": values.get("bvps", 0.0),
-            "roe_2025": values.get("roe", 0.0), "roa_2025": values.get("roa", 0.0),
-            "casa_30062026": values.get("casa", 0.0),
-            "total_assets_30062026": money_ty("total_assets"),
-            "market_cap": values.get("market_cap", 0.0),
-            "shares_outstanding": values.get("shares", 0.0),
-            "equity": money_ty("equity"),
-            "toi_6t2026": money_ty("revenue"),
-            "lntt_6t2026": money_ty("profit_before_tax"),
-            "lnst_6t2026": money_ty("profit"),
-            "lnst_2024": 0.0, "lnst_2025": 0.0,
-            "growth_2025_2024": values.get("growth", 0.0),
-            "div_per_share": values.get("dividend", 0.0), "div_yield": 0.0,
-        }
-        for year in ("2024", "2025"):
-            v, _, _ = _long_get_value_v48(sub, _LONG_METRIC_ALIASES_V48["profit"], (year,))
-            if v is not None:
-                d[f"lnst_{year}"] = v * ticker_scale
-        if d["div_per_share"] > 0 and d["price"] > 0:
-            d["div_yield"] = round((d["div_per_share"] / d["price"]) * 100, 2)
-        if d["bvps"] <= 0 and d["equity"] > 0 and d["shares_outstanding"] > 0:
-            calc = (d["equity"] * 1e9) / d["shares_outstanding"]
-            if 1000 <= calc <= 500_000:
-                d["bvps"] = round(calc, 0)
-        if d["eps_ttm"] <= 0 and d["lnst_2025"] > 0 and d["shares_outstanding"] > 0:
-            calc = (d["lnst_2025"] * 1e9) / d["shares_outstanding"]
-            if 100 <= calc <= 1_000_000:
-                d["eps_ttm"] = round(calc, 0)
-        if d["pe_ttm"] <= 0 and d["price"] > 0 and d["eps_ttm"] > 0:
-            calc = d["price"] / d["eps_ttm"]
-            if 0.5 <= calc <= 1000:
-                d["pe_ttm"] = round(calc, 2)
-        if d["pb"] <= 0 and d["price"] > 0 and d["bvps"] > 0:
-            calc = d["price"] / d["bvps"]
-            if 0.1 <= calc <= 100:
-                d["pb"] = round(calc, 2)
-        out[t] = d
-    return out
-
-
-_CAP_SHARES_TOL_V56 = 0.01
-
-
-def _apply_snapshot_to_fin_data(fin_data):
-    if not isinstance(fin_data, dict):
-        return fin_data
-    if not _HAS_SNAPSHOT or not LATEST_MARKET_SNAPSHOT:
-        return fin_data
-    n_merged, n_added = 0, 0
-    for t_raw, snap in LATEST_MARKET_SNAPSHOT.items():
-        t = _canonical_ticker(t_raw)
-        if t not in fin_data:
-            fin_data[t] = {}; n_added += 1
-        d = fin_data[t]
-        if snap.get('price_vnd'):
-            d['price'] = float(snap['price_vnd'])
-        if snap.get('market_cap_ty'):
-            d['market_cap'] = float(snap['market_cap_ty'])
-        if snap.get('shares'):
-            d['shares_outstanding'] = float(snap['shares'])
-        if snap.get('dividend_yield_pct') is not None:
-            d['div_yield'] = float(snap['dividend_yield_pct'])
-        if d.get('price', 0) > 0 and float(snap.get('dividend_yield_pct', 0)) > 0:
-            d['div_per_share'] = round(snap['dividend_yield_pct'] / 100.0 * d['price'], 0)
-        if snap.get('casa_pct') is not None:
-            d['casa_30062026'] = float(snap['casa_pct'])
-        d['price_as_of'] = snap.get('price_as_of', '')
-        d['price_stale_days'] = snap.get('price_stale_days', 999)
-        d['price_is_stale'] = snap.get('price_is_stale', False)
-        d['price_is_missing'] = snap.get('price_is_missing', False)
-        d['shares_is_official'] = snap.get('shares_is_official', False)
-        d['shares_is_estimated'] = snap.get('shares_is_estimated', True)
-        d['shares_is_provisional'] = snap.get('shares_is_provisional', False)
-        d['shares_basis'] = snap.get('shares_basis', 'unknown')
-        d['shares_as_of'] = snap.get('shares_as_of', '')
-        d['snapshot_as_of'] = snap.get('snapshot_as_of', SNAPSHOT_PRICE_DATE)
-        p, c, s = float(d.get('price', 0) or 0), float(d.get('market_cap', 0) or 0), float(d.get('shares_outstanding', 0) or 0)
-        if p > 0 and c > 0 and s > 0:
-            implied_cap = p * s / 1e9
-            diff = abs(implied_cap - c) / c
-            if diff > _CAP_SHARES_TOL_V56:
-                if d.get('shares_is_official'):
-                    d['_market_cap_reported_ty'] = c
-                    d['market_cap'] = round(implied_cap, 3)
-                    d['_market_cap_reconciled'] = True
-                else:
-                    d['_shares_reported'] = s
-                    d['shares_outstanding'] = round(c * 1e9 / p, 0)
-                    d['_shares_reconciled'] = True
-                    d['shares_basis'] = 'estimated_market_cap_div_price'
-
-        def _has_valid(key):
-            v = d.get(key, 0)
-            try:
-                return isinstance(v, (int, float, np.number)) and np.isfinite(float(v)) and float(v) != 0
-            except Exception:
-                return False
-
-        if snap.get('total_assets_ty') and not _has_valid('total_assets_30062026'):
-            d['total_assets_30062026'] = float(snap['total_assets_ty'])
-        if snap.get('lntt_6m_ty') and not _has_valid('lntt_6t2026'):
-            d['lntt_6t2026'] = float(snap['lntt_6m_ty'])
-        if snap.get('lnst_2024_ty') and not _has_valid('lnst_2024'):
-            d['lnst_2024'] = float(snap['lnst_2024_ty'])
-        if snap.get('lnst_2025_ty') and not _has_valid('lnst_2025'):
-            d['lnst_2025'] = float(snap['lnst_2025_ty'])
-        supp = LATEST_FINANCIAL_SUPPLEMENT.get(t, {})
-        if supp:
-            if not _has_valid('lnst_2024') and supp.get('lnst_2024_ty'):
-                d['lnst_2024'] = float(supp['lnst_2024_ty'])
-            if not _has_valid('lnst_2025') and supp.get('lnst_2025_ty'):
-                d['lnst_2025'] = float(supp['lnst_2025_ty'])
-            if not _has_valid('lnst_6t2026') and supp.get('lnst_6t2026_ty'):
-                d['lnst_6t2026'] = float(supp['lnst_6t2026_ty'])
-            if not _has_valid('lntt_6t2026') and supp.get('lntt_9t2026_ty'):
-                d['lntt_6t2026'] = float(supp['lntt_9t2026_ty'])
-            if not _has_valid('eps_ttm') and supp.get('eps_ttm_vnd'):
-                d['eps_ttm'] = float(supp['eps_ttm_vnd']); d['_eps_source'] = 'SUPPLEMENT_TTM'
-            if not _has_valid('pe_ttm') and supp.get('pe'):
-                d['pe_ttm'] = float(supp['pe']); d['_pe_source'] = 'SUPPLEMENT_TTM'
-            d['financial_as_of'] = supp.get('financial_as_of', SNAPSHOT_BUILD_DATE)
-            d['financial_note'] = supp.get('financial_note', '')
-        if not _has_valid('eps_ttm') and d.get('lnst_2025', 0) > 0 and d.get('shares_outstanding', 0) > 0:
-            d['eps_ttm'] = round(d['lnst_2025'] * 1e9 / d['shares_outstanding'], 0)
-        if not _has_valid('pe_ttm') and d.get('market_cap', 0) > 0 and d.get('lnst_2025', 0) > 0:
-            d['pe_ttm'] = round(d['market_cap'] / d['lnst_2025'], 2)
-        elif not _has_valid('pe_ttm') and d.get('price', 0) > 0 and d.get('eps_ttm', 0) > 0:
-            d['pe_ttm'] = round(d['price'] / d['eps_ttm'], 2)
-        if not _has_valid('bvps') and d.get('equity', 0) > 0 and d.get('shares_outstanding', 0) > 0:
-            d['bvps'] = round(d['equity'] * 1e9 / d['shares_outstanding'], 0)
-        if not _has_valid('pb') and d.get('price', 0) > 0 and d.get('bvps', 0) > 0:
-            d['pb'] = round(d['price'] / d['bvps'], 2)
-        if snap.get('note'):
-            d['_snapshot_note'] = snap['note']
-        d['_snapshot_source'] = True
-        n_merged += 1
-    return fin_data
-
-
-def _load_all_csv_v50():
-    bank_df = _load_csv_db_to_df_v50(_CSV_DB_PATHS.get('ngan_hang_va_tai_chinh', ''))
-    corp_frames = []
-    for key in ['cong_nghe', 'san_xuat_va_khac']:
-        d = _load_csv_db_to_df_v50(_CSV_DB_PATHS.get(key, ''))
-        if not d.empty:
-            corp_frames.append(d)
-    if corp_frames:
-        corp_df = pd.concat(corp_frames, ignore_index=True).drop_duplicates(
-            subset=['ticker', 'metric_name', 'period'], keep='last').reset_index(drop=True)
-    else:
-        corp_df = pd.DataFrame(columns=['ticker', 'metric_name', 'period', 'value'])
-    all_frames = [d for d in [bank_df, corp_df] if not d.empty]
-    long_df = pd.concat(all_frames, ignore_index=True) if all_frames else pd.DataFrame(
-        columns=['ticker', 'metric_name', 'period', 'value'])
-    bank_tickers = sorted(bank_df['ticker'].dropna().unique().tolist()) if not bank_df.empty else []
-    corp_tickers = sorted(corp_df['ticker'].dropna().unique().tolist()) if not corp_df.empty else []
-    return long_df, bank_df, corp_df, bank_tickers, corp_tickers
-
-
-with prof("⏱️ [v56-CSV] Load 3 file CSV"):
-    _LONG_DF_CSV, _BANK_DF_CSV, _CORP_DF_CSV, _BANK_TICKERS_CSV, _CORP_TICKERS_CSV = _load_all_csv_v50()
-print(f"[v56-CSV] ✅ Loaded: {len(_BANK_TICKERS_CSV)} banks + {len(_CORP_TICKERS_CSV)} corps")
-
 _LONG_DF_SQLITE, _BANK_DF_SQLITE, _CORP_DF_SQLITE = _LONG_DF_CSV, _BANK_DF_CSV, _CORP_DF_CSV
 _BANK_TICKERS_SQLITE, _CORP_TICKERS_SQLITE = _BANK_TICKERS_CSV, _CORP_TICKERS_CSV
 
@@ -998,7 +25,6 @@ if _HAS_SNAPSHOT:
         if _tk_canon not in _ALL_TICKERS_41:
             _ALL_TICKERS_41.append(_tk_canon)
 
-# ⭐ [v60] Merge tickers từ CSV tổng hợp vào ALL_TICKERS_41
 for _t in V60_ALL_TICKERS:
     if _t and _t not in _ALL_TICKERS_41:
         _ALL_TICKERS_41.append(_t)
@@ -1011,7 +37,6 @@ _CANDIDATE_CSV_PATHS = [
     "/content/du_lieu/vn30_41_fin_long.csv", "/content/vn30_41_fin_long.csv",
     "/app/du_lieu/vn30_41_fin_long.csv", "/app/vn30_41_fin_long.csv",
 ]
-
 
 def _find_csv_file_v47():
     for p in _CANDIDATE_CSV_PATHS:
@@ -1029,7 +54,6 @@ def _find_csv_file_v47():
         except OSError:
             continue
     return None
-
 
 def _create_template_csv_v47(path="du_lieu/vn30_41_fin_long.csv"):
     try:
@@ -1062,7 +86,6 @@ def _create_template_csv_v47(path="du_lieu/vn30_41_fin_long.csv"):
     except OSError:
         pass
     return path
-
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def _load_and_pivot_vn30(csv_path):
@@ -1116,7 +139,6 @@ def _load_and_pivot_vn30(csv_path):
     wide.columns.name = None
     return wide
 
-
 if _IS_USING_CSV and not _LONG_DF_CSV.empty:
     _src = _LONG_DF_CSV.copy()
     _src["_r"] = _src["period"].astype(str).str.upper().str.strip().map(
@@ -1141,10 +163,8 @@ BANK_TICKERS_41 = _BANK_TICKERS_41
 CORP_TICKERS_41 = _CORP_TICKERS_41
 ALL_TICKERS_41 = _ALL_TICKERS_41
 
-
 def is_non_bank_ticker(ticker):
     return str(ticker).strip().upper() in CORP_TICKERS_41
-
 
 _SECTOR_MAP_41 = {}
 if _IS_USING_CSV:
@@ -1176,7 +196,6 @@ _DEFAULTS_V56 = {
     "show_partner_dialog": False, "selected_partner": None,
 }
 
-
 def _ensure_session_defaults_v56():
     if "profiler_log" not in st.session_state:
         st.session_state["profiler_log"] = []
@@ -1185,7 +204,6 @@ def _ensure_session_defaults_v56():
     for _k, _v in _DEFAULTS_V56.items():
         if _k not in st.session_state:
             st.session_state[_k] = _v
-
 
 _ensure_session_defaults_v56()
 
@@ -1221,7 +239,6 @@ PARTNERS = {
 
 _MAX_REASONABLE_TY = 10_000_000
 
-
 def _sanity_ty(v, metric_key=None):
     try:
         v = float(v)
@@ -1239,7 +256,6 @@ def _sanity_ty(v, metric_key=None):
         if abs(alt) <= max_ok:
             return alt
     return v
-
 
 def to_ty_dong(value, already_in_ty=False):
     if value is None:
@@ -1263,7 +279,6 @@ def to_ty_dong(value, already_in_ty=False):
         v = v / 1e3
     return _sanity_ty(v)
 
-
 def format_ty_dong(value, unit="auto", decimals=0, suffix=True, already_in_ty=False):
     v = to_ty_dong(value, already_in_ty=already_in_ty)
     if v == 0:
@@ -1284,7 +299,6 @@ def format_ty_dong(value, unit="auto", decimals=0, suffix=True, already_in_ty=Fa
         return f"{sign}{av/1000:,.2f} nghìn tỷ" if suffix else f"{sign}{av/1000:,.2f}"
     return f"{sign}{av:,.0f} tỷ" if suffix else f"{sign}{av:,.0f}"
 
-
 def format_ty_dong_full(value, already_in_ty=False):
     v = to_ty_dong(value, already_in_ty=already_in_ty)
     if v == 0:
@@ -1295,7 +309,6 @@ def format_ty_dong_full(value, already_in_ty=False):
         return f"{v/1000:,.2f} nghìn tỷ ({v:,.0f} tỷ)"
     return f"{v:,.0f} tỷ"
 
-
 def format_ty_dong_help(value, already_in_ty=False):
     v = to_ty_dong(value, already_in_ty=already_in_ty)
     if v == 0:
@@ -1305,7 +318,6 @@ def format_ty_dong_help(value, already_in_ty=False):
     if abs(v) >= 1000:
         return f"{v:,.0f} tỷ đồng  ({v/1000:,.2f} nghìn tỷ)"
     return f"{v:,.0f} tỷ đồng"
-
 
 BANK_ID, ACCOUNT_NO, ACCOUNT_NAME = "VCB", "9327625853", "TRAN ANH QUAN"
 DNSE_API_SECRET = "LGGvscgOF_jfqYF6I_0Ugs3rN-lAUFYMJLgT2ZAb-Q3dgckhBWqNf6ud5NVzYibKggia-WcqLvdQp7kwmitqkQ"
@@ -1382,7 +394,6 @@ with prof("⏱️ [v56-CSV] Build FINANCIAL_DATA + merge snapshot + supplement")
 
         FINANCIAL_DATA_2026 = _build_fin_data_from_wide(_WIDE_DF_VN30)
 
-    # ⭐ [v60] Merge CSV tổng hợp vào FINANCIAL_DATA_2026
     if _V60_LOADED and _V60_TICKER_COL and _V60_METRIC_COL and _V60_VALUE_COL:
         _v60_fin_data = _build_fin_data_from_long_v50(df)
         for _t, _d in _v60_fin_data.items():
@@ -1430,7 +441,6 @@ VNINDEX_MILESTONES = [
     ("2026-10-22", 1774.15, "Đỉnh lịch sử mới (22/10/2026) — VN-Index 1,774.15"),
 ]
 
-
 @st.cache_data(ttl=86400, show_spinner=False)
 def generate_vnindex_history():
     rows = []
@@ -1467,7 +477,6 @@ def generate_vnindex_history():
     df.loc[df.index[-1], 'l'] = 1758.40
     return df
 
-
 def get_dnse_stock_data(symbol: str, days_back: int = 365) -> pd.DataFrame:
     symbol_mapped = symbol.upper().strip()
     headers = {"X-API-KEY": DNSE_API_SECRET, "User-Agent": "Mozilla/5.0", "Accept": "application/json"}
@@ -1492,19 +501,16 @@ def get_dnse_stock_data(symbol: str, days_back: int = 365) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
 
-
 @st.cache_data(ttl=300, show_spinner=False)
 def _fetch_vnindex_cached():
     with prof("⏱️ [VNINDEX] Sinh history"):
         hist_df = generate_vnindex_history()
     return hist_df, True, int(hist_df['v'].sum())
 
-
 def get_vnindex_full_history():
     df, is_fb, vol = _fetch_vnindex_cached()
     st.session_state["vn30_volume"] = vol
     return df, is_fb
-
 
 def on_message(ws, message):
     try:
@@ -1541,25 +547,20 @@ def on_message(ws, message):
     except Exception as e:
         print(f"WS error: {e}")
 
-
 def on_error(ws, error):
     pass
-
 
 def on_close(ws, close_status_code, close_msg):
     st.session_state["vn30_ws_running"] = False
 
-
 def on_open(ws):
     st.session_state["vn30_ws_running"] = True
-
 
 def run_websocket(symbol):
     ws_url = f"{DNSE_WS_BASE}?token={DNSE_API_SECRET}&symbol={symbol}"
     ws = websocket.WebSocketApp(ws_url, on_open=on_open, on_message=on_message,
                                 on_error=on_error, on_close=on_close)
     ws.run_forever()
-
 
 def _render_vnindex_chart(df, current_price, high, low, last_update):
     col1, col2, col3, col4 = st.columns(4)
@@ -1680,7 +681,6 @@ def _render_vnindex_chart(df, current_price, high, low, last_update):
         st.caption(f"⏱ Cập nhật lúc: {last_update.strftime('%H:%M:%S %d/%m/%Y')} · "
                    f"Nguồn: VN-Index 26 năm (2000 – nay) · Đơn vị: điểm")
 
-
 def render_dynamic_chart():
     with prof("⏱️ [CHART] Header"):
         st.markdown("### 📈 VN-INDEX – 26 NĂM LỊCH SỬ (2000 – NAY)")
@@ -1709,7 +709,6 @@ def render_dynamic_chart():
         st.info("Đang tải dữ liệu..."); return
     _render_vnindex_chart(_df, 1774.15, 1774.15, float(_df['l'].min()),
                           st.session_state.get("vn30_last_update"))
-
 
 def render_snapshot_sidebar_card(ticker):
     if not _HAS_SNAPSHOT:
@@ -1762,7 +761,6 @@ padding: 10px 12px; margin-top: 8px;'>
 <div style='display:flex; justify-content:space-between; color:#CBD5E1; font-size:0.85em; margin:3px 0;'>
 <span>Div yield:</span><strong style='color:#22C55E; font-variant-numeric:tabular-nums;'>{div_y:.2f}%</strong></div>
 {casa_row}{note_html}</div>""", unsafe_allow_html=True)
-
 
 def render_market_snapshot_panel(ticker):
     if not _HAS_SNAPSHOT:
@@ -1826,9 +824,7 @@ padding: 14px 18px; margin: 10px 0; box-shadow: 0 4px 16px rgba(34,197,94,0.15);
         st.info(f"📝 **Ghi chú:** {note}")
     if financial_note:
         st.warning(f"📊 **Ghi chú tài chính (supplement {financial_as_of}):** {financial_note}")
-
-
-def render_accuracy_section():
+        def render_accuracy_section():
     if 'show_accuracy' not in st.session_state:
         st.session_state["show_accuracy"] = False
     col_btn, _ = st.columns([1, 3])
@@ -1903,7 +899,6 @@ def render_accuracy_section():
 <div class="progress-bar-fill" style="width: {item['weight']}%; background: {item['color']};"></div>
 </div></div>""", unsafe_allow_html=True)
         st.caption("💡 *Trọng số được tối ưu dựa trên hiệu suất backtest và độ tin cậy của từng mô hình.*")
-
 
 def render_valuation_slider(current_price, eps, bvps):
     st.markdown("---")
@@ -2008,7 +1003,6 @@ def render_valuation_slider(current_price, eps, bvps):
                "Điều chỉnh các thanh trượt để xem kịch bản khác nhau. "
                "Đây chỉ là công cụ tham khảo, không phải khuyến nghị đầu tư.*")
 
-
 def render_document_section():
     with st.expander("📖 Mở tài liệu tham khảo: Phân Tích Chứng Khoán (Security Analysis)", expanded=False):
         st.markdown("""**Về định giá doanh nghiệp:**
@@ -2033,14 +1027,12 @@ trong một giao dịch mua cổ phiếu phổ thông mang tính đầu tư."*
 > *"Chắc chắn có những suy đoán ủng hộ việc mua dưới giá trị tài sản nhiều và chống lại
 việc mua với mức phí bảo hiểm cao hơn."*""")
 
-
 def _safe_get_historical_crises():
     try:
         from lich_su.backtest_chien_luoc import HISTORICAL_CRISES
         return HISTORICAL_CRISES
     except ImportError:
         return {}
-
 
 def render_crisis_section(crisis_key):
     HISTORICAL_CRISES = _safe_get_historical_crises()
@@ -2100,7 +1092,6 @@ def render_crisis_section(crisis_key):
     if stress_params:
         st.markdown("### 🧪 Tham số Stress Test áp dụng"); st.json(stress_params)
 
-
 def _pick_latest_row(df, ticker_filter=None):
     if df is None or df.empty:
         return None
@@ -2120,7 +1111,6 @@ def _pick_latest_row(df, ticker_filter=None):
         return d.iloc[-1]
     return d.iloc[-1]
 
-
 def _extract_metadata_from_any_row(df, col_names, validator=None):
     if df is None or df.empty:
         return 0.0
@@ -2137,7 +1127,6 @@ def _extract_metadata_from_any_row(df, col_names, validator=None):
             if vals:
                 return vals[-1]
     return 0.0
-
 
 def render_real_time_data(ticker):
     try:
@@ -2172,7 +1161,6 @@ def render_real_time_data(ticker):
     col12.metric("Vốn chủ sở hữu", format_ty_dong(data.get('equity', 0)) if data.get('equity') else "N/A")
     st.caption(f"*Dữ liệu được lấy từ {data.get('source', 'API')} "
                f"vào lúc {pd.Timestamp.now().strftime('%H:%M:%S %d/%m/%Y')}.*")
-
 
 @st.cache_data(ttl=600)
 def get_subscription_packages():
@@ -2215,7 +1203,6 @@ def get_subscription_packages():
                       "Quyền truy cập API dữ liệu chuẩn hóa của Terminal"],
          "button_text": "Đăng ký Gói Enterprise (499k)"},
     ]
-
 
 @st.dialog("🚀 NÂNG CẤP TÀI KHOẢN FINEX VN", width="large")
 def vip_upgrade_dialog():
@@ -2284,7 +1271,6 @@ font-size: 1.2em;">{ACCOUNT_NO}</span><br>
                          key="btn_confirm_pay"):
                 st.success("Đã ghi nhận thanh toán! Hệ thống đang xác thực giao dịch..."); st.balloons()
 
-
 @st.dialog("🔍 THÔNG TIN ĐỐI TÁC", width="large")
 def partner_detail_dialog():
     partner_id = st.session_state.get("selected_partner")
@@ -2328,7 +1314,6 @@ alert('Đã sao chép mã giới thiệu!');">📋 Copy</button></div>""", unsaf
     if st.button("Đóng", use_container_width=True):
         st.session_state.show_partner_dialog = False; st.rerun()
 
-
 def compute_hybrid_valuation(price, eps, bvps, roe, roa):
     graham = (22.5 * eps * bvps) ** 0.5 if (eps > 0 and bvps > 0) else 0
     dcf = eps * 1.08 / 0.04 if eps > 0 else 0
@@ -2355,7 +1340,6 @@ def compute_hybrid_valuation(price, eps, bvps, roe, roa):
     return {"hybrid": round(hybrid, 0), "graham": round(graham, 0), "dcf": round(dcf, 0),
             "pe_band": round(pe_band, 0), "pb_band": round(pb_band, 0),
             "weights": w, "mos": round(mos, 1)}
-
 
 @st.cache_resource(show_spinner=False)
 def _load_all_modules():
@@ -2413,7 +1397,6 @@ def _load_all_modules():
                 "get_bank_revenue": lambda r, d: (0, None),
                 "clean_numeric": lambda x: float(x) if x else 0.0})
     return mods
-
 
 @st.cache_resource(show_spinner=False)
 def _safe_import_graham():
@@ -2488,7 +1471,6 @@ def _safe_import_graham():
                 "get_investment_verdict": _dcf_verdict_fallback,
             }
 
-
 @st.cache_resource(show_spinner=False)
 def _safe_import_backtest():
     with prof("⏱️ [CACHE] backtest"):
@@ -2508,7 +1490,6 @@ def _safe_import_backtest():
                 "run_backtest_vectorbt": lambda *a, **k: pd.DataFrame(),
             }
 
-
 @st.cache_data(ttl=1800, show_spinner=False)
 def _cached_col_lookup(columns_tuple: tuple, keywords_tuple: tuple):
     _find = _load_all_modules()["find_column_by_keywords"]
@@ -2518,7 +1499,6 @@ def _cached_col_lookup(columns_tuple: tuple, keywords_tuple: tuple):
     except Exception:
         return None
 
-
 def find_col_fast(df, keywords):
     if df is None or df.empty:
         return None
@@ -2526,7 +1506,6 @@ def find_col_fast(df, keywords):
         return _cached_col_lookup(tuple(df.columns.tolist()), tuple(keywords))
     except Exception:
         return _load_all_modules()["find_column_by_keywords"](df, keywords)
-
 
 # ============================================================================
 # [v58-CSV9] TÍCH HỢP 9 FILE CSV GỐC — BACKUP IM LẶNG (KHÔNG CẢNH BÁO)
@@ -2570,7 +1549,6 @@ _V58_FIELD_ALIASES = {
     "fcf": ["Dòng tiền tự do (FCF)"],
 }
 
-
 def _v58_resolve_paths():
     """Tìm 9 file CSV gốc — quét sâu bằng glob recursive. KHÔNG cảnh báo khi thiếu."""
     _HERE = os.path.dirname(os.path.abspath(__file__)) if "__file__" in dir() else os.getcwd()
@@ -2612,9 +1590,7 @@ def _v58_resolve_paths():
     print(f"[v58.1] 9 CSV backup: {n}/9 files found (silent mode)")
     return result
 
-
 _V58_CSV_PATHS = _v58_resolve_paths()
-
 
 def _v58_safe_numeric(v):
     if v is None:
@@ -2626,7 +1602,6 @@ def _v58_safe_numeric(v):
         except Exception:
             return None
     return _parse_vn_number_v51(v)
-
 
 def _v58_load_one_csv(path, label):
     if not path or not os.path.exists(path):
@@ -2642,7 +1617,6 @@ def _v58_load_one_csv(path, label):
         return df
     return df
 
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _v58_load_all():
     csv_dict = {}
@@ -2653,7 +1627,6 @@ def _v58_load_all():
         if df is not None and not df.empty:
             csv_dict[key] = df
     return csv_dict
-
 
 def _v58_build_ticker_registry(csv_dict):
     registry = {}
@@ -2685,7 +1658,6 @@ def _v58_build_ticker_registry(csv_dict):
             if not registry[t]["sector"] and sector:
                 registry[t]["sector"] = sector
     return registry
-
 
 def _v58_build_long_df(csv_dict):
     if not csv_dict:
@@ -2757,14 +1729,12 @@ def _v58_build_long_df(csv_dict):
     long_df = long_df[long_df["ticker"].astype(str).str.len() > 0]
     return long_df
 
-
 @st.cache_data(ttl=3600, show_spinner=False)
 def _v58_build_all_cached():
     csv_dict = _v58_load_all()
     long_df = _v58_build_long_df(csv_dict)
     registry = _v58_build_ticker_registry(csv_dict)
     return long_df, registry
-
 
 try:
     if any(_V58_CSV_PATHS.values()):
@@ -2775,7 +1745,6 @@ except Exception:
     _V58_LONG_DF, _V58_TICKER_REGISTRY = pd.DataFrame(), {}
 
 _V58_DATA_LOADED = bool(_V58_TICKER_REGISTRY) or (not _V58_LONG_DF.empty)
-
 
 def _v58_extract_and_merge(fin_data):
     if not _V58_TICKER_REGISTRY:
@@ -2909,7 +1878,6 @@ def _v58_extract_and_merge(fin_data):
         merged_count += 1
     return (merged_count, new_tickers)
 
-
 _V58_MERGED_COUNT, _V58_NEW_TICKERS = (0, 0)
 if _V58_DATA_LOADED:
     try:
@@ -2917,15 +1885,10 @@ if _V58_DATA_LOADED:
     except Exception:
         pass
 
-
-# ============================================================================
-# [v60] UI — SIDEBAR: TRẠNG THÁI NGUỒN DỮ LIỆU (KHÔNG CÒN CẢNH BÁO THIẾU 9 CSV)
-# ============================================================================
 def _v58_render_sidebar():
     """Sidebar card: TRẠNG THÁI NGUỒN DỮ LIỆU — không còn cảnh báo 'Không tìm thấy 9 file CSV gốc'."""
     with st.sidebar:
         with st.expander("📚 NGUỒN DỮ LIỆU — TRẠNG THÁI", expanded=False):
-            # 1️⃣ Nguồn ưu tiên #1: CSV tổng hợp từ GitHub
             if _V60_LOADED:
                 try:
                     _kb = round(os.path.getsize(os.path.abspath(
@@ -2951,7 +1914,6 @@ def _v58_render_sidebar():
                     "GitHub Actions</span><br><span style='color:#94A3B8; font-size:0.85em;'>"
                     "Hệ thống tự động dùng snapshot + registry hiện có.</span></div>",
                     unsafe_allow_html=True)
-            # 2️⃣ Backup: 9 CSV gốc (chỉ hiển thị số liệu, KHÔNG warning)
             n_backup = sum(1 for v in _V58_CSV_PATHS.values() if v)
             n_registry = len(_V58_TICKER_REGISTRY)
             st.markdown(f"**🗄️ Backup 9 CSV:** `{n_backup}/9` file · "
@@ -2965,10 +1927,6 @@ def _v58_render_sidebar():
                        f"Build: **{SNAPSHOT_BUILD_DATE}** · "
                        f"{len(LATEST_MARKET_SNAPSHOT)} mã")
 
-
-# ============================================================================
-# [v58.1] UI — TAB BCTC GỐC
-# ============================================================================
 def _v58_render_statement(sub, stmt_type, ticker):
     stmt_sub = sub[sub["statement_type"] == stmt_type].copy()
     if stmt_sub.empty:
@@ -3051,13 +2009,11 @@ def _v58_render_statement(sub, stmt_type, ticker):
         hide_index=True,
     )
 
-
 def _v58_render_bctc_tab():
     st.markdown("# 📚 BÁO CÁO TÀI CHÍNH GỐC")
     st.markdown("*Xem trực tiếp dữ liệu LCTT / KQKD / BCDKT từ 9 file CSV gốc.*")
     st.markdown("---")
     if not _V58_DATA_LOADED:
-        # ⭐ [v60] Không còn cảnh báo "❌ Không có dữ liệu" — chỉ thông tin nhẹ
         st.info("📂 Dữ liệu BCTC gốc sẽ tự hiển thị khi 9 file CSV được đưa vào thư mục `du_lieu/`. "
                 "Hiện tại bạn có thể dùng **tab 🗂️ DỮ LIỆU & KHÁCH HÀNG** để khám phá CSV tổng hợp.")
         return
@@ -3108,10 +2064,6 @@ def _v58_render_bctc_tab():
     with tab_bcdkt:
         _v58_render_statement(sub, "BCDKT", sel_ticker)
 
-
-# ============================================================================
-# [v57] MÁY TÍNH CỔ TỨC — GIỮ NGUYÊN 100% (cash + stock)
-# ============================================================================
 def render_cash_dividend_ui():
     st.markdown("## 💵 MÁY TÍNH CỔ TỨC TIỀN MẶT")
     st.markdown("*Tính toán số tiền cổ tức nhận được dựa trên vốn đầu tư và giá thị trường.*")
@@ -3195,7 +2147,6 @@ def render_cash_dividend_ui():
     else:
         st.error("Không thể tạo bảng kịch bản. Vui lòng kiểm tra lại giá thị trường.")
 
-
 def render_stock_dividend_ui():
     st.markdown("## 📈 MÁY TÍNH CỔ TỨC BẰNG CỔ PHIẾU")
     st.markdown("*Tính toán số lượng cổ phiếu nhận thêm từ việc chia cổ tức bằng cổ phiếu.*")
@@ -3269,10 +2220,6 @@ def render_stock_dividend_ui():
     else:
         st.error("Không thể tạo bảng kịch bản. Vui lòng kiểm tra lại số lượng cổ phiếu.")
 
-
-# ============================================================================
-# [v59] DATA EXPLORER + CUSTOMER INTRO
-# ============================================================================
 def _v59_find_column(columns, aliases):
     lookup = {str(c).strip().casefold(): c for c in columns}
     for alias in aliases:
@@ -3285,7 +2232,6 @@ def _v59_find_column(columns, aliases):
             if key and key in candidate:
                 return original
     return None
-
 
 def _v59_render_customer_intro():
     st.markdown("""
@@ -3320,7 +2266,6 @@ Mọi kết quả phụ thuộc vào độ đầy đủ, tính chính xác và t
         st.caption("Thông tin liên hệ được hiển thị để khách hàng chủ động kết nối; "
                    "ứng dụng chưa tự động gửi yêu cầu hay xử lý thanh toán.")
 
-
 def _v59_render_database_explorer():
     """Tab dữ liệu SaaS: KPI, lọc mã, biểu đồ, tìm kiếm bảng và tải CSV."""
     st.markdown("## 🗂️ Trung tâm dữ liệu tài chính")
@@ -3328,7 +2273,6 @@ def _v59_render_database_explorer():
 
     df_source = df
     if df_source.empty:
-        # ⭐ [v60] Không còn cảnh báo "Chưa tìm thấy dữ liệu tổng hợp" — chỉ thông tin nhẹ
         st.info("ℹ️ CSV tổng hợp `vietnam_stock_database_tong_hop.csv` đang chờ GitHub Actions đẩy lên. "
                 "Hãy đặt file tại thư mục `data/` hoặc `du_lieu/` trong repository để kích hoạt tab này.")
         st.code(
@@ -3494,47 +2438,110 @@ def _v59_render_database_explorer():
             "báo cáo hợp nhất/riêng lẻ và điều chỉnh cổ phiếu trước khi dùng trong mô hình định giá."
         )
     _v59_render_customer_intro()
+    # ============================================================================
+# [v61-FIX] render_main() — ĐÃ VÁ: khôi phục def + _T_START + <style> mở đầu
+# ============================================================================
+def render_main(df_arg, selected_ticker, selected_crisis_key):
+    """
+    Hàm render chính. Bản vá v61:
+    - Thêm header def render_main() — bị mất khi ghép file
+    - Thêm _T_START = time.perf_counter() — khai báo trước khi dùng ở cuối hàm
+    - Thêm _ensure_session_defaults_v56() — đảm bảo session_state đã init
+    - Mở <style> trước khi khai báo CSS — sửa IndentationError
+    - Bổ sung CSS classes bị thiếu (stButton, broker-*, glass-card, signal-*)
+    """
+    _T_START = time.perf_counter()
+    _ensure_session_defaults_v56()
 
-
-# === HẾT PHẦN 1/2 ===
-        .recommend-badge { padding: 5px 14px; border-radius: 14px; font-weight: 700;
-        font-size: 0.9em; letter-spacing: 0.3px; }
-        .rec-buy { background: #0A2E1A; color: #22C55E; border: 1px solid #22C55E; }
-        .rec-hold { background: #3A2A0A; color: #F59E0B; border: 1px solid #F59E0B; }
-        .rec-sell { background: #2A0A0A; color: #EF4444; border: 1px solid #EF4444; }
-        .status-badge { padding: 3px 12px; border-radius: 10px; font-size: 0.82em;
-        font-weight: 600; }
-        .status-match { background: #0A2E1A; color: #22C55E; border: 1px solid #22C55E; }
-        .metric-card-acc { background: linear-gradient(145deg, #111C2E 0%, #0F1829 100%);
-        border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #1F2A44;
-        border-top: 3px solid #D4AF37; box-shadow: 0 3px 12px rgba(0,0,0,0.30); }
-        .metric-card-acc .value { font-size: 2em; font-weight: 800;
-        font-variant-numeric: tabular-nums; }
-        .metric-card-acc .label { color: #94A3B8; font-size: 0.88em; margin-top: 6px;
-        font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .metric-card-acc .sub { color: #64748B; font-size: 0.76em; margin-top: 4px; }
-        .ensemble-card { background: #111C2E; border: 1px solid #1F2A44;
-        border-radius: 10px; padding: 12px 16px; margin: 8px 0; }
-        .progress-label { display: flex; justify-content: space-between;
-        color: #E2E8F0; margin-bottom: 6px; font-weight: 600; font-size: 0.9em; }
-        .progress-label .percent { color: #F5D97A; font-weight: 700; }
-        .progress-bar-container { background: #0B1220; height: 8px; border-radius: 6px;
-        overflow: hidden; border: 1px solid #1F2A44; }
-        .progress-bar-fill { height: 100%; border-radius: 6px; }
-        .hybrid-card { background: linear-gradient(145deg, #0F1829 0%, #16223A 100%);
-        border: 1px solid #2A3A5C; border-left: 4px solid #D4AF37; border-radius: 12px;
-        padding: 18px 20px; margin: 10px 0; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
-        .terminal-header { background: linear-gradient(135deg, #0B1220 0%, #111C2E 100%);
-        border: 1px solid #1F2A44; border-top: 3px solid #D4AF37; border-radius: 12px;
-        padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
-        .terminal-header h1 { background: linear-gradient(90deg, #F5D97A 0%, #D4AF37 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-        background-clip: text; margin: 0; }
-        ::-webkit-scrollbar { width: 10px; height: 10px; }
-        ::-webkit-scrollbar-track { background: #0B1220; }
-        ::-webkit-scrollbar-thumb { background: #2A3A5C; border-radius: 6px; }
-        ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
-        </style>""", unsafe_allow_html=True)
+    # ========================================================================
+    # CSS TOÀN CỤC — BẮT BUỘC PHẢI MỞ <style> TRƯỚC KHI KHAI BÁO
+    # ========================================================================
+    st.markdown("""<style>
+    /* === NỀN TẢNG === */
+    .stApp { background-color: #0B1220; color: #E2E8F0; }
+    .stButton>button {
+        background: linear-gradient(135deg, #1E293B 0%, #111C2E 100%);
+        color: #E2E8F0; border: 1px solid #2A3A5C; border-radius: 8px;
+        font-weight: 600; padding: 8px 16px; transition: all 0.2s;
+    }
+    .stButton>button:hover {
+        border-color: #D4AF37; color: #F5D97A;
+        box-shadow: 0 0 12px rgba(212,175,55,0.35);
+    }
+    /* === BROKER PANEL === */
+    .broker-container {
+        background: linear-gradient(145deg, #111C2E 0%, #0F1829 100%);
+        border: 1px solid #1F2A44; border-radius: 12px; padding: 16px 18px;
+    }
+    .broker-title {
+        color: #D4AF37; font-weight: 700; font-size: 0.95em;
+        margin-bottom: 12px; letter-spacing: 0.5px;
+    }
+    .broker-note {
+        color: #64748B; font-size: 0.78em; margin-top: 10px;
+        padding-top: 8px; border-top: 1px dashed #1F2A44;
+    }
+    /* === GLASS CARD === */
+    .glass-card {
+        background: linear-gradient(145deg, #111C2E 0%, #0F1829 100%);
+        border: 1px solid #1F2A44; border-radius: 12px;
+        padding: 16px 18px; margin: 8px 0;
+        box-shadow: 0 3px 12px rgba(0,0,0,0.30);
+    }
+    /* === SIGNAL BOX === */
+    .signal-buy {
+        background: linear-gradient(145deg, #0A2E1A 0%, #0D1F14 100%);
+        border-left: 5px solid #22C55E; border-radius: 8px;
+        padding: 14px 18px; margin: 10px 0;
+    }
+    .signal-buy .title { color: #22C55E; font-weight: 800; font-size: 1.1em; }
+    .signal-reject {
+        background: linear-gradient(145deg, #3A2A0A 0%, #1A140A 100%);
+        border-left: 5px solid #F59E0B; border-radius: 8px;
+        padding: 14px 18px; margin: 10px 0;
+    }
+    .signal-reject .title { color: #F59E0B; font-weight: 800; font-size: 1.1em; }
+    .signal-msg { color: #CBD5E1; margin-top: 6px; font-size: 0.92em; }
+    .signal-detail { color: #94A3B8; font-size: 0.82em; margin-top: 4px; }
+    /* === BADGES (giữ nguyên bản gốc) === */
+    .recommend-badge { padding: 5px 14px; border-radius: 14px; font-weight: 700;
+    font-size: 0.9em; letter-spacing: 0.3px; }
+    .rec-buy { background: #0A2E1A; color: #22C55E; border: 1px solid #22C55E; }
+    .rec-hold { background: #3A2A0A; color: #F59E0B; border: 1px solid #F59E0B; }
+    .rec-sell { background: #2A0A0A; color: #EF4444; border: 1px solid #EF4444; }
+    .status-badge { padding: 3px 12px; border-radius: 10px; font-size: 0.82em;
+    font-weight: 600; }
+    .status-match { background: #0A2E1A; color: #22C55E; border: 1px solid #22C55E; }
+    .metric-card-acc { background: linear-gradient(145deg, #111C2E 0%, #0F1829 100%);
+    border-radius: 12px; padding: 20px; text-align: center; border: 1px solid #1F2A44;
+    border-top: 3px solid #D4AF37; box-shadow: 0 3px 12px rgba(0,0,0,0.30); }
+    .metric-card-acc .value { font-size: 2em; font-weight: 800;
+    font-variant-numeric: tabular-nums; }
+    .metric-card-acc .label { color: #94A3B8; font-size: 0.88em; margin-top: 6px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .metric-card-acc .sub { color: #64748B; font-size: 0.76em; margin-top: 4px; }
+    .ensemble-card { background: #111C2E; border: 1px solid #1F2A44;
+    border-radius: 10px; padding: 12px 16px; margin: 8px 0; }
+    .progress-label { display: flex; justify-content: space-between;
+    color: #E2E8F0; margin-bottom: 6px; font-weight: 600; font-size: 0.9em; }
+    .progress-label .percent { color: #F5D97A; font-weight: 700; }
+    .progress-bar-container { background: #0B1220; height: 8px; border-radius: 6px;
+    overflow: hidden; border: 1px solid #1F2A44; }
+    .progress-bar-fill { height: 100%; border-radius: 6px; }
+    .hybrid-card { background: linear-gradient(145deg, #0F1829 0%, #16223A 100%);
+    border: 1px solid #2A3A5C; border-left: 4px solid #D4AF37; border-radius: 12px;
+    padding: 18px 20px; margin: 10px 0; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+    .terminal-header { background: linear-gradient(135deg, #0B1220 0%, #111C2E 100%);
+    border: 1px solid #1F2A44; border-top: 3px solid #D4AF37; border-radius: 12px;
+    padding: 18px 24px; margin-bottom: 16px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); }
+    .terminal-header h1 { background: linear-gradient(90deg, #F5D97A 0%, #D4AF37 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text; margin: 0; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: #0B1220; }
+    ::-webkit-scrollbar-thumb { background: #2A3A5C; border-radius: 6px; }
+    ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+    </style>""", unsafe_allow_html=True)
 
     # ------------------------------------------------------------------------
     # SIDEBAR
@@ -3550,12 +2557,10 @@ def _v59_render_database_explorer():
                 text-transform:uppercase;'>Vietnam Terminal</div></div>""",
                 unsafe_allow_html=True)
 
-            # [v58.1-MODIFIED #1] Báo cáo nguồn dữ liệu trong sidebar (v60: KHÔNG warning)
             _v58_render_sidebar()
 
             st.markdown("---")
             st.markdown("### 🧮 MÁY TÍNH CỔ TỨC")
-            # [v58.1-MODIFIED #2] Thêm option "📚 BCTC GỐC (v58)"
             app_mode = st.radio(
                 "Chọn chức năng:",
                 ["Terminal (Mặc định)", "Cổ tức tiền mặt", "Cổ tức bằng cổ phiếu",
@@ -3566,7 +2571,6 @@ def _v59_render_database_explorer():
             st.markdown("---")
             render_profiler_panel()
 
-    # [v58.1-MODIFIED #3] Route tab mới "BCTC GỐC (v58)"
     if app_mode == "Cổ tức tiền mặt":
         render_cash_dividend_ui(); return
     elif app_mode == "Cổ tức bằng cổ phiếu":
@@ -3985,6 +2989,48 @@ def _v59_render_database_explorer():
                 BVPS: {'Có' if bvps > 0 else 'Không'}</div></div>""",
                 unsafe_allow_html=True)
 
+    # Khai báo các module đã load (biến module-level từ _load_all_modules)
+    _mods = _load_all_modules()
+    COMPANY_MAPPING = _mods.get("COMPANY_MAPPING", {})
+    BANK_TICKERS = _mods.get("BANK_TICKERS", set())
+    TICKER_DISPLAY = _mods.get("TICKER_DISPLAY", {})
+    THRESHOLDS = _mods.get("THRESHOLDS", {})
+    to_float_scalar = _mods.get("to_float_scalar", lambda x: float(x) if x else 0.0)
+    safe_divide = _mods.get("safe_divide", lambda a, b, d=0: (a / b) if b else d)
+    round_float = _mods.get("round_float", lambda x, n=0: round(float(x), n) if x else 0.0)
+    format_currency_vn = _mods.get("format_currency_vn", lambda x: f"{x:,.0f}")
+    format_currency_vn_advanced = _mods.get("format_currency_vn_advanced",
+                                            lambda x, per_share=False: f"{x:,.0f}")
+    format_eps_value = _mods.get("format_eps_value", lambda x: f"{x:,.0f}" if x else "N/A")
+    format_pe_pb = _mods.get("format_pe_pb", lambda x: f"{x:.2f}" if x else "N/A")
+    find_column_by_keywords = _mods.get("find_column_by_keywords", lambda df, keys: None)
+    is_bank_ticker = _mods.get("is_bank_ticker", lambda t: False)
+    detect_sector = _mods.get("detect_sector", lambda f, t: "Doanh nghiệp")
+    extract_financial_metrics_smart = _mods.get("extract_financial_metrics_smart", lambda *a, **k: {})
+    extract_all_metrics = _mods.get("extract_all_metrics", lambda *a, **k: {})
+    get_company_and_industry = _mods.get("get_company_and_industry", lambda t, r, d: (t, "N/A"))
+    get_bank_revenue = _mods.get("get_bank_revenue", lambda r, d: (0, None))
+    clean_numeric = _mods.get("clean_numeric", lambda x: float(x) if x else 0.0)
+
+    _graham = _safe_import_graham()
+    check_signal_filters = _graham["check_signal_filters"]
+    get_undervalued_stocks = _graham["get_undervalued_stocks"]
+    hybrid_valuation_ensemble = _graham["hybrid_valuation_ensemble"]
+    forecast_trend = _graham["forecast_trend"]
+    predict_risk_ensemble = _graham["predict_risk_ensemble"]
+    predict_eps_ensemble = _graham["predict_eps_ensemble"]
+    calculate_dcf_valuation = _graham["calculate_dcf_valuation"]
+    run_dcf_scenarios = _graham["run_dcf_scenarios"]
+    get_investment_verdict = _graham["get_investment_verdict"]
+
+    _bt = _safe_import_backtest()
+    HISTORICAL_CRISES = _bt["HISTORICAL_CRISES"]
+    calculate_technical_indicators = _bt["calculate_technical_indicators"]
+    run_backtest_vectorbt = _bt["run_backtest_vectorbt"]
+
+    # ========================================================================
+    # TABS
+    # ========================================================================
     tab_val, tab_fc, tab_ov, tab_sr, tab_ml, tab_dl, tab_data = st.tabs([
         "🧮 ĐỊNH GIÁ", "📈 DỰ BÁO", "📊 TỔNG QUAN",
         "🔎 TRA CỨU", "🤖 ML", "🧠 DL", "🗂️ DỮ LIỆU & KHÁCH HÀNG",
@@ -4901,6 +3947,13 @@ def _v59_render_database_explorer():
                 "được huấn luyện trên dữ liệu thực tế (nếu có đủ mẫu), "
                 "ngược lại sẽ dùng dữ liệu mô phỏng để minh họa.")
 
+    # ========================================================================
+    # TAB 7: DATA EXPLORER
+    # ========================================================================
+    with tab_data:
+        with prof("⏱️ [TAB] DATA EXPLORER"):
+            _v59_render_database_explorer()
+
     st.markdown("---")
     with prof("⏱️ [END] accuracy"):
         render_accuracy_section()
@@ -4957,13 +4010,6 @@ def _v59_render_database_explorer():
             "📌 Module `lich_su.backtest_chien_luoc` chưa khả dụng "
             "(thiếu `vectorbt`). App vẫn chạy đầy đủ 6 tab "
             "và các tính năng khác.")
-    # ========================================================================
-    # TAB 7: DATA EXPLORER + CUSTOMER INTRO [v59-SAAS] [v60-NO-WARNING]
-    # ========================================================================
-    with tab_data:
-        with prof("⏱️ [TAB] DATA EXPLORER"):
-            _v59_render_database_explorer()
-
     st.markdown("---")
     st.markdown(
         """<div style="background: linear-gradient(145deg, rgba(239,68,68,0.10) 0%, rgba(239,68,68,0.04) 100%);
@@ -5026,13 +4072,12 @@ mới nhất ngay khi công bố.""")
 
 
 # ============================================================================
-# 15. MAIN — [v58.1-UPGRADE] Bổ sung TOÀN BỘ tickers từ REGISTRY vào ALL_TICKERS_41
+# MAIN
 # ============================================================================
 def main():
     _ensure_session_defaults_v56()
     _prof_reset()
 
-    # [v58.1-UPGRADE] Add TOÀN BỘ ticker từ registry 9-CSV vào ALL_TICKERS_41
     if _V58_TICKER_REGISTRY:
         _v58_added = 0
         _v58_total = len(_V58_TICKER_REGISTRY)
@@ -5057,14 +4102,12 @@ def main():
         if _v58_added:
             print(f"[v58.1] ➕ Add {_v58_added}/{_v58_total} tickers từ registry "
                   f"(tổng ALL_TICKERS_41: {len(ALL_TICKERS_41)})")
-        # Verify coverage
         _missing = [t for t in _V58_TICKER_REGISTRY.keys()
                     if t not in ALL_TICKERS_41]
         if _missing:
             print(f"[v58.1] ⚠️ Còn thiếu {len(_missing)} mã: "
                   f"{_missing[:10]}...")
 
-    # Load BCTC — pivot từ long-DF → wide (giữ tương thích code render_main)
     if (st.session_state.get("df") is None
             or (hasattr(st.session_state.get("df"), "empty")
                 and st.session_state["df"].empty)):
