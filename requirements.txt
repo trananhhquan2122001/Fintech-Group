@@ -1,17 +1,11 @@
-# FINEX VN Terminal — requirements.txt [v60-COMPAT]
-# Tương thích với app.py hiện tại trên Streamlit Cloud.
-# Không nâng NumPy lên 2.x để giảm rủi ro xung đột với thư viện phân tích dữ liệu.
+# FINEX VN Terminal — requirements.txt [v60-COMPAT-STABLE]
+# Tối ưu hóa cho Streamlit Cloud (Python mới nhất) - Cài đặt trực tiếp dạng binary wheel, tránh lỗi biên dịch zlib.
 
-# Giao diện và xử lý dữ liệu
-streamlit>=1.40.0,<2.0.0
-pandas>=2.2.3,<3.0.0
-numpy>=1.26.4,<2.0.0
-plotly>=5.24.0,<7.0.0
-openpyxl>=3.1.5,<4.0.0
-
-# HTTP và WebSocket
-requests>=2.32.0,<3.0.0
-websocket-client>=1.8.0,<2.0.0
-
-# PostgreSQL (cần cho các chức năng kết nối cơ sở dữ liệu)
-psycopg2-binary>=2.9.9,<3.0.0
+streamlit>=1.40.0
+pandas>=2.2.3
+numpy>=1.26.4
+plotly>=5.24.0
+openpyxl>=3.1.5
+requests>=2.32.0
+websocket-client>=1.8.0
+psycopg2-binary>=2.9.9
