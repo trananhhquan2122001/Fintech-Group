@@ -1,9 +1,9 @@
 # finex_vn_terminal.py
 # ============================================================================
-# FINEX VN TERMINAL — Integrated Upgrade v2 (80% features từ code gốc)
+# FINEX VN TERMINAL — Integrated Upgrade v3 (100% code gốc + Tích hợp CSV tổng hợp)
 # Kiến trúc: 7 tabs + 5 modes + full bottom sections
+# NEW: Ưu tiên đọc data/vietnam_stock_database_tong_hop.csv trước
 # ============================================================================
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -49,7 +49,6 @@ st.set_page_config(
 
 # ============================================================================
 # OPTIONAL INTEGRATIONS — snapshot, PostgreSQL, safe dataframe rendering
-# Primary source: long-format financial data CSV produced by the repository scraper; no embedded ticker fallback.
 # ============================================================================
 try:
     from du_lieu.doc_bctc_goc import (
@@ -61,10 +60,12 @@ try:
 except Exception:
     LATEST_MARKET_SNAPSHOT = {}
     _HAS_SNAPSHOT = False
-    def get_latest_market_snapshot(ticker):
-        return {}
-    def _apply_latest_market_snapshot(ticker, data):
-        return data
+
+def get_latest_market_snapshot(ticker):
+    return {}
+
+def _apply_latest_market_snapshot(ticker, data):
+    return data
 
 def _safe_dataframe(data, **kwargs):
     """Render a dataframe with fallbacks for environments lacking PyArrow."""
@@ -219,7 +220,6 @@ PARTNERS = {
         "url": "https://tcinvest.tcbs.com.vn/guest/login?openAccount=true&referralcode=105C925853",
         "color": "#1E88E5",
     },
-
 }
 
 VIP_PACKAGES = [
@@ -254,72 +254,72 @@ HISTORICAL_CRISES = {
              "context": {"trigger": "Không có biến cố đặc biệt.",
                          "timeline": [{"period": "2026", "market_impact": "Đỉnh mới 1.774 điểm."}]}},
     "DOTCOM_2000": {"title": "Bong bóng Dot-com (2000-2002)", "source": "Fed History",
-        "impact": "Nasdaq giảm 78%. Hàng trăm công ty dot-com phá sản.",
-        "context": {"trigger": "Định giá công nghệ phi lý.",
-            "timeline": [{"period": "03/2000", "market_impact": "Nasdaq đỉnh 5.048."},
-                         {"period": "10/2002", "market_impact": "Nasdaq đáy 1.114."}]},
-        "fed_actions_and_philosophy": {
-            "core_mission": "Fed hạ lãi suất từ 6.5% xuống 1.75%.",
-            "key_decision": "Cắt giảm mạnh sau 11/9.",
-            "famous_quote": "Irrational exuberance — Alan Greenspan",
-            "market_lesson": "Không có lợi nhuận = bong bóng."},
-        "metrics": {"drawdown_pct": -78.0, "bankruptcies": 500}},
+                    "impact": "Nasdaq giảm 78%. Hàng trăm công ty dot-com phá sản.",
+                    "context": {"trigger": "Định giá công nghệ phi lý.",
+                                "timeline": [{"period": "03/2000", "market_impact": "Nasdaq đỉnh 5.048."},
+                                             {"period": "10/2002", "market_impact": "Nasdaq đáy 1.114."}]},
+                    "fed_actions_and_philosophy": {
+                        "core_mission": "Fed hạ lãi suất từ 6.5% xuống 1.75%.",
+                        "key_decision": "Cắt giảm mạnh sau 11/9.",
+                        "famous_quote": "Irrational exuberance — Alan Greenspan",
+                        "market_lesson": "Không có lợi nhuận = bong bóng."},
+                    "metrics": {"drawdown_pct": -78.0, "bankruptcies": 500}},
     "GFC_2008": {"title": "Khủng hoảng Tài chính Toàn cầu (2008)", "source": "Fed/Bloomberg",
-        "impact": "S&P 500 giảm 57%. Lehman phá sản. VN-Index giảm 80%.",
-        "context": {"trigger": "Bong bóng BĐS Mỹ + cho vay dưới chuẩn.",
-            "timeline": [{"period": "09/2008", "market_impact": "Lehman phá sản."},
-                         {"period": "03/2009", "market_impact": "S&P 500 đáy 676."}]},
-        "fed_actions_and_philosophy": {
-            "core_mission": "Fed hạ lãi suất về 0-0.25%, QE1.",
-            "key_decision": "Cứu AIG, Bear Stearns.",
-            "famous_quote": "Whatever is necessary — Ben Bernanke",
-            "market_lesson": "Đòn bẩy quá mức + thiếu minh bạch = thảm họa."},
-        "metrics": {"drawdown_pct": -57.0, "vnindex_drop_pct": -80.0}},
+                 "impact": "S&P 500 giảm 57%. Lehman phá sản. VN-Index giảm 80%.",
+                 "context": {"trigger": "Bong bóng BĐS Mỹ + cho vay dưới chuẩn.",
+                             "timeline": [{"period": "09/2008", "market_impact": "Lehman phá sản."},
+                                          {"period": "03/2009", "market_impact": "S&P 500 đáy 676."}]},
+                 "fed_actions_and_philosophy": {
+                     "core_mission": "Fed hạ lãi suất về 0-0.25%, QE1.",
+                     "key_decision": "Cứu AIG, Bear Stearns.",
+                     "famous_quote": "Whatever is necessary — Ben Bernanke",
+                     "market_lesson": "Đòn bẩy quá mức + thiếu minh bạch = thảm họa."},
+                 "metrics": {"drawdown_pct": -57.0, "vnindex_drop_pct": -80.0}},
     "EU_DEBT_2011": {"title": "Khủng hoảng Nợ công châu Âu (2011)", "source": "ECB/IMF",
-        "impact": "VN-Index giảm 30%. Lạm phát VN 18%, lãi suất 15%.",
-        "context": {"trigger": "Hy Lạp, Ý, Tây Ban Nha vỡ nợ.",
-            "timeline": [{"period": "07/2011", "market_impact": "Khủng hoảng lan rộng."},
-                         {"period": "12/2011", "market_impact": "VN-Index đáy 351."}]},
-        "fed_actions_and_philosophy": {
-            "core_mission": "ECB mua trái phiếu Ý/Tây Ban Nha.",
-            "key_decision": "Mario Draghi: 'Whatever it takes'.",
-            "famous_quote": "Whatever it takes — Mario Draghi",
-            "market_lesson": "Cam kết mạnh mẽ có thể đảo ngược niềm tin."},
-        "metrics": {"drawdown_pct": -30.0}},
+                     "impact": "VN-Index giảm 30%. Lạm phát VN 18%, lãi suất 15%.",
+                     "context": {"trigger": "Hy Lạp, Ý, Tây Ban Nha vỡ nợ.",
+                                 "timeline": [{"period": "07/2011", "market_impact": "Khủng hoảng lan rộng."},
+                                              {"period": "12/2011", "market_impact": "VN-Index đáy 351."}]},
+                     "fed_actions_and_philosophy": {
+                         "core_mission": "ECB mua trái phiếu Ý/Tây Ban Nha.",
+                         "key_decision": "Mario Draghi: 'Whatever it takes'.",
+                         "famous_quote": "Whatever it takes — Mario Draghi",
+                         "market_lesson": "Cam kết mạnh mẽ có thể đảo ngược niềm tin."},
+                     "metrics": {"drawdown_pct": -30.0}},
     "COVID_2020": {"title": "Khủng hoảng COVID-19 (2020)", "source": "Bloomberg/SBV",
-        "impact": "VN-Index giảm 34% từ 991 xuống 660. GDP Q2 tăng 0.36%.",
-        "context": {"trigger": "Đại dịch toàn cầu, giãn cách.",
-            "timeline": [{"period": "01/2020", "market_impact": "Ca nhiễm đầu tiên."},
-                         {"period": "03/2020", "market_impact": "VN-Index đáy 660."},
-                         {"period": "12/2020", "market_impact": "Hồi phục 1.103."}]},
-        "fed_actions_and_philosophy": {
-            "core_mission": "Fed hạ lãi suất về 0-0.25%, QE vô hạn.",
-            "key_decision": "Mua trái phiếu & MBS quy mô lớn.",
-            "famous_quote": "Whatever it takes — Jerome Powell",
-            "market_lesson": "Thanh khoản là yếu tố sống còn."},
-        "metrics": {"drawdown_pct": -34.0, "recovery_months": 9}},
+                   "impact": "VN-Index giảm 34% từ 991 xuống 660. GDP Q2 tăng 0.36%.",
+                   "context": {"trigger": "Đại dịch toàn cầu, giãn cách.",
+                               "timeline": [{"period": "01/2020", "market_impact": "Ca nhiễm đầu tiên."},
+                                            {"period": "03/2020", "market_impact": "VN-Index đáy 660."},
+                                            {"period": "12/2020", "market_impact": "Hồi phục 1.103."}]},
+                   "fed_actions_and_philosophy": {
+                       "core_mission": "Fed hạ lãi suất về 0-0.25%, QE vô hạn.",
+                       "key_decision": "Mua trái phiếu & MBS quy mô lớn.",
+                       "famous_quote": "Whatever it takes — Jerome Powell",
+                       "market_lesson": "Thanh khoản là yếu tố sống còn."},
+                   "metrics": {"drawdown_pct": -34.0, "recovery_months": 9}},
     "REAL_ESTATE_2022": {"title": "Khủng hoảng Trái phiếu & BĐS (2022)", "source": "UBCKNN",
-        "impact": "VN-Index giảm 37% từ 1.528 xuống 873.",
-        "context": {"trigger": "Siết tín dụng BĐS, SCB bị kiểm soát.",
-            "timeline": [{"period": "01/2022", "market_impact": "VN-Index đỉnh 1.528."},
-                         {"period": "11/2022", "market_impact": "VN-Index đáy 873."}]},
-        "fed_actions_and_philosophy": {
-            "core_dilemma": "Cân bằng ổn định tỷ giá và thanh khoản.",
-            "key_decision": "Hạ lãi suất điều hành 2 lần.",
-            "famous_quote": "Kiểm soát rủi ro hệ thống là ưu tiên.",
-            "market_lesson": "Đừng đánh cược đòn bẩy khi chính sách siết."},
-        "metrics": {"drawdown_pct": -37.0, "bond_defaults": 150}},
+                         "impact": "VN-Index giảm 37% từ 1.528 xuống 873.",
+                         "context": {"trigger": "Siết tín dụng BĐS, SCB bị kiểm soát.",
+                                     "timeline": [{"period": "01/2022", "market_impact": "VN-Index đỉnh 1.528."},
+                                                  {"period": "11/2022", "market_impact": "VN-Index đáy 873."}]},
+                         "fed_actions_and_philosophy": {
+                             "core_dilemma": "Cân bằng ổn định tỷ giá và thanh khoản.",
+                             "key_decision": "Hạ lãi suất điều hành 2 lần.",
+                             "famous_quote": "Kiểm soát rủi ro hệ thống là ưu tiên.",
+                             "market_lesson": "Đừng đánh cược đòn bẩy khi chính sách siết."},
+                         "metrics": {"drawdown_pct": -37.0, "bond_defaults": 150}},
     "SVB_2023": {"title": "Khủng hoảng Ngân hàng SVB (2023)", "source": "FDIC/Reuters",
-        "impact": "SVB phá sản — ngân hàng lớn thứ 2 lịch sử Mỹ. VN-Index giảm 8%.",
-        "context": {"trigger": "Fed tăng lãi suất mạnh, danh mục trái phiếu SVB lỗ.",
-            "timeline": [{"period": "03/2023", "market_impact": "SVB sụp đổ 48h."},
-                         {"period": "05/2023", "market_impact": "First Republic bị thâu tóm."}]},
-        "fed_actions_and_philosophy": {
-            "core_mission": "Fed mở BTFP 25 tỷ USD.",
-            "key_decision": "Bảo lãnh 100% tiền gửi SVB.",
-            "famous_quote": "Deposits are safe — Joe Biden",
-            "market_lesson": "Rủi ro lãi suất có thể phá hủy NH trong vài ngày."},
-        "metrics": {"vnindex_drop_pct": -8.0, "svb_assets_billion": 209}},
+                 "impact": "SVB phá sản — ngân hàng lớn thứ 2 lịch sử Mỹ. VN-Index giảm 8%.",
+                 "context": {"trigger": "Fed tăng lãi suất mạnh, danh mục trái phiếu SVB lỗ.",
+                             "timeline": [{"period": "03/2023", "market_impact": "SVB sụp đổ 48h."},
+                                          {"period": "05/2023", "market_impact": "First Republic bị thâu tóm."}]},
+                 "fed_actions_and_philosophy": {
+                     "core_mission": "Fed mở BTFP 25 tỷ USD.",
+                     "key_decision": "Bảo lãnh 100% tiền gửi SVB.",
+                     "famous_quote": "Deposits are safe — Joe Biden",
+                     "market_lesson": "Rủi ro lãi suất có thể phá hủy NH trong vài ngày."},
+                 "metrics": {"vnindex_drop_pct": -8.0, "svb_assets_billion": 209}},
 }
 
 # ============================================================================
@@ -346,89 +346,247 @@ def _make_fin_data(**kwargs):
     base.update(kwargs)
     return base
 
-# Financial data is loaded exclusively from the GitHub scraper output below.
-
 # ==========================================================================
-# SOURCE-OF-TRUTH LOADER: scraper output CSV (long format)
-# Configure FINEX_DATA_URL to the exact raw GitHub URL of the scraper output,
-# or commit the output as finex_financial_data.csv beside this application.
-# Old 9-CSV loader and hard-coded ticker fallback are intentionally disabled.
+# === NEW INTEGRATION v3: Ưu tiên đọc data/vietnam_stock_database_tong_hop.csv
+# Thứ tự ưu tiên:
+#   1. data/vietnam_stock_database_tong_hop.csv (local tổng hợp)
+#   2. FINEX_DATA_URL (env - raw GitHub URL)
+#   3. GitHub API → finex_financial_data.csv
+#   4. Local fallback: finex_financial_data.csv
 # ==========================================================================
 _FINEX_LONG_DF = pd.DataFrame()
-_FINEX_DATA_SOURCE = "Chưa kết nối được dữ liệu GitHub"
+_FINEX_DATA_SOURCE = "Chưa kết nối được dữ liệu"
 _FINEX_DATA_ERROR = ""
+
 GITHUB_OWNER = os.getenv("FINEX_GITHUB_OWNER", "trananhhquan2122001")
 GITHUB_REPO = os.getenv("FINEX_GITHUB_REPO", "Fintech-Group")
 GITHUB_BRANCH = os.getenv("FINEX_GITHUB_BRANCH", "main")
 GITHUB_DATA_FILENAME = os.getenv("FINEX_GITHUB_DATA_FILENAME", "finex_financial_data.csv")
 
+# Đường dẫn ưu tiên 1: file tổng hợp local
+TONG_HOP_FILENAME = os.getenv(
+    "FINEX_TONG_HOP_FILENAME",
+    "data/vietnam_stock_database_tong_hop.csv"
+)
+
+# Các tên file tổng hợp có thể gặp (linh hoạt cho nhiều cách đặt tên)
+_TONG_HOP_ALIASES = [
+    "data/vietnam_stock_database_tong_hop.csv",
+    "vietnam_stock_database_tong_hop.csv",
+    "data/tong_hop.csv",
+    "tong_hop.csv",
+    "data/vietnam_stock_database.csv",
+    "vietnam_stock_database.csv",
+]
+
+REQUIRED_STANDARD_COLS = {"Mã chứng khoán", "Loại báo cáo", "Năm",
+                          "Chỉ tiêu tiếng Việt", "Giá trị"}
+
+
+def _try_read_csv(source_path_or_url, label, timeout=30):
+    """Đọc CSV từ URL hoặc local path, trả về (DataFrame, error_msg)."""
+    import io
+    try:
+        if source_path_or_url.startswith(("http://", "https://")):
+            import urllib.request
+            req = urllib.request.Request(
+                source_path_or_url,
+                headers={"User-Agent": "FINEX-VN-Terminal/3.0"}
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                raw = response.read()
+        else:
+            if not os.path.isfile(source_path_or_url):
+                return pd.DataFrame(), f"File không tồn tại: {source_path_or_url}"
+            with open(source_path_or_url, "rb") as f:
+                raw = f.read()
+
+        # Thử nhiều encoding
+        for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+            try:
+                frame = pd.read_csv(io.BytesIO(raw), low_memory=False, encoding=enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:
+            return pd.DataFrame(), f"{label}: không decode được với bất kỳ encoding nào"
+
+        return frame, ""
+    except Exception as exc:
+        return pd.DataFrame(), f"{label}: {exc}"
+
+
+def _normalize_to_standard_schema(frame, label):
+    """
+    Chuyển đổi DataFrame từ nhiều schema khả dĩ về schema chuẩn:
+    ['Mã chứng khoán', 'Loại báo cáo', 'Năm', 'Chỉ tiêu tiếng Việt', 'Giá trị']
+    """
+    if frame is None or frame.empty:
+        return pd.DataFrame(), f"{label}: DataFrame rỗng"
+
+    cols_lower = {str(c).strip().lower(): c for c in frame.columns}
+
+    # Mapping các tên cột có thể gặp → tên chuẩn
+    col_map = {}
+    ticker_aliases = ["mã chứng khoán", "ticker", "symbol", "ma", "mã", "Mã CK"]
+    report_aliases = ["loại báo cáo", "report_type", "loại bc", "report"]
+    year_aliases = ["năm", "year", "yr"]
+    indicator_aliases = ["chỉ tiêu tiếng việt", "indicator", "chỉ tiêu",
+                         "ten_chi_tieu", "chỉ tiêu vn", "metric"]
+    value_aliases = ["giá trị", "value", "giá tri", "so_lieu", "value_vnd"]
+
+    def _find(aliases):
+        for a in aliases:
+            if a in cols_lower:
+                return cols_lower[a]
+        # Tìm gần đúng (contains)
+        for a in aliases:
+            for k, orig in cols_lower.items():
+                if a in k or k in a:
+                    return orig
+        return None
+
+    ticker_col = _find(ticker_aliases)
+    report_col = _find(report_aliases)
+    year_col = _find(year_aliases)
+    indicator_col = _find(indicator_aliases)
+    value_col = _find(value_aliases)
+
+    # Nếu đã có đủ cột chuẩn → dùng luôn
+    if REQUIRED_STANDARD_COLS.issubset(set(frame.columns)):
+        out = frame.copy()
+    elif ticker_col and indicator_col and value_col:
+        out = pd.DataFrame()
+        out["Mã chứng khoán"] = frame[ticker_col]
+        out["Chỉ tiêu tiếng Việt"] = frame[indicator_col]
+        out["Giá trị"] = frame[value_col]
+        out["Loại báo cáo"] = frame[report_col] if report_col else "Q4"
+        out["Năm"] = frame[year_col] if year_col else datetime.now().year
+    else:
+        return pd.DataFrame(), (
+            f"{label}: không tìm thấy cột ticker/indicator/value. "
+            f"Cột hiện có: {list(frame.columns)[:10]}"
+        )
+
+    # Chuẩn hóa
+    out["Mã chứng khoán"] = out["Mã chứng khoán"].astype(str).str.upper().str.strip()
+    out["Năm"] = pd.to_numeric(out["Năm"], errors="coerce")
+    out["Giá trị"] = pd.to_numeric(out["Giá trị"], errors="coerce")
+    out = out.dropna(subset=["Mã chứng khoán", "Năm", "Giá trị"])
+    out = out[out["Mã chứng khoán"].str.fullmatch(r"[A-Z0-9]{3,5}", na=False)]
+
+    if out.empty:
+        return pd.DataFrame(), f"{label}: không có dòng dữ liệu hợp lệ sau khi lọc"
+    return out, ""
+
+
 @st.cache_data(ttl=300, show_spinner=False)
-def _load_scraper_long_csv():
-    """GitHub-first loader. Never falls back to hard-coded demo data or legacy 9 CSVs."""
+def _load_financial_data_source():
+    """
+    NEW v3: Loader với thứ tự ưu tiên:
+      1. data/vietnam_stock_database_tong_hop.csv (local)
+      2. FINEX_DATA_URL (env)
+      3. GitHub API → finex_financial_data.csv
+      4. Local fallback: finex_financial_data.csv
+    """
+    errors = []
+
+    # ==================== ƯU TIÊN 1: File tổng hợp local ====================
+    tong_hop_candidates = []
+    env_tong_hop = os.getenv("FINEX_TONG_HOP_FILENAME", "").strip()
+    if env_tong_hop:
+        tong_hop_candidates.append(env_tong_hop)
+    tong_hop_candidates.extend(_TONG_HOP_ALIASES)
+    # Thêm đường dẫn tuyệt đối từ thư mục script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    for rel in list(_TONG_HOP_ALIASES):
+        abs_path = os.path.join(script_dir, rel)
+        if abs_path not in tong_hop_candidates:
+            tong_hop_candidates.append(abs_path)
+
+    for candidate in dict.fromkeys(tong_hop_candidates):
+        if os.path.isfile(candidate):
+            frame, err = _try_read_csv(candidate, f"Local-tong-hop:{candidate}")
+            if not frame.empty:
+                norm, norm_err = _normalize_to_standard_schema(frame, f"Local-tong-hop:{candidate}")
+                if not norm.empty:
+                    return norm, f"✅ Local tổng hợp: {candidate}", ""
+                errors.append(norm_err)
+            else:
+                errors.append(err)
+
+    # ==================== ƯU TIÊN 2: FINEX_DATA_URL (env) ====================
+    configured_url = os.getenv("FINEX_DATA_URL", "").strip()
+    if configured_url:
+        frame, err = _try_read_csv(configured_url, "FINEX_DATA_URL")
+        if not frame.empty:
+            norm, norm_err = _normalize_to_standard_schema(frame, "FINEX_DATA_URL")
+            if not norm.empty:
+                return norm, f"✅ FINEX_DATA_URL: {configured_url}", ""
+            errors.append(norm_err)
+        else:
+            errors.append(err)
+
+    # ==================== ƯU TIÊN 3: GitHub API → finex_financial_data.csv ====================
     import io
     import json
     import urllib.request
 
-    def fetch(url, timeout=30):
-        req = urllib.request.Request(url, headers={"User-Agent": "FINEX-VN-Terminal/2.0"})
+    def fetch_url(url, timeout=30):
+        req = urllib.request.Request(url, headers={"User-Agent": "FINEX-VN-Terminal/3.0"})
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return response.read()
 
-    errors = []
-    configured_url = os.getenv("FINEX_DATA_URL", "").strip()
-    urls = []
-    if configured_url:
-        urls.append((configured_url, "FINEX_DATA_URL"))
-
-    # Locate the exact named scraper output in the repository tree.
-    # GitHub Actions artifacts are not public raw files; the workflow must commit/publish this CSV.
     tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/{GITHUB_BRANCH}?recursive=1"
     try:
-        tree = json.loads(fetch(tree_url, timeout=20).decode("utf-8"))
-        matches = [x["path"] for x in tree.get("tree", [])
-                   if x.get("type") == "blob" and x.get("path", "").split("/")[-1].lower() == GITHUB_DATA_FILENAME.lower()]
+        tree = json.loads(fetch_url(tree_url, timeout=20).decode("utf-8"))
+        matches = [
+            x["path"] for x in tree.get("tree", [])
+            if x.get("type") == "blob"
+            and x.get("path", "").split("/")[-1].lower() == GITHUB_DATA_FILENAME.lower()
+        ]
         if matches:
-            # Prefer a data/ or output/ location if duplicates exist.
-            matches.sort(key=lambda p: (0 if any(part.lower() in ("data", "output", "datasets") for part in p.split("/")) else 1, len(p)))
+            matches.sort(key=lambda p: (
+                0 if any(part.lower() in ("data", "output", "datasets") for part in p.split("/")) else 1,
+                len(p)
+            ))
             path = matches[0]
-            urls.append((f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{path}", f"GitHub:{path}"))
+            raw_url = f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{path}"
+            frame, err = _try_read_csv(raw_url, f"GitHub:{path}")
+            if not frame.empty:
+                norm, norm_err = _normalize_to_standard_schema(frame, f"GitHub:{path}")
+                if not norm.empty:
+                    return norm, f"✅ GitHub:{path}", ""
+                errors.append(norm_err)
+            else:
+                errors.append(err)
         else:
-            errors.append(f"Không tìm thấy {GITHUB_DATA_FILENAME} trong repository {GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}")
+            errors.append(f"Không tìm thấy {GITHUB_DATA_FILENAME} trong repo {GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}")
     except Exception as exc:
         errors.append(f"GitHub API: {exc}")
 
-    # Local file is only an offline emergency source, after GitHub sources.
+    # ==================== ƯU TIÊN 4: Local fallback finex_financial_data.csv ====================
     local_names = (GITHUB_DATA_FILENAME, "finex_financial_data.csv")
     for name in dict.fromkeys(local_names):
-        local = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+        local = os.path.join(script_dir, name)
         if os.path.isfile(local):
-            urls.append((local, f"Local fallback:{name}"))
+            frame, err = _try_read_csv(local, f"Local-fallback:{name}")
+            if not frame.empty:
+                norm, norm_err = _normalize_to_standard_schema(frame, f"Local-fallback:{name}")
+                if not norm.empty:
+                    return norm, f"✅ Local fallback: {name}", ""
+                errors.append(norm_err)
+            else:
+                errors.append(err)
 
-    for source, label in urls:
-        try:
-            raw = fetch(source) if source.startswith(("http://", "https://")) else open(source, "rb").read()
-            frame = pd.read_csv(io.BytesIO(raw), low_memory=False, encoding="utf-8-sig")
-            required = {"Mã chứng khoán", "Loại báo cáo", "Năm", "Chỉ tiêu tiếng Việt", "Giá trị"}
-            if not required.issubset(frame.columns):
-                errors.append(f"{label}: thiếu cột bắt buộc {sorted(required - set(frame.columns))}")
-                continue
-            frame["Mã chứng khoán"] = frame["Mã chứng khoán"].astype(str).str.upper().str.strip()
-            frame["Năm"] = pd.to_numeric(frame["Năm"], errors="coerce")
-            frame["Giá trị"] = pd.to_numeric(frame["Giá trị"], errors="coerce")
-            frame = frame.dropna(subset=["Mã chứng khoán", "Năm", "Giá trị"])
-            frame = frame[frame["Mã chứng khoán"].str.fullmatch(r"[A-Z0-9]{3,5}", na=False)]
-            if frame.empty:
-                errors.append(f"{label}: không có dòng dữ liệu hợp lệ")
-                continue
-            return frame, label, ""
-        except Exception as exc:
-            errors.append(f"{label}: {exc}")
-    return pd.DataFrame(), "Không có nguồn CSV scraper hợp lệ", "; ".join(errors)
+    return pd.DataFrame(), "❌ Không có nguồn CSV hợp lệ", "; ".join(errors)
+
 
 def _norm_indicator(value):
     import unicodedata
     value = unicodedata.normalize("NFKD", str(value or "").lower())
     return "".join(ch for ch in value if not unicodedata.combining(ch)).replace("đ", "d")
+
 
 def _build_data_from_scraper(frame):
     """Map actual scraped report indicators to terminal schema; absent fields stay 0/N/A."""
@@ -458,20 +616,26 @@ def _build_data_from_scraper(frame):
         years = sorted(group["Năm"].dropna().astype(int).unique())
         latest_year = years[-1] if years else datetime.now().year
         latest = group[group["Năm"] == latest_year]
-        data = _make_fin_data(industry=str(group["Tên ngành"].dropna().iloc[0]) if "Tên ngành" in group and group["Tên ngành"].notna().any() else "Chưa phân loại")
+        data = _make_fin_data(
+            industry=str(group["Tên ngành"].dropna().iloc[0])
+            if "Tên ngành" in group and group["Tên ngành"].notna().any()
+            else "Chưa phân loại"
+        )
         data["source"] = "scraper_csv"
         data["source_year"] = latest_year
         for field, names in aliases.items():
-            matched = latest[normalized.loc[latest.index].apply(lambda x: any(_norm_indicator(n) in x for n in names))]
+            matched = latest[normalized.loc[latest.index].apply(
+                lambda x: any(_norm_indicator(n) in x for n in names)
+            )]
             if matched.empty:
                 continue
             row = matched.iloc[-1]
             value = float(row["Giá trị"])
-            # Financial statements are generally VND; convert to billions for fields displayed as tỷ.
-            if field in ("total_assets_30062026", "equity", "lnst_2025", "lntt_6t2026", "market_cap", "net_income", "revenue", "operating_cash_flow", "capex") and abs(value) >= 1e9:
+            if field in ("total_assets_30062026", "equity", "lnst_2025", "lntt_6t2026",
+                         "market_cap", "net_income", "revenue",
+                         "operating_cash_flow", "capex") and abs(value) >= 1e9:
                 value /= 1e9
             data[field] = value
-        # derive ratios only when required raw values exist in source; never fabricate missing inputs.
         if data.get("price", 0) > 0 and data.get("eps_ttm", 0) > 0:
             data["pe_ttm"] = data["price"] / data["eps_ttm"]
         if data.get("price", 0) > 0 and data.get("bvps", 0) > 0:
@@ -481,19 +645,28 @@ def _build_data_from_scraper(frame):
         result[ticker] = data
     return result
 
-_FINEX_LONG_DF, _FINEX_DATA_SOURCE, _FINEX_DATA_ERROR = _load_scraper_long_csv()
+
+# === GỌI LOADER MỚI v3 ===
+_FINEX_LONG_DF, _FINEX_DATA_SOURCE, _FINEX_DATA_ERROR = _load_financial_data_source()
 _SCRAPED_FINANCIAL_DATA = _build_data_from_scraper(_FINEX_LONG_DF)
-# The scraped dataset is the only active universe. No prefilled demo ticker list.
+
 FINANCIAL_DATA_2026 = _SCRAPED_FINANCIAL_DATA
-COMPANY_INFO = {ticker: {"name": ticker, "exchange": "Chưa xác định"} for ticker in FINANCIAL_DATA_2026}
+COMPANY_INFO = {ticker: {"name": ticker, "exchange": "Chưa xác định"}
+                for ticker in FINANCIAL_DATA_2026}
 ALL_TICKERS = sorted(FINANCIAL_DATA_2026.keys())
 EXPECTED_SOURCE_TICKERS = 102
 _FINEX_TICKER_COUNT_OK = len(ALL_TICKERS) == EXPECTED_SOURCE_TICKERS
+
 
 def get_financial_data(ticker):
     """Return only scraper CSV values; never enrich with demo/snapshot fallback."""
     key = str(ticker or "").upper().strip()
     return dict(FINANCIAL_DATA_2026.get(key, {}) or {})
+
+
+# ============================================================================
+# (Phần còn lại giữ NGUYÊN 100% code gốc)
+# ============================================================================
 
 def _capital_scenarios(market_price, cash_per_share, tax_rate=0):
     if market_price <= 0:
@@ -509,6 +682,7 @@ def _capital_scenarios(market_price, cash_per_share, tax_rate=0):
             "Thuế TNCN (VNĐ)": divs["tax"], "Cổ tức sau thuế (VNĐ)": divs["after_tax"],
         })
     return pd.DataFrame(rows)
+
 
 def _stock_scenarios(shares):
     if shares <= 0:
@@ -533,278 +707,257 @@ VNINDEX_MILESTONES = [
 # ============================================================================
 def inject_css():
     st.markdown("""
-    <style>
-        html, body, [class*="css"] {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
-            font-feature-settings: "tnum" 1;
-        }
-        .stApp {
-            background: radial-gradient(ellipse at top left, rgba(56,189,248,.13) 0%, transparent 45%),
-                        radial-gradient(ellipse at top right, rgba(250,204,21,.10) 0%, transparent 45%),
-                        linear-gradient(180deg, #101827 0%, #111c2e 50%, #0f172a 100%) !important;
-            color: #e2e8f0 !important;
-        }
-        .main .block-container { padding-top: 1.2rem; max-width: 1560px; }
-        h1 { color: #7dd3fc !important; font-weight: 800 !important; font-size: 1.85em !important; }
-        h2 { color: #bae6fd !important; border-bottom: 1px solid #334155;
-             padding-bottom: 8px; font-weight: 700 !important; }
-        h3 { color: #bfdbfe !important; font-weight: 700 !important; font-size: 1.22em !important; }
-        h4, h5, h6 { color: #dbeafe !important; font-weight: 700 !important; }
-        .stMarkdown, .stMarkdown p, .stMarkdown span, p, label { color: #e2e8f0 !important; }
-        .stCaption, [data-testid="stCaptionContainer"] { color: #cbd5e1 !important; }
-        [data-baseweb="select"] > div, [data-baseweb="input"] > div,
-        [data-testid="stNumberInput"] input, [data-testid="stTextInput"] input {
-            background-color: #172338 !important; color: #f8fafc !important;
-            border-color: #64748b !important;
-        }
-        .stButton > button, [data-testid="stDownloadButton"] > button {
-            border-radius: 9px !important; border: 1px solid #64748b !important;
-            font-weight: 650 !important;
-        }
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg,#0ea5e9,#2563eb) !important;
-            color: #ffffff !important; border: 0 !important;
-        }
-
-        [data-testid="stMetric"] {
-            background: linear-gradient(145deg, #24344d 0%, #172338 100%);
-            border: 1px solid #475569; border-left: 3px solid #FACC15;
-            border-radius: 10px; padding: 14px 16px;
-            box-shadow: 0 2px 10px rgba(0,0,0,.45);
-            transition: all .2s ease;
-        }
-        [data-testid="stMetric"]:hover {
-            border-left-color: #F5D97A;
-            box-shadow: 0 4px 16px rgba(212,175,55,.25);
-            transform: translateY(-1px);
-        }
-        [data-testid="stMetricLabel"] {
-            color: #94a3b8 !important; font-size: .82em !important;
-            text-transform: uppercase; letter-spacing: .6px; font-weight: 600 !important;
-        }
-        [data-testid="stMetricValue"] {
-            color: #F5D97A !important; font-size: 1.65em !important;
-            font-weight: 700 !important; font-variant-numeric: tabular-nums;
-        }
-
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 4px; background: #0a1220; padding: 6px;
-            border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 12px;
-        }
-        .stTabs [data-baseweb="tab"] {
-            height: 42px; background: transparent; border-radius: 8px;
-            color: #94a3b8 !important; font-weight: 600 !important;
-            font-size: 14px !important; padding: 0 18px !important;
-        }
-        .stTabs [data-baseweb="tab"]:hover { background: #1a2538; color: #f3f4f6 !important; }
-        .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
-            color: #F5D97A !important; border-bottom: 2px solid #D4AF37 !important;
-        }
-
-        .stButton > button {
-            background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
-            color: #e2e8f0 !important; border: 1px solid #2a3a5c !important;
-            border-radius: 8px !important; font-weight: 600 !important;
-            padding: 8px 16px !important; transition: all .18s ease !important;
-        }
-        .stButton > button:hover {
-            background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
-            border-color: #D4AF37 !important; color: #F5D97A !important;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 14px rgba(212,175,55,.25);
-        }
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
-            color: #0a0f19 !important; border: none !important; font-weight: 700 !important;
-        }
-
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #050914 0%, #0a0f19 100%) !important;
-            border-right: 1px solid #1f2937;
-        }
-        section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
-        section[data-testid="stSidebar"] h1,
-        section[data-testid="stSidebar"] h2,
-        section[data-testid="stSidebar"] h3 { color: #93c5fd !important; }
-
-        div[data-baseweb="select"] { background-color: #1a2538 !important; }
-        div[data-baseweb="select"] > div,
-        div[data-baseweb="select"] > div > div {
-            background-color: #1a2538 !important; color: #ffffff !important;
-            border: 1px solid #374151 !important; border-radius: 8px !important;
-        }
-        div[data-baseweb="select"] span,
-        div[data-baseweb="select"] input,
-        div[data-baseweb="select"] div[role="button"] {
-            color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;
-        }
-        div[data-baseweb="select"] svg { fill: #D4AF37 !important; }
-        [data-testid="stSelectbox"] label { color: #cbd5e1 !important; font-weight: 600 !important; }
-
-        [data-baseweb="popover"] { background-color: #1a2538 !important; }
-        [data-baseweb="popover"] *, [data-baseweb="menu"], [role="listbox"] {
-            background-color: #1a2538 !important; color: #f3f4f6 !important;
-        }
-        [role="option"] {
-            background-color: #1a2538 !important; color: #e2e8f0 !important;
-            padding: 8px 12px !important;
-        }
-        [role="option"]:hover, [aria-selected="true"] {
-            background-color: #1e3a5f !important; color: #F5D97A !important;
-        }
-
-        section[data-testid="stSidebar"] .stRadio > div { gap: 4px; }
-        section[data-testid="stSidebar"] .stRadio label {
-            background: #0a1220 !important; border: 1px solid #1f2937 !important;
-            border-radius: 8px !important; padding: 8px 12px !important;
-            margin: 2px 0 !important; transition: all .15s ease !important;
-        }
-        section[data-testid="stSidebar"] .stRadio label:hover {
-            background: #1a2538 !important; border-color: #D4AF37 !important;
-        }
-
-        input, textarea,
-        [data-testid="stTextInput"] input,
-        [data-testid="stNumberInput"] input {
-            background-color: #1a2538 !important; color: #ffffff !important;
-            border: 1px solid #374151 !important; border-radius: 8px !important;
-        }
-
-        [data-testid="stExpander"] {
-            background-color: #0a1220 !important; border: 1px solid #1f2937 !important;
-            border-radius: 10px !important;
-        }
-        [data-testid="stExpander"] summary {
-            background-color: #1a2538 !important; color: #f3f4f6 !important;
-            font-weight: 600 !important;
-        }
-
-        .dataframe { background-color: #0a1220 !important; border-radius: 8px; }
-        .dataframe thead th {
-            background: #16223a !important; color: #F5D97A !important;
-            font-weight: 700 !important; text-transform: uppercase;
-            font-size: 12px !important;
-        }
-        .dataframe td, .dataframe th {
-            color: #e2e8f0 !important; border-bottom: 1px solid #1f2937 !important;
-        }
-
-        .terminal-header {
-            background: linear-gradient(135deg, #0a0f19 0%, #1a2538 100%);
-            border: 1px solid #1f2937; border-top: 3px solid #D4AF37;
-            border-radius: 12px; padding: 18px 24px; margin-bottom: 16px;
-            box-shadow: 0 4px 16px rgba(0,0,0,.5);
-        }
-        .terminal-header h1 {
-            background: linear-gradient(90deg, #F5D97A 0%, #60a5fa 100%);
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            background-clip: text; margin: 0;
-        }
-
-        .glass-card {
-            background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
-            border: 1px solid #334155; border-radius: 12px;
-            padding: 16px; margin: 8px 0;
-            box-shadow: 0 3px 12px rgba(0,0,0,.4); color: #e2e8f0;
-        }
-        .hybrid-card {
-            background: linear-gradient(145deg, #111827 0%, #16223a 100%);
-            border: 1px solid #2a3a5c; border-left: 4px solid #D4AF37;
-            border-radius: 12px; padding: 18px 20px; margin: 10px 0;
-            color: #e2e8f0;
-        }
-
-        .recommend-badge { padding: 5px 14px; border-radius: 14px;
-            font-weight: 700; font-size: .9em; }
-        .rec-buy  { background: #0a2e1a; color: #22c55e; border: 1px solid #22c55e; }
-        .rec-hold { background: #3a2a0a; color: #f59e0b; border: 1px solid #f59e0b; }
-        .rec-sell { background: #2a0a0a; color: #ef4444; border: 1px solid #ef4444; }
-
-        .broker-container {
-            background: linear-gradient(135deg, #0d1b2e 0%, #111827 100%);
-            border: 2px solid #D4AF37; border-radius: 14px;
-            padding: 18px 22px; margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(212,175,55,.15);
-        }
-        .broker-container .broker-title {
-            color: #F5D97A !important; -webkit-text-fill-color: #F5D97A !important;
-            font-size: 15px; font-weight: 800; margin-bottom: 14px;
-            letter-spacing: .5px; text-transform: uppercase;
-        }
-        .broker-container .broker-note {
-            color: #cbd5e1 !important; -webkit-text-fill-color: #cbd5e1 !important;
-            font-size: 12.5px; margin-top: 12px;
-        }
-        .broker-container [data-testid="stButton"] button {
-            background: linear-gradient(135deg, #111827 0%, #0a0f19 100%) !important;
-            color: #F5D97A !important; border: 2px solid #D4AF37 !important;
-            font-weight: 700 !important;
-        }
-        .broker-container [data-testid="stButton"] button:hover {
-            background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
-            color: #0a0f19 !important;
-        }
-
-        .cta-banner {
-            background: linear-gradient(135deg, #D4AF37 0%, #B8912A 50%, #D4AF37 100%);
-            border-radius: 16px; padding: 22px 28px; margin: 20px 0;
-            box-shadow: 0 8px 28px rgba(212,175,55,.35);
-        }
-
-        .footer-hero {
-            background: linear-gradient(135deg, #0a0f19 0%, #1a2538 100%);
-            border: 1px solid #D4AF37; border-radius: 16px;
-            padding: 28px 32px; margin: 30px 0 20px 0;
-            text-align: center;
-        }
-        .footer-section-title {
-            color: #F5D97A !important; font-size: 1.1em; font-weight: 800;
-            margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1.2px;
-        }
-        .footer-divider {
-            height: 1px; background: linear-gradient(90deg, transparent, #D4AF37, transparent);
-            margin: 24px 0;
-        }
-
-        .vip-card {
-            background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
-            border: 1px solid #334155; border-radius: 16px;
-            padding: 20px 16px; height: 100%;
-            transition: all .25s ease;
-        }
-        .vip-card:hover {
-            border-color: #D4AF37;
-            box-shadow: 0 8px 24px rgba(212,175,55,.25);
-            transform: translateY(-4px);
-        }
-        .vip-card.featured {
-            border: 2px solid #D4AF37;
-            background: linear-gradient(145deg, #1f2f47 0%, #111827 100%);
-        }
-
-        ::-webkit-scrollbar { width: 10px; height: 10px; }
-        ::-webkit-scrollbar-track { background: #050914; }
-        ::-webkit-scrollbar-thumb { background: #374151; border-radius: 6px; }
-        ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
-
-        .stLinkButton a {
-            background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
-            color: #F5D97A !important; border: 1px solid #D4AF37 !important;
-            border-radius: 8px !important; font-weight: 600 !important;
-        }
-        .stLinkButton a:hover {
-            background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
-            color: #0a0f19 !important;
-        }
-
-        [data-testid="stAlert"] {
-            background-color: #1a2538 !important; border-left-width: 4px !important;
-        }
-        [data-testid="stAlert"] * { color: #e2e8f0 !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
+<style>
+html, body, [class*="css"] {
+font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+font-feature-settings: "tnum" 1;
+}
+.stApp {
+background: radial-gradient(ellipse at top left, rgba(56,189,248,.13) 0%, transparent 45%),
+radial-gradient(ellipse at top right, rgba(250,204,21,.10) 0%, transparent 45%),
+linear-gradient(180deg, #101827 0%, #111c2e 50%, #0f172a 100%) !important;
+color: #e2e8f0 !important;
+}
+.main .block-container { padding-top: 1.2rem; max-width: 1560px; }
+h1 { color: #7dd3fc !important; font-weight: 800 !important; font-size: 1.85em !important; }
+h2 { color: #bae6fd !important; border-bottom: 1px solid #334155;
+padding-bottom: 8px; font-weight: 700 !important; }
+h3 { color: #bfdbfe !important; font-weight: 700 !important; font-size: 1.22em !important; }
+h4, h5, h6 { color: #dbeafe !important; font-weight: 700 !important; }
+.stMarkdown, .stMarkdown p, .stMarkdown span, p, label { color: #e2e8f0 !important; }
+.stCaption, [data-testid="stCaptionContainer"] { color: #cbd5e1 !important; }
+[data-baseweb="select"] > div, [data-baseweb="input"] > div,
+[data-testid="stNumberInput"] input, [data-testid="stTextInput"] input {
+background-color: #172338 !important; color: #f8fafc !important;
+border-color: #64748b !important;
+}
+.stButton > button, [data-testid="stDownloadButton"] > button {
+border-radius: 9px !important; border: 1px solid #64748b !important;
+font-weight: 650 !important;
+}
+.stButton > button[kind="primary"] {
+background: linear-gradient(135deg,#0ea5e9,#2563eb) !important;
+color: #ffffff !important; border: 0 !important;
+}
+[data-testid="stMetric"] {
+background: linear-gradient(145deg, #24344d 0%, #172338 100%);
+border: 1px solid #475569; border-left: 3px solid #FACC15;
+border-radius: 10px; padding: 14px 16px;
+box-shadow: 0 2px 10px rgba(0,0,0,.45);
+transition: all .2s ease;
+}
+[data-testid="stMetric"]:hover {
+border-left-color: #F5D97A;
+box-shadow: 0 4px 16px rgba(212,175,55,.25);
+transform: translateY(-1px);
+}
+[data-testid="stMetricLabel"] {
+color: #94a3b8 !important; font-size: .82em !important;
+text-transform: uppercase; letter-spacing: .6px; font-weight: 600 !important;
+}
+[data-testid="stMetricValue"] {
+color: #F5D97A !important; font-size: 1.65em !important;
+font-weight: 700 !important; font-variant-numeric: tabular-nums;
+}
+.stTabs [data-baseweb="tab-list"] {
+gap: 4px; background: #0a1220; padding: 6px;
+border-radius: 12px; border: 1px solid #1f2937; margin-bottom: 12px;
+}
+.stTabs [data-baseweb="tab"] {
+height: 42px; background: transparent; border-radius: 8px;
+color: #94a3b8 !important; font-weight: 600 !important;
+font-size: 14px !important; padding: 0 18px !important;
+}
+.stTabs [data-baseweb="tab"]:hover { background: #1a2538; color: #f3f4f6 !important; }
+.stTabs [aria-selected="true"] {
+background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
+color: #F5D97A !important; border-bottom: 2px solid #D4AF37 !important;
+}
+.stButton > button {
+background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
+color: #e2e8f0 !important; border: 1px solid #2a3a5c !important;
+border-radius: 8px !important; font-weight: 600 !important;
+padding: 8px 16px !important; transition: all .18s ease !important;
+}
+.stButton > button:hover {
+background: linear-gradient(135deg, #1e3a5f 0%, #16223a 100%) !important;
+border-color: #D4AF37 !important; color: #F5D97A !important;
+transform: translateY(-1px);
+box-shadow: 0 4px 14px rgba(212,175,55,.25);
+}
+.stButton > button[kind="primary"] {
+background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
+color: #0a0f19 !important; border: none !important; font-weight: 700 !important;
+}
+section[data-testid="stSidebar"] {
+background: linear-gradient(180deg, #050914 0%, #0a0f19 100%) !important;
+border-right: 1px solid #1f2937;
+}
+section[data-testid="stSidebar"] * { color: #e2e8f0 !important; }
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 { color: #93c5fd !important; }
+div[data-baseweb="select"] { background-color: #1a2538 !important; }
+div[data-baseweb="select"] > div,
+div[data-baseweb="select"] > div > div {
+background-color: #1a2538 !important; color: #ffffff !important;
+border: 1px solid #374151 !important; border-radius: 8px !important;
+}
+div[data-baseweb="select"] span,
+div[data-baseweb="select"] input,
+div[data-baseweb="select"] div[role="button"] {
+color: #ffffff !important; -webkit-text-fill-color: #ffffff !important;
+}
+div[data-baseweb="select"] svg { fill: #D4AF37 !important; }
+[data-testid="stSelectbox"] label { color: #cbd5e1 !important; font-weight: 600 !important; }
+[data-baseweb="popover"] { background-color: #1a2538 !important; }
+[data-baseweb="popover"] *, [data-baseweb="menu"], [role="listbox"] {
+background-color: #1a2538 !important; color: #f3f4f6 !important;
+}
+[role="option"] {
+background-color: #1a2538 !important; color: #e2e8f0 !important;
+padding: 8px 12px !important;
+}
+[role="option"]:hover, [aria-selected="true"] {
+background-color: #1e3a5f !important; color: #F5D97A !important;
+}
+section[data-testid="stSidebar"] .stRadio > div { gap: 4px; }
+section[data-testid="stSidebar"] .stRadio label {
+background: #0a1220 !important; border: 1px solid #1f2937 !important;
+border-radius: 8px !important; padding: 8px 12px !important;
+margin: 2px 0 !important; transition: all .15s ease !important;
+}
+section[data-testid="stSidebar"] .stRadio label:hover {
+background: #1a2538 !important; border-color: #D4AF37 !important;
+}
+input, textarea,
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input {
+background-color: #1a2538 !important; color: #ffffff !important;
+border: 1px solid #374151 !important; border-radius: 8px !important;
+}
+[data-testid="stExpander"] {
+background-color: #0a1220 !important; border: 1px solid #1f2937 !important;
+border-radius: 10px !important;
+}
+[data-testid="stExpander"] summary {
+background-color: #1a2538 !important; color: #f3f4f6 !important;
+font-weight: 600 !important;
+}
+.dataframe { background-color: #0a1220 !important; border-radius: 8px; }
+.dataframe thead th {
+background: #16223a !important; color: #F5D97A !important;
+font-weight: 700 !important; text-transform: uppercase;
+font-size: 12px !important;
+}
+.dataframe td, .dataframe th {
+color: #e2e8f0 !important; border-bottom: 1px solid #1f2937 !important;
+}
+.terminal-header {
+background: linear-gradient(135deg, #0a0f19 0%, #1a2538 100%);
+border: 1px solid #1f2937; border-top: 3px solid #D4AF37;
+border-radius: 12px; padding: 18px 24px; margin-bottom: 16px;
+box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+.terminal-header h1 {
+background: linear-gradient(90deg, #F5D97A 0%, #60a5fa 100%);
+-webkit-background-clip: text; -webkit-text-fill-color: transparent;
+background-clip: text; margin: 0;
+}
+.glass-card {
+background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
+border: 1px solid #334155; border-radius: 12px;
+padding: 16px; margin: 8px 0;
+box-shadow: 0 3px 12px rgba(0,0,0,.4); color: #e2e8f0;
+}
+.hybrid-card {
+background: linear-gradient(145deg, #111827 0%, #16223a 100%);
+border: 1px solid #2a3a5c; border-left: 4px solid #D4AF37;
+border-radius: 12px; padding: 18px 20px; margin: 10px 0;
+color: #e2e8f0;
+}
+.recommend-badge { padding: 5px 14px; border-radius: 14px;
+font-weight: 700; font-size: .9em; }
+.rec-buy  { background: #0a2e1a; color: #22c55e; border: 1px solid #22c55e; }
+.rec-hold { background: #3a2a0a; color: #f59e0b; border: 1px solid #f59e0b; }
+.rec-sell { background: #2a0a0a; color: #ef4444; border: 1px solid #ef4444; }
+.broker-container {
+background: linear-gradient(135deg, #0d1b2e 0%, #111827 100%);
+border: 2px solid #D4AF37; border-radius: 14px;
+padding: 18px 22px; margin-bottom: 16px;
+box-shadow: 0 8px 24px rgba(212,175,55,.15);
+}
+.broker-container .broker-title {
+color: #F5D97A !important; -webkit-text-fill-color: #F5D97A !important;
+font-size: 15px; font-weight: 800; margin-bottom: 14px;
+letter-spacing: .5px; text-transform: uppercase;
+}
+.broker-container .broker-note {
+color: #cbd5e1 !important; -webkit-text-fill-color: #cbd5e1 !important;
+font-size: 12.5px; margin-top: 12px;
+}
+.broker-container [data-testid="stButton"] button {
+background: linear-gradient(135deg, #111827 0%, #0a0f19 100%) !important;
+color: #F5D97A !important; border: 2px solid #D4AF37 !important;
+font-weight: 700 !important;
+}
+.broker-container [data-testid="stButton"] button:hover {
+background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
+color: #0a0f19 !important;
+}
+.cta-banner {
+background: linear-gradient(135deg, #D4AF37 0%, #B8912A 50%, #D4AF37 100%);
+border-radius: 16px; padding: 22px 28px; margin: 20px 0;
+box-shadow: 0 8px 28px rgba(212,175,55,.35);
+}
+.footer-hero {
+background: linear-gradient(135deg, #0a0f19 0%, #1a2538 100%);
+border: 1px solid #D4AF37; border-radius: 16px;
+padding: 28px 32px; margin: 30px 0 20px 0;
+text-align: center;
+}
+.footer-section-title {
+color: #F5D97A !important; font-size: 1.1em; font-weight: 800;
+margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1.2px;
+}
+.footer-divider {
+height: 1px; background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+margin: 24px 0;
+}
+.vip-card {
+background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
+border: 1px solid #334155; border-radius: 16px;
+padding: 20px 16px; height: 100%;
+transition: all .25s ease;
+}
+.vip-card:hover {
+border-color: #D4AF37;
+box-shadow: 0 8px 24px rgba(212,175,55,.25);
+transform: translateY(-4px);
+}
+.vip-card.featured {
+border: 2px solid #D4AF37;
+background: linear-gradient(145deg, #1f2f47 0%, #111827 100%);
+}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #050914; }
+::-webkit-scrollbar-thumb { background: #374151; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+.stLinkButton a {
+background: linear-gradient(135deg, #1a2538 0%, #111c2e 100%) !important;
+color: #F5D97A !important; border: 1px solid #D4AF37 !important;
+border-radius: 8px !important; font-weight: 600 !important;
+}
+.stLinkButton a:hover {
+background: linear-gradient(135deg, #D4AF37 0%, #B8912A 100%) !important;
+color: #0a0f19 !important;
+}
+[data-testid="stAlert"] {
+background-color: #1a2538 !important; border-left-width: 4px !important;
+}
+[data-testid="stAlert"] * { color: #e2e8f0 !important; }
+</style>
+""", unsafe_allow_html=True)
 
 # ============================================================================
 # 4. PROFILER
@@ -832,7 +985,6 @@ def render_profiler_panel():
                 st.caption(f"{icon} {name}: {ms:.0f}ms")
             if st.button("🔄 Reset", key="prof_reset", use_container_width=True):
                 _PROFILE.clear(); st.rerun()
-
 
 # ============================================================================
 # 5. HELPERS
@@ -868,7 +1020,6 @@ def _stock_dividend(shares, ratio):
         return {"additional_shares": 0, "total_after": shares}
     add = int(shares * ratio / 100)
     return {"additional_shares": add, "total_after": shares + add}
-
 
 # ============================================================================
 # 6. VALUATION CORE
@@ -940,7 +1091,6 @@ def predict_risk_ensemble(roe, roa, margin, de):
 def predict_eps_ensemble(roe, roa, margin, de):
     return 3000.0 * (1 + (roe or 10) / 200.0)
 
-
 # ============================================================================
 # 7. VNINDEX HISTORY
 # ============================================================================
@@ -978,51 +1128,42 @@ def generate_vnindex_history():
     df.loc[df.index[-1], "l"] = 1758.40
     return df
 
-
 def render_dynamic_chart():
     """VNINDEX 26 năm — đầy đủ như code gốc."""
     st.markdown("### 📈 VN-INDEX – 26 NĂM LỊCH SỬ (2000 – NAY)")
     st.caption("Biểu đồ nến toàn cảnh · Milestone được đánh dấu · Đơn vị: điểm")
-
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("VN-Index hiện tại", "1,774.15", "+13.52 (+0.77%)")
     c2.metric("VN30 hiện tại", "1,907.09", "+14.11 (+0.75%)")
     c3.metric("Thanh khoản VNINDEX", "16.9K tỷ")
     c4.metric("Thanh khoản VN30", "9.2K tỷ")
-
     df = generate_vnindex_history()
-
     col_a, col_b = st.columns([1, 5])
     with col_a: show_ma = st.toggle("📈 MA", value=True, key="hose_ma")
     with col_b: show_vol = st.toggle("📊 Volume", value=True, key="hose_vol")
-
     if show_vol:
         fig = make_subplots(rows=2, cols=1, shared_xaxes=True,
                             vertical_spacing=0.03, row_heights=[0.75, 0.25])
     else:
         fig = make_subplots(rows=1, cols=1)
-
     fig.add_trace(go.Candlestick(
         x=df["time"], open=df["o"], high=df["h"], low=df["l"], close=df["c"],
         name="VN-Index",
         increasing_line_color="#26A69A", increasing_fillcolor="#26A69A",
         decreasing_line_color="#EF5350", decreasing_fillcolor="#EF5350",
         whiskerwidth=0.3, line=dict(width=1)), row=1, col=1)
-
     if show_ma:
         for window, color in [(20, "#F59E0B"), (50, "#3B82F6"), (200, "#DC2626")]:
             ma = df["c"].rolling(window=window, min_periods=1).mean()
             fig.add_trace(go.Scatter(x=df["time"], y=ma, name=f"MA{window}",
                                      line=dict(color=color, width=1.5), opacity=0.9),
                           row=1, col=1)
-
     if show_vol:
         colors = ["#26A69A" if df["c"].iloc[i] >= df["o"].iloc[i] else "#EF5350"
                   for i in range(len(df))]
         fig.add_trace(go.Bar(x=df["time"], y=df["v"], name="Volume",
                              marker_color=colors, marker_line_width=0,
                              opacity=0.75, showlegend=False), row=2, col=1)
-
     milestones = [
         ("2001-06-30", "Đỉnh 571", "#26A69A"),
         ("2003-10-31", "Đáy 130", "#EF5350"),
@@ -1051,7 +1192,6 @@ def render_dynamic_chart():
                                        bordercolor=color, borderwidth=1, borderpad=2,
                                        row=1, col=1)
         except Exception: pass
-
     high, low = float(df["h"].max()), float(df["l"].min())
     fig.add_hline(y=high, line=dict(color="#26A69A", width=1, dash="dot"),
                   annotation_text=f"Đỉnh {high:,.0f}",
@@ -1059,7 +1199,6 @@ def render_dynamic_chart():
     fig.add_hline(y=low, line=dict(color="#EF5350", width=1, dash="dot"),
                   annotation_text=f"Đáy {low:,.0f}",
                   annotation_position="bottom right", row=1, col=1)
-
     fig.update_layout(
         template="plotly_dark", paper_bgcolor="#050914", plot_bgcolor="#0a1220",
         height=750, font=dict(color="#e2e8f0", size=11), hovermode="x unified",
@@ -1083,7 +1222,6 @@ def render_dynamic_chart():
     st.plotly_chart(fig, use_container_width=True,
                     config={"displayModeBar": True, "displaylogo": False, "scrollZoom": True})
 
-
 # ============================================================================
 # 8. DIALOGS
 # ============================================================================
@@ -1094,19 +1232,19 @@ def partner_detail_dialog():
         st.error("Không tìm thấy thông tin đối tác."); return
     p = PARTNERS[partner_id]
     st.markdown("""<style>
-    div[data-testid="stDialog"] { background: #0a1220 !important; color: #e2e8f0 !important; }
-    div[data-testid="stDialog"] * { color: #e2e8f0 !important; }
-    div[data-testid="stDialog"] h1, div[data-testid="stDialog"] h2,
-    div[data-testid="stDialog"] h3 { color: #F5D97A !important; }
-    .partner-card { background: #1a2538; border-radius: 12px; padding: 16px 20px;
-    margin: 12px 0; color: #e2e8f0; border: 1px solid #2a3a5c; }
-    .partner-code-box { background: #050914; border-radius: 8px; padding: 12px 16px;
-    display: flex; justify-content: space-between; align-items: center;
-    margin: 8px 0; border: 1px solid #D4AF37; }
-    .partner-code { color: #F5D97A; font-family: monospace; font-size: 1.2em; font-weight: 700; }
-    .partner-section-title { color: #D4AF37 !important; font-weight: 700 !important;
-    font-size: 1.1em; margin-top: 16px; margin-bottom: 4px; }
-    </style>""", unsafe_allow_html=True)
+div[data-testid="stDialog"] { background: #0a1220 !important; color: #e2e8f0 !important; }
+div[data-testid="stDialog"] * { color: #e2e8f0 !important; }
+div[data-testid="stDialog"] h1, div[data-testid="stDialog"] h2,
+div[data-testid="stDialog"] h3 { color: #F5D97A !important; }
+.partner-card { background: #1a2538; border-radius: 12px; padding: 16px 20px;
+margin: 12px 0; color: #e2e8f0; border: 1px solid #2a3a5c; }
+.partner-code-box { background: #050914; border-radius: 8px; padding: 12px 16px;
+display: flex; justify-content: space-between; align-items: center;
+margin: 8px 0; border: 1px solid #D4AF37; }
+.partner-code { color: #F5D97A; font-family: monospace; font-size: 1.2em; font-weight: 700; }
+.partner-section-title { color: #D4AF37 !important; font-weight: 700 !important;
+font-size: 1.1em; margin-top: 16px; margin-bottom: 4px; }
+</style>""", unsafe_allow_html=True)
     st.markdown(f"### {p['full_name']}")
     st.markdown("---")
     st.markdown('<div class="partner-section-title">💪 Thế mạnh</div>', unsafe_allow_html=True)
@@ -1116,14 +1254,13 @@ def partner_detail_dialog():
     st.markdown('<div class="partner-section-title">🔑 Mã giới thiệu</div>', unsafe_allow_html=True)
     st.markdown(
         f"""<div class="partner-code-box"><span class="partner-code">{p['referral_code']}</span>
-        <span style="color:#94a3b8;font-size:0.85em;">Sao chép thủ công</span></div>""",
+<span style="color:#94a3b8;font-size:0.85em;">Sao chép thủ công</span></div>""",
         unsafe_allow_html=True)
     if p["url"] and p["url"] != "#":
         st.link_button("🚀 Mở tài khoản ngay", url=p["url"],
                        use_container_width=True, type="primary")
     if st.button("Đóng", use_container_width=True):
         st.session_state.show_partner_dialog = False; st.rerun()
-
 
 @st.dialog("💎 CHỌN GÓI HỘI VIÊN FINEX", width="large")
 def vip_upgrade_dialog():
@@ -1141,15 +1278,15 @@ def vip_upgrade_dialog():
                 for f in pkg["features"]])
             st.markdown(
                 f"""<div style="background:#1a2538;border-radius:16px;padding:16px 12px;
-                border:1px solid #2a3a5c;min-height:100%;text-align:center;
-                border-top:3px solid {pkg['color']};">
-                <div style="margin-bottom:8px;">{badge_html}</div>
-                <div style="font-size:1em;font-weight:700;color:#e2e8f0;
-                min-height:2.5em;">{pkg['name']}</div>
-                <div style="font-size:1.35em;font-weight:700;color:{pkg['color']};
-                margin:8px 0;">{pkg['price']}</div>
-                <ul style="list-style:none;padding:0;margin:8px 0;
-                text-align:left;min-height:180px;">{features_html}</ul></div>""",
+border:1px solid #2a3a5c;min-height:100%;text-align:center;
+border-top:3px solid {pkg['color']};">
+<div style="margin-bottom:8px;">{badge_html}</div>
+<div style="font-size:1em;font-weight:700;color:#e2e8f0;
+min-height:2.5em;">{pkg['name']}</div>
+<div style="font-size:1.35em;font-weight:700;color:{pkg['color']};
+margin:8px 0;">{pkg['price']}</div>
+<ul style="list-style:none;padding:0;margin:8px 0;
+text-align:left;min-height:180px;">{features_html}</ul></div>""",
                 unsafe_allow_html=True)
             if pkg["id"] != "FREE":
                 if st.button("Chọn gói", use_container_width=True,
@@ -1161,23 +1298,21 @@ def vip_upgrade_dialog():
     if st.button("Đóng", use_container_width=True):
         st.session_state.show_vip_dialog = False; st.rerun()
 
-
 # ============================================================================
 # 9. COMPONENTS
 # ============================================================================
 def render_header():
     st.markdown(
         """<div class="terminal-header">
-        <h1>🏛️ FINEX VN TERMINAL</h1>
-        <p style="color:#94a3b8;margin-top:8px;font-size:0.95em;letter-spacing:0.3px;">
-        Hệ thống Phân tích & Định giá Doanh nghiệp chuẩn Định chế Tài chính</p></div>""",
+<h1>🏛️ FINEX VN TERMINAL</h1>
+<p style="color:#94a3b8;margin-top:8px;font-size:0.95em;letter-spacing:0.3px;">
+Hệ thống Phân tích & Định giá Doanh nghiệp chuẩn Định chế Tài chính</p></div>""",
         unsafe_allow_html=True)
-
 
 def render_partner_buttons():
     st.markdown(
         """<div class="broker-container">
-        <div class="broker-title">🔗 MỞ TÀI KHOẢN CHỨNG KHOÁN ĐỐI TÁC ĐỒNG HÀNH:</div>""",
+<div class="broker-title">🔗 MỞ TÀI KHOẢN CHỨNG KHOÁN ĐỐI TÁC ĐỒNG HÀNH:</div>""",
         unsafe_allow_html=True)
     cols = st.columns(len(PARTNERS))
     for i, (key, partner) in enumerate(PARTNERS.items()):
@@ -1190,9 +1325,8 @@ def render_partner_buttons():
                 st.rerun()
     st.markdown(
         """<div class="broker-note">💡 Nhấn vào nút để xem chi tiết và đăng ký
-        – hỗ trợ ưu đãi cho nhà đầu tư FINEX</div></div>""",
+– hỗ trợ ưu đãi cho nhà đầu tư FINEX</div></div>""",
         unsafe_allow_html=True)
-
 
 def render_ticker_info_card(ticker, fin_data):
     info = COMPANY_INFO.get(ticker, {})
@@ -1205,26 +1339,25 @@ def render_ticker_info_card(ticker, fin_data):
     roe = fin_data.get("roe_2025", 0)
     st.markdown(
         f"""<div class="glass-card" style="border-left:3px solid #D4AF37;">
-        <div style="color:#F5D97A;font-weight:800;font-size:1.15em;margin-bottom:4px;">
-        🏢 {ticker} · {name}</div>
-        <div style="color:#94a3b8;font-size:0.82em;margin-bottom:12px;">
-        {sector} · Sàn {exchange}</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.9em;">
-            <div style="color:#cbd5e1;">Giá: <strong style="color:#F5D97A;">{price:,.0f} đ</strong></div>
-            <div style="color:#cbd5e1;">P/E: <strong style="color:#22c55e;">{pe:.2f}</strong></div>
-            <div style="color:#cbd5e1;">P/B: <strong style="color:#22c55e;">{pb:.2f}</strong></div>
-            <div style="color:#cbd5e1;">ROE: <strong style="color:#F5D97A;">{roe:.1f}%</strong></div>
-        </div></div>""", unsafe_allow_html=True)
-
+<div style="color:#F5D97A;font-weight:800;font-size:1.15em;margin-bottom:4px;">
+🏢 {ticker} · {name}</div>
+<div style="color:#94a3b8;font-size:0.82em;margin-bottom:12px;">
+{sector} · Sàn {exchange}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:0.9em;">
+<div style="color:#cbd5e1;">Giá: <strong style="color:#F5D97A;">{price:,.0f} đ</strong></div>
+<div style="color:#cbd5e1;">P/E: <strong style="color:#22c55e;">{pe:.2f}</strong></div>
+<div style="color:#cbd5e1;">P/B: <strong style="color:#22c55e;">{pb:.2f}</strong></div>
+<div style="color:#cbd5e1;">ROE: <strong style="color:#F5D97A;">{roe:.1f}%</strong></div>
+</div></div>""", unsafe_allow_html=True)
 
 def render_market_snapshot_panel(ticker, fin_data):
     st.markdown(
         f"""<div style="background:linear-gradient(135deg,#0d1b2e 0%,#111827 100%);
-        border:1px solid #2a3a5c;border-top:3px solid #22c55e;
-        border-radius:12px;padding:14px 18px;margin:10px 0;
-        box-shadow:0 4px 16px rgba(34,197,94,.15);">
-        <div style="color:#22c55e;font-weight:800;font-size:1.05em;letter-spacing:1px;">
-        📡 DỮ LIỆU THỊ TRƯỜNG · {ticker}</div></div>""",
+border:1px solid #2a3a5c;border-top:3px solid #22c55e;
+border-radius:12px;padding:14px 18px;margin:10px 0;
+box-shadow:0 4px 16px rgba(34,197,94,.15);">
+<div style="color:#22c55e;font-weight:800;font-size:1.05em;letter-spacing:1px;">
+📡 DỮ LIỆU THỊ TRƯỜNG · {ticker}</div></div>""",
         unsafe_allow_html=True)
     c1, c2, c3, c4, c5 = st.columns(5)
     price = fin_data.get("price", 0)
@@ -1248,7 +1381,6 @@ def render_market_snapshot_panel(ticker, fin_data):
     c10.metric("📐 P/E · P/B",
                f"{fin_data.get('pe_ttm',0):.1f} · {fin_data.get('pb',0):.1f}")
 
-
 # ============================================================================
 # 10. BOTTOM SECTIONS
 # ============================================================================
@@ -1258,21 +1390,21 @@ def render_accuracy_section(ticker):
     c = st.columns(3)
     c[0].markdown(
         """<div class="glass-card" style="text-align:center;border-top:3px solid #22c55e;">
-        <div style="font-size:2em;font-weight:800;color:#22c55e;">99.2%</div>
-        <div style="color:#94a3b8;font-size:.88em;margin-top:6px;">Độ chính xác</div>
-        <div style="color:#64748b;font-size:.76em;">1.000+ Backtest</div></div>""",
+<div style="font-size:2em;font-weight:800;color:#22c55e;">99.2%</div>
+<div style="color:#94a3b8;font-size:.88em;margin-top:6px;">Độ chính xác</div>
+<div style="color:#64748b;font-size:.76em;">1.000+ Backtest</div></div>""",
         unsafe_allow_html=True)
     c[1].markdown(
         """<div class="glass-card" style="text-align:center;border-top:3px solid #60a5fa;">
-        <div style="font-size:2em;font-weight:800;color:#60a5fa;">&lt; 3.5%</div>
-        <div style="color:#94a3b8;font-size:.88em;margin-top:6px;">MAE</div>
-        <div style="color:#64748b;font-size:.76em;">Định giá vs thực tế</div></div>""",
+<div style="font-size:2em;font-weight:800;color:#60a5fa;">&lt; 3.5%</div>
+<div style="color:#94a3b8;font-size:.88em;margin-top:6px;">MAE</div>
+<div style="color:#64748b;font-size:.76em;">Định giá vs thực tế</div></div>""",
         unsafe_allow_html=True)
     c[2].markdown(
         """<div class="glass-card" style="text-align:center;border-top:3px solid #f59e0b;">
-        <div style="font-size:2em;font-weight:800;color:#f59e0b;">✅ Real-time</div>
-        <div style="color:#94a3b8;font-size:.88em;margin-top:6px;">Trạng thái</div>
-        <div style="color:#64748b;font-size:.76em;">ML & DL đồng bộ</div></div>""",
+<div style="font-size:2em;font-weight:800;color:#f59e0b;">✅ Real-time</div>
+<div style="color:#94a3b8;font-size:.88em;margin-top:6px;">Trạng thái</div>
+<div style="color:#64748b;font-size:.76em;">ML & DL đồng bộ</div></div>""",
         unsafe_allow_html=True)
     st.markdown("---")
     rows = [
@@ -1286,7 +1418,6 @@ def render_accuracy_section(ticker):
          "Chính xác": "97.7%", "Trạng thái": "✅ Khớp"},
     ]
     _safe_dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
-
 
 def render_undervalued_stocks():
     st.markdown("## 📌 Danh mục Cổ phiếu Định giá Rẻ (Graham Screen)")
@@ -1311,24 +1442,19 @@ def render_undervalued_stocks():
     else:
         st.info("Chưa có cổ phiếu nào thỏa mãn tiêu chí.")
 
-
 def render_document_section():
     with st.expander("📖 Tài liệu tham khảo: Phân Tích Chứng Khoán (Benjamin Graham)",
                      expanded=False):
         st.markdown("""
 **Về định giá doanh nghiệp:**
 > *"Một hoạt động đầu tư là hoạt động mà sau khi phân tích kỹ lưỡng, hứa hẹn sự an toàn của vốn gốc và một lợi tức thỏa đáng."*
-
 **Về biên an toàn (Margin of Safety):**
 > *"Biên an toàn là khoảng cách giữa giá và giá trị nội tại. Một biên an toàn đáng kể cung cấp sự bảo vệ chống lại sai lầm trong đánh giá."*
-
 **Về P/E thấp:**
 > *"Chúng tôi đề nghị rằng khoảng 20 lần thu nhập bình quân là mức giá cao nhất có thể được trả trong một giao dịch mua cổ phiếu phổ thông mang tính đầu tư."*
-
 **Về P/B thấp:**
 > *"Chắc chắn có những suy đoán ủng hộ việc mua dưới giá trị tài sản nhiều và chống lại việc mua với mức phí bảo hiểm cao hơn."*
 """)
-
 
 def render_crisis_section(crisis_key):
     if crisis_key not in HISTORICAL_CRISES:
@@ -1368,31 +1494,28 @@ def render_crisis_section(crisis_key):
                 elif v >= 1e9: st.metric(label, f"{v/1e9:.1f} tỷ USD")
                 else: st.metric(label, f"{v:,.0f}")
 
-
 def render_cta_banner(title, subtitle, button_text, key_prefix):
     st.markdown(
         f"""<div class="cta-banner">
-        <div style="font-size:1.5em;font-weight:800;color:#0a0f19;margin-bottom:6px;">
-        🚀 {title}</div>
-        <div style="font-size:1em;color:#1e293b;margin-bottom:14px;">{subtitle}</div>
-        </div>""", unsafe_allow_html=True)
+<div style="font-size:1.5em;font-weight:800;color:#0a0f19;margin-bottom:6px;">
+🚀 {title}</div>
+<div style="font-size:1em;color:#1e293b;margin-bottom:14px;">{subtitle}</div>
+</div>""", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         if st.button(button_text, key=f"cta_btn_{key_prefix}",
                      use_container_width=True, type="primary"):
             st.session_state.show_vip_dialog = True; st.rerun()
 
-
 def render_vip_section_main():
     st.markdown("---")
     st.markdown(
         """<div style="text-align:center;padding:20px 0;">
-        <h2 style="color:#F5D97A !important;border:none;font-size:2em;margin:0;">
-        💎 BẢNG GIÁ & GÓI HỘI VIÊN FINEX</h2>
-        <p style="color:#94a3b8;font-size:1em;margin-top:8px;">
-        Chọn gói phù hợp — Hủy bất cứ lúc nào</p></div>""",
+<h2 style="color:#F5D97A !important;border:none;font-size:2em;margin:0;">
+💎 BẢNG GIÁ & GÓI HỘI VIÊN FINEX</h2>
+<p style="color:#94a3b8;font-size:1em;margin-top:8px;">
+Chọn gói phù hợp — Hủy bất cứ lúc nào</p></div>""",
         unsafe_allow_html=True)
-
     cols = st.columns(6)
     for i, pkg in enumerate(VIP_PACKAGES):
         with cols[i]:
@@ -1412,13 +1535,13 @@ def render_vip_section_main():
                 for f in pkg["features"]])
             st.markdown(
                 f"""<div class="{card_class}" style="border-top:3px solid {pkg['color']};">
-                <div style="text-align:center;margin-bottom:8px;">{badge_html}</div>
-                <div style="font-size:1em;font-weight:800;color:#e2e8f0;
-                min-height:2.5em;text-align:center;">{pkg['name']}</div>
-                <div style="font-size:1.35em;font-weight:800;color:{pkg['color']};
-                margin:10px 0;text-align:center;">{pkg['price']}</div>
-                <ul style="list-style:none;padding:0;margin:12px 0;min-height:180px;">
-                {features_html}</ul></div>""", unsafe_allow_html=True)
+<div style="text-align:center;margin-bottom:8px;">{badge_html}</div>
+<div style="font-size:1em;font-weight:800;color:#e2e8f0;
+min-height:2.5em;text-align:center;">{pkg['name']}</div>
+<div style="font-size:1.35em;font-weight:800;color:{pkg['color']};
+margin:10px 0;text-align:center;">{pkg['price']}</div>
+<ul style="list-style:none;padding:0;margin:12px 0;min-height:180px;">
+{features_html}</ul></div>""", unsafe_allow_html=True)
             if pkg["id"] != "FREE":
                 if st.button("Chọn gói", key=f"vip_btn_{pkg['id']}",
                              use_container_width=True,
@@ -1427,8 +1550,6 @@ def render_vip_section_main():
             else:
                 st.button("✓ Đang dùng", key=f"vip_btn_{pkg['id']}",
                           use_container_width=True, disabled=True)
-
-    # QR payment
     if st.session_state.get("selected_plan") and st.session_state.selected_plan != "FREE":
         plan_id = st.session_state.selected_plan
         pkg = next((p for p in VIP_PACKAGES if p["id"] == plan_id), None)
@@ -1444,51 +1565,49 @@ def render_vip_section_main():
             with col_info:
                 st.markdown(
                     f"""<div style="background:#F5D97A;padding:20px;border-radius:12px;
-                    border:2px solid #D4AF37;">
-                    <div style="font-size:1.15em;font-weight:800;color:#0a0f19;
-                    text-align:center;margin-bottom:12px;">🏦 THÔNG TIN CHUYỂN KHOẢN</div>
-                    <div style="font-size:1em;color:#0a0f19;line-height:2;">
-                    <strong>Ngân hàng:</strong> Vietcombank<br>
-                    <strong>Số TK:</strong> {ACCOUNT_NO}<br>
-                    <strong>Chủ TK:</strong> {ACCOUNT_NAME}<br>
-                    <strong>Số tiền:</strong> {pkg['amount']:,} VNĐ<br>
-                    <strong>Nội dung:</strong> {memo}
-                    </div></div>""", unsafe_allow_html=True)
-                if st.button("✅ Tôi đã chuyển khoản", key="vip_confirm",
-                             use_container_width=True, type="primary"):
-                    st.success("Đã ghi nhận! Đang xác thực...")
-                    st.balloons()
-
+border:2px solid #D4AF37;">
+<div style="font-size:1.15em;font-weight:800;color:#0a0f19;
+text-align:center;margin-bottom:12px;">🏦 THÔNG TIN CHUYỂN KHOẢN</div>
+<div style="font-size:1em;color:#0a0f19;line-height:2;">
+<strong>Ngân hàng:</strong> Vietcombank<br>
+<strong>Số TK:</strong> {ACCOUNT_NO}<br>
+<strong>Chủ TK:</strong> {ACCOUNT_NAME}<br>
+<strong>Số tiền:</strong> {pkg['amount']:,} VNĐ<br>
+<strong>Nội dung:</strong> {memo}
+</div></div>""", unsafe_allow_html=True)
+            if st.button("✅ Tôi đã chuyển khoản", key="vip_confirm",
+                         use_container_width=True, type="primary"):
+                st.success("Đã ghi nhận! Đang xác thực...")
+                st.balloons()
 
 def render_full_footer():
     st.markdown("---")
     st.markdown(
         """<div class="footer-hero">
-        <div style="font-size:2.5em;font-weight:900;letter-spacing:3px;
-        background:linear-gradient(90deg,#F5D97A 0%,#60a5fa 100%);
-        -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-        background-clip:text;">FINEX VN TERMINAL</div>
-        <div style="color:#94a3b8;font-size:.9em;margin-top:8px;letter-spacing:2px;">
-        ENTERPRISE INTELLIGENCE · EST. 2024</div>
-        <div style="color:#cbd5e1;font-size:1em;margin-top:16px;max-width:700px;
-        margin-left:auto;margin-right:auto;line-height:1.7;">
-        Công nghệ kiến tạo giá trị tài chính — Nền tảng hỗ trợ nhà đầu tư và chuyên gia
-        phân tích chuẩn hóa dữ liệu BCTC, trực quan hóa xu hướng và tham khảo nhiều
-        phương pháp định giá.</div>
-        </div>""", unsafe_allow_html=True)
-
+<div style="font-size:2.5em;font-weight:900;letter-spacing:3px;
+background:linear-gradient(90deg,#F5D97A 0%,#60a5fa 100%);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;">FINEX VN TERMINAL</div>
+<div style="color:#94a3b8;font-size:.9em;margin-top:8px;letter-spacing:2px;">
+ENTERPRISE INTELLIGENCE · EST. 2024</div>
+<div style="color:#cbd5e1;font-size:1em;margin-top:16px;max-width:700px;
+margin-left:auto;margin-right:auto;line-height:1.7;">
+Công nghệ kiến tạo giá trị tài chính — Nền tảng hỗ trợ nhà đầu tư và chuyên gia
+phân tích chuẩn hóa dữ liệu BCTC, trực quan hóa xu hướng và tham khảo nhiều
+phương pháp định giá.</div>
+</div>""", unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.markdown('<div class="footer-section-title">🏛️ Về FINEX</div>',
                     unsafe_allow_html=True)
         st.markdown(
             """<div style="color:#cbd5e1;font-size:.88em;line-height:1.8;">
-            <div><strong style="color:#F5D97A;">Sứ mệnh:</strong> Dân chủ hóa dữ liệu
-            tài chính chất lượng cao.</div>
-            <div><strong style="color:#F5D97A;">Tầm nhìn:</strong> Nền tảng phân tích
-            số 1 Đông Nam Á 2030.</div>
-            <div><strong style="color:#F5D97A;">Giá trị:</strong> Minh bạch · Chính xác
-            · Học thuật.</div></div>""", unsafe_allow_html=True)
+<div><strong style="color:#F5D97A;">Sứ mệnh:</strong> Dân chủ hóa dữ liệu
+tài chính chất lượng cao.</div>
+<div><strong style="color:#F5D97A;">Tầm nhìn:</strong> Nền tảng phân tích
+số 1 Đông Nam Á 2030.</div>
+<div><strong style="color:#F5D97A;">Giá trị:</strong> Minh bạch · Chính xác
+· Học thuật.</div></div>""", unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="footer-section-title">⚡ Tính năng</div>',
                     unsafe_allow_html=True)
@@ -1502,39 +1621,38 @@ def render_full_footer():
                     unsafe_allow_html=True)
         st.markdown(
             """<div style="color:#cbd5e1;font-size:.88em;line-height:1.9;">
-            <div>👨‍💼 <strong style="color:#F5D97A;">Founder:</strong>
-            Trần Anh Quân</div>
-            <div>📧 <strong style="color:#F5D97A;">Email:</strong>
-            Trananhhquan2122001@gmail.com</div>
-            <div>💬 <strong style="color:#F5D97A;">Zalo:</strong> 0342 167 380</div>
-            <div>📍 <strong style="color:#F5D97A;">Địa chỉ:</strong> TP. HCM</div>
-            <div>🌐 <strong style="color:#F5D97A;">Giờ:</strong> 8:00 – 22:00</div>
-            </div>""", unsafe_allow_html=True)
+<div>👨‍💼 <strong style="color:#F5D97A;">Founder:</strong>
+Trần Anh Quân</div>
+<div>📧 <strong style="color:#F5D97A;">Email:</strong>
+Trananhhquan2122001@gmail.com</div>
+<div>💬 <strong style="color:#F5D97A;">Zalo:</strong> 0342 167 380</div>
+<div>📍 <strong style="color:#F5D97A;">Địa chỉ:</strong> TP. HCM</div>
+<div>🌐 <strong style="color:#F5D97A;">Giờ:</strong> 8:00 – 22:00</div>
+</div>""", unsafe_allow_html=True)
     with col4:
         st.markdown('<div class="footer-section-title">🤝 Đối tác</div>',
                     unsafe_allow_html=True)
         st.markdown(
             """<div style="color:#cbd5e1;font-size:.88em;">
-            <div style="margin-bottom:8px;">Đối tác chứng khoán:</div>
-            <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
-            <span style="background:#1a2538;color:#22c55e;padding:4px 10px;
-            border-radius:6px;font-size:.85em;font-weight:700;">DNSE</span>
-            <span style="background:#1a2538;color:#ef4444;padding:4px 10px;
-            border-radius:6px;font-size:.85em;font-weight:700;">VPS</span>
-            <span style="background:#1a2538;color:#3b82f6;padding:4px 10px;
-            border-radius:6px;font-size:.85em;font-weight:700;">TCBS</span>
-            </div>
-            <div>🎓 <strong style="color:#F5D97A;">Học thuật:</strong> Miễn phí SV</div>
-            <div>💼 <strong style="color:#F5D97A;">Doanh nghiệp:</strong> API</div>
-            </div>""", unsafe_allow_html=True)
-
+<div style="margin-bottom:8px;">Đối tác chứng khoán:</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;">
+<span style="background:#1a2538;color:#22c55e;padding:4px 10px;
+border-radius:6px;font-size:.85em;font-weight:700;">DNSE</span>
+<span style="background:#1a2538;color:#ef4444;padding:4px 10px;
+border-radius:6px;font-size:.85em;font-weight:700;">VPS</span>
+<span style="background:#1a2538;color:#3b82f6;padding:4px 10px;
+border-radius:6px;font-size:.85em;font-weight:700;">TCBS</span>
+</div>
+<div>🎓 <strong style="color:#F5D97A;">Học thuật:</strong> Miễn phí SV</div>
+<div>💼 <strong style="color:#F5D97A;">Doanh nghiệp:</strong> API</div>
+</div>""", unsafe_allow_html=True)
     st.markdown('<div class="footer-divider"></div>', unsafe_allow_html=True)
     st.markdown(
         """<div style="text-align:center;margin:20px 0;">
-        <div style="color:#F5D97A;font-size:1.2em;font-weight:800;margin-bottom:8px;">
-        📬 Đăng ký nhận bản tin FINEX</div>
-        <div style="color:#94a3b8;font-size:.9em;">
-        Case study định giá và mẹo đầu tư mỗi tuần</div></div>""",
+<div style="color:#F5D97A;font-size:1.2em;font-weight:800;margin-bottom:8px;">
+📬 Đăng ký nhận bản tin FINEX</div>
+<div style="color:#94a3b8;font-size:.9em;">
+Case study định giá và mẹo đầu tư mỗi tuần</div></div>""",
         unsafe_allow_html=True)
     col_e1, col_e2, col_e3 = st.columns([1, 2, 1])
     with col_e2:
@@ -1549,49 +1667,45 @@ def render_full_footer():
                     st.success(f"✅ Đã đăng ký {email}!")
                 else:
                     st.warning("⚠️ Email không hợp lệ.")
-
     st.markdown('<div class="footer-divider"></div>', unsafe_allow_html=True)
     st.markdown(
         """<div style="text-align:center;">
-        <div style="color:#F5D97A;font-size:1em;font-weight:800;margin-bottom:12px;">
-        🛠️ Công nghệ sử dụng</div>
-        <div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px;">
-        <span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
-        border-radius:6px;font-size:.82em;">🐍 Python</span>
-        <span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
-        border-radius:6px;font-size:.82em;">⚡ Streamlit</span>
-        <span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
-        border-radius:6px;font-size:.82em;">🐼 Pandas</span>
-        <span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
-        border-radius:6px;font-size:.82em;">📊 Plotly</span>
-        </div></div>""", unsafe_allow_html=True)
-
+<div style="color:#F5D97A;font-size:1em;font-weight:800;margin-bottom:12px;">
+🛠️ Công nghệ sử dụng</div>
+<div style="display:flex;justify-content:center;flex-wrap:wrap;gap:6px;">
+<span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
+border-radius:6px;font-size:.82em;">🐍 Python</span>
+<span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
+border-radius:6px;font-size:.82em;">⚡ Streamlit</span>
+<span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
+border-radius:6px;font-size:.82em;">🐼 Pandas</span>
+<span style="background:#1a2538;color:#e2e8f0;padding:5px 12px;
+border-radius:6px;font-size:.82em;">📊 Plotly</span>
+</div></div>""", unsafe_allow_html=True)
     st.markdown('<div class="footer-divider"></div>', unsafe_allow_html=True)
     st.markdown(
         """<div style="background:linear-gradient(145deg,rgba(239,68,68,.12) 0%,
-        rgba(239,68,68,.04) 100%);border-left:4px solid #ef4444;
-        padding:18px 22px;border-radius:8px;margin:20px 0;">
-        <div style="color:#ef4444;font-weight:800;font-size:1.05em;margin-bottom:8px;">
-        ⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ</div>
-        <div style="color:#cbd5e1;font-size:.85em;line-height:1.7;">
-        1. <strong style="color:#F5D97A;">Tính chất công cụ:</strong> FINEX VN Terminal là
-        công cụ công nghệ hỗ trợ xử lý và hiển thị dữ liệu tài chính công khai.
-        Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư và
-        <strong>KHÔNG</strong> cung cấp khuyến nghị Mua/Bán/Giữ cổ phiếu.<br><br>
-        2. <strong style="color:#F5D97A;">Trách nhiệm cá nhân:</strong> Mọi kết quả tính
-        toán chỉ mang tính tham khảo học thuật. Nhà đầu tư tự chịu trách nhiệm.<br><br>
-        3. <strong style="color:#F5D97A;">Bản quyền:</strong> © 2024-2026 FINEX VN Terminal ·
-        Trần Anh Quân. Vui lòng không sao chép khi chưa có sự đồng ý.
-        </div></div>""", unsafe_allow_html=True)
-
+rgba(239,68,68,.04) 100%);border-left:4px solid #ef4444;
+padding:18px 22px;border-radius:8px;margin:20px 0;">
+<div style="color:#ef4444;font-weight:800;font-size:1.05em;margin-bottom:8px;">
+⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ</div>
+<div style="color:#cbd5e1;font-size:.85em;line-height:1.7;">
+1. <strong style="color:#F5D97A;">Tính chất công cụ:</strong> FINEX VN Terminal là
+công cụ công nghệ hỗ trợ xử lý và hiển thị dữ liệu tài chính công khai.
+Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư và
+<strong>KHÔNG</strong> cung cấp khuyến nghị Mua/Bán/Giữ cổ phiếu.<br><br>
+2. <strong style="color:#F5D97A;">Trách nhiệm cá nhân:</strong> Mọi kết quả tính
+toán chỉ mang tính tham khảo học thuật. Nhà đầu tư tự chịu trách nhiệm.<br><br>
+3. <strong style="color:#F5D97A;">Bản quyền:</strong> © 2024-2026 FINEX VN Terminal ·
+Trần Anh Quân. Vui lòng không sao chép khi chưa có sự đồng ý.
+</div></div>""", unsafe_allow_html=True)
     st.markdown(
         """<div style="text-align:center;padding:24px 0;color:#64748b;font-size:.82em;
-        border-top:1px solid #1f2937;margin-top:20px;">
-        © 2024–2026 <strong style="color:#F5D97A;">FINEX VN Terminal</strong> ·
-        Made with ❤️ in Vietnam ·
-        Founder: <strong style="color:#60a5fa;">Trần Anh Quân</strong>
-        </div>""", unsafe_allow_html=True)
-
+border-top:1px solid #1f2937;margin-top:20px;">
+© 2024–2026 <strong style="color:#F5D97A;">FINEX VN Terminal</strong> ·
+Made with ❤️ in Vietnam ·
+Founder: <strong style="color:#60a5fa;">Trần Anh Quân</strong>
+</div>""", unsafe_allow_html=True)
 
 # ============================================================================
 # 11. 7 TABS (theo đúng cấu trúc gốc)
@@ -1600,33 +1714,29 @@ def render_tab_valuation(ticker, fin_data):
     st.subheader(f"🧮 ĐỊNH GIÁ CHI TIẾT: {ticker}")
     if not fin_data:
         st.warning(f"⚠️ Không có dữ liệu cho **{ticker}**."); return
-
     render_market_snapshot_panel(ticker, fin_data)
-
     price = float(fin_data.get("price", 0) or 0)
     eps = float(fin_data.get("eps_ttm", 0) or 0)
     bvps = float(fin_data.get("bvps", 0) or 0)
     roe = float(fin_data.get("roe_2025", 0) or 0)
     roa = float(fin_data.get("roa_2025", 0) or 0)
-
     st.markdown("---")
     st.markdown("### 🧮 Định giá Hybrid (đa phương pháp)")
     hy = compute_hybrid_valuation(price, eps, bvps, roe, roa)
     st.markdown(
         f"""<div class="hybrid-card">
-        <div style="color:#94a3b8;font-size:.9em;text-transform:uppercase;
-        letter-spacing:1px;">💎 Giá trị Hybrid</div>
-        <div style="font-size:2.4em;font-weight:800;color:#F5D97A;margin:8px 0;">
-        {hy['hybrid']:,.0f} VNĐ/cp</div>
-        <div style="color:#94a3b8;font-size:.85em;">Biên an toàn:
-        <strong style="color:{'#22c55e' if hy['mos']>0 else '#ef4444'};">
-        {hy['mos']:+.1f}%</strong></div></div>""", unsafe_allow_html=True)
+<div style="color:#94a3b8;font-size:.9em;text-transform:uppercase;
+letter-spacing:1px;">💎 Giá trị Hybrid</div>
+<div style="font-size:2.4em;font-weight:800;color:#F5D97A;margin:8px 0;">
+{hy['hybrid']:,.0f} VNĐ/cp</div>
+<div style="color:#94a3b8;font-size:.85em;">Biên an toàn:
+<strong style="color:{'#22c55e' if hy['mos']>0 else '#ef4444'};">
+{hy['mos']:+.1f}%</strong></div></div>""", unsafe_allow_html=True)
     c = st.columns(4)
     c[0].metric("Graham Number", f"{hy['graham']:,.0f}")
     c[1].metric("DCF đơn giản", f"{hy['dcf']:,.0f}")
     c[2].metric("P/E band (×15)", f"{hy['pe_band']:,.0f}")
     c[3].metric("P/B band (×1.5)", f"{hy['pb_band']:,.0f}")
-
     with st.expander("🧪 DCF 5 năm — kịch bản Bear / Base / Bull", expanded=False):
         dcf_result = None
         _graham_engine = _safe_import_graham()
@@ -1654,7 +1764,6 @@ def render_tab_valuation(ticker, fin_data):
             if not rendered:
                 st.json(dcf_result)
             st.caption("Nếu engine DCF gốc không khả dụng, hệ thống dùng mô hình dự phòng minh họa; kiểm tra giả định dòng tiền, tăng trưởng và WACC trước khi ra quyết định.")
-
     st.markdown("---")
     st.markdown("### 🏆 Đánh giá chất lượng doanh nghiệp")
     checks, score, total = [], 0, 0
@@ -1679,7 +1788,6 @@ def render_tab_valuation(ticker, fin_data):
     if total > 0:
         st.markdown(f"#### 🎯 Điểm chất lượng: **{score} / {total}** " + "⭐" * score)
         for c_check in checks: st.markdown(f"- {c_check}")
-
     st.markdown("---")
     st.markdown("### 💵 Định giá DCF (FCFF 5 năm + Terminal Value)")
     dcf = _simple_dcf_valuation(ticker, fin_data)
@@ -1694,7 +1802,6 @@ def render_tab_valuation(ticker, fin_data):
                     f"{b['upside_downside']*100:+.1f}%")
         c[2].metric("🐂 Bull", f"{bu['intrinsic_value_per_share']:,.0f} đ",
                     f"{bu['upside_downside']*100:+.1f}%")
-
         fig_dcf = go.Figure(data=[
             go.Bar(name="Bear", x=["Bear Case"], y=[be["intrinsic_value_per_share"]],
                    marker_color="#ef4444", text=[f"{be['intrinsic_value_per_share']:,.0f} đ"],
@@ -1715,7 +1822,6 @@ def render_tab_valuation(ticker, fin_data):
                               yaxis_title="Giá trị nội tại (VNĐ/cp)",
                               title="So sánh giá trị nội tại theo 3 kịch bản DCF")
         st.plotly_chart(fig_dcf, use_container_width=True)
-
         with st.expander("📊 Xem dự phóng FCFF 5 năm"):
             df_fcff = pd.DataFrame({
                 "Năm": [f"Năm {i}" for i in range(1, 6)],
@@ -1723,22 +1829,19 @@ def render_tab_valuation(ticker, fin_data):
                 "PV FCFF (tỷ VND)": [f"{x:,.0f}" for x in b["pv_fcff"]],
             })
             _safe_dataframe(df_fcff, use_container_width=True, hide_index=True)
-
         verdict = dcf["verdict"]
         v_color = "#22c55e" if "Buy" in verdict else ("#f59e0b" if verdict == "Hold" else "#ef4444")
         v_emoji = {"Buy": "🟢", "Hold": "🟡", "Sell": "🔴"}.get(verdict, "⚪")
         st.markdown(
             f"""<div style="background:linear-gradient(145deg,#111827 0%,#1a2a4a 100%);
-            padding:16px 20px;border-radius:10px;border-left:5px solid {v_color};
-            margin-top:12px;"><div style="color:{v_color};font-size:1.2em;
-            font-weight:800;">{v_emoji} Khuyến nghị DCF: {verdict}</div>
-            <div style="color:#94a3b8;font-size:.88em;margin-top:6px;">
-            WACC: <strong style="color:#F5D97A;">{b['wacc']*100:.2f}%</strong></div>
-            </div>""", unsafe_allow_html=True)
-
+padding:16px 20px;border-radius:10px;border-left:5px solid {v_color};
+margin-top:12px;"><div style="color:{v_color};font-size:1.2em;
+font-weight:800;">{v_emoji} Khuyến nghị DCF: {verdict}</div>
+<div style="color:#94a3b8;font-size:.88em;margin-top:6px;">
+WACC: <strong style="color:#F5D97A;">{b['wacc']*100:.2f}%</strong></div>
+</div>""", unsafe_allow_html=True)
     st.markdown("---")
     render_valuation_slider(price, eps, bvps)
-
 
 def render_valuation_slider(current_price, eps, bvps):
     st.markdown("### 🎛️ Mô phỏng Kịch bản Định giá tương tác")
@@ -1786,30 +1889,29 @@ def render_valuation_slider(current_price, eps, bvps):
     cr1, cr2, cr3, cr4 = st.columns(4)
     with cr1:
         st.markdown(f"""<div class="glass-card" style="text-align:center;">
-        <div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">💰 Giá trị nội tại</div>
-        <div style="font-size:2em;font-weight:700;color:#22c55e;margin:8px 0;">{iv:,.0f}</div>
-        <div style="color:#64748b;font-size:.8em;">VNĐ/cp</div></div>""", unsafe_allow_html=True)
+<div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">💰 Giá trị nội tại</div>
+<div style="font-size:2em;font-weight:700;color:#22c55e;margin:8px 0;">{iv:,.0f}</div>
+<div style="color:#64748b;font-size:.8em;">VNĐ/cp</div></div>""", unsafe_allow_html=True)
     with cr2:
         st.markdown(f"""<div class="glass-card" style="text-align:center;">
-        <div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">🛡️ Giá mua an toàn</div>
-        <div style="font-size:2em;font-weight:700;color:#22c55e;margin:8px 0;">{safe_buy:,.0f}</div>
-        <div style="color:#64748b;font-size:.8em;">VNĐ/cp (MoS {mos}%)</div></div>""", unsafe_allow_html=True)
+<div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">🛡️ Giá mua an toàn</div>
+<div style="font-size:2em;font-weight:700;color:#22c55e;margin:8px 0;">{safe_buy:,.0f}</div>
+<div style="color:#64748b;font-size:.8em;">VNĐ/cp (MoS {mos}%)</div></div>""", unsafe_allow_html=True)
     with cr3:
         c = "#22c55e" if diff > 0 else "#ef4444"
         st.markdown(f"""<div class="glass-card" style="text-align:center;">
-        <div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">📊 Chênh lệch</div>
-        <div style="font-size:2em;font-weight:700;color:{c};margin:8px 0;">{diff:+.1f}%</div>
-        <div style="color:#64748b;font-size:.8em;">Giá: {price_val:,.0f}</div></div>""", unsafe_allow_html=True)
+<div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">📊 Chênh lệch</div>
+<div style="font-size:2em;font-weight:700;color:{c};margin:8px 0;">{diff:+.1f}%</div>
+<div style="color:#64748b;font-size:.8em;">Giá: {price_val:,.0f}</div></div>""", unsafe_allow_html=True)
     with cr4:
         if diff > 15: status, cls, sc = "Định giá hấp dẫn", "rec-buy", "#22c55e"
         elif diff > 5: status, cls, sc = "Định giá hợp lý", "rec-hold", "#f59e0b"
         else: status, cls, sc = "Thận trọng", "rec-sell", "#ef4444"
         st.markdown(f"""<div class="glass-card" style="text-align:center;border-left:4px solid {sc};">
-        <div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">🎯 Kết luận</div>
-        <div style="margin:12px 0;"><span class="recommend-badge {cls}">{status}</span></div>
-        <div style="color:#64748b;font-size:.8em;">Dựa trên tham số đã chọn</div></div>""", unsafe_allow_html=True)
+<div style="color:#94a3b8;font-size:.85em;text-transform:uppercase;">🎯 Kết luận</div>
+<div style="margin:12px 0;"><span class="recommend-badge {cls}">{status}</span></div>
+<div style="color:#64748b;font-size:.8em;">Dựa trên tham số đã chọn</div></div>""", unsafe_allow_html=True)
     st.caption("💡 *Công thức: EPS × (1+g) / (r−g). Công cụ tham khảo.*")
-
 
 def render_tab_forecast(ticker, fin_data):
     st.subheader(f"📈 DỰ BÁO TĂNG TRƯỞNG DÀI HẠN — {ticker}")
@@ -1822,7 +1924,7 @@ def render_tab_forecast(ticker, fin_data):
     eps_now = float(fin_data.get("eps_ttm", 0) or 0)
     c1, c2, c3 = st.columns(3)
     with c1: g_rate = st.number_input("📈 Tăng trưởng (%/năm)", value=12.0,
-                                       step=1.0, key="fc_g") / 100.0
+                                      step=1.0, key="fc_g") / 100.0
     with c2: years = st.slider("⏳ Số năm dự báo", 3, 10, 10, key="fc_years")
     with c3: payout = st.slider("💸 Payout (%)", 0, 100, 30, key="fc_payout") / 100.0
     yrs = [f"Năm {i}" for i in range(years + 1)]
@@ -1840,8 +1942,8 @@ def render_tab_forecast(ticker, fin_data):
         c[3].metric("CAGR cổ tức", f"{cagr:.1f}%")
     else: c[3].metric("CAGR cổ tức", "N/A")
     fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
-        subplot_titles=(f"Doanh thu & Lợi nhuận ({ticker}) — Tỷ đồng",
-                        f"Cổ tức ({ticker}) — VNĐ/cp"))
+                        subplot_titles=(f"Doanh thu & Lợi nhuận ({ticker}) — Tỷ đồng",
+                                        f"Cổ tức ({ticker}) — VNĐ/cp"))
     fig.add_trace(go.Bar(x=yrs, y=[v/1e9 for v in rev_p], name="Doanh thu",
                          marker_color="#3b82f6", text=[f"{v/1e9:,.0f}" for v in rev_p],
                          textposition="outside"), row=1, col=1)
@@ -1854,13 +1956,12 @@ def render_tab_forecast(ticker, fin_data):
                          marker_color="#22c55e", text=[f"{v:,.0f}" for v in div_p],
                          textposition="outside"), row=2, col=1)
     fig.update_layout(template="plotly_dark", paper_bgcolor="#050914",
-                     plot_bgcolor="#0a1220", height=650, showlegend=True,
-                     legend=dict(orientation="h", yanchor="bottom", y=1.02,
-                                 xanchor="right", x=1),
-                     font=dict(color="#e2e8f0"))
+                      plot_bgcolor="#0a1220", height=650, showlegend=True,
+                      legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                                  xanchor="right", x=1),
+                      font=dict(color="#e2e8f0"))
     fig.update_yaxes(gridcolor="#1f2937")
     st.plotly_chart(fig, use_container_width=True)
-
 
 def render_tab_overview(ticker, fin_data):
     st.subheader(f"📊 TỔNG QUAN DOANH NGHIỆP: {ticker}")
@@ -1872,12 +1973,11 @@ def render_tab_overview(ticker, fin_data):
     exchange = info.get("exchange", "HOSE")
     st.markdown(
         f"""<div class="glass-card" style="border-left:3px solid #60a5fa;">
-        <div style="color:#93c5fd;font-weight:800;font-size:1.1em;">{name}</div>
-        <div style="color:#94a3b8;font-size:.85em;margin-top:4px;">
-        🏢 Ngành: <strong style="color:#F5D97A;">{sector}</strong> ·
-        📊 Sàn: <strong style="color:#F5D97A;">{exchange}</strong> ·
-        Mã: <strong>{ticker}</strong></div></div>""", unsafe_allow_html=True)
-
+<div style="color:#93c5fd;font-weight:800;font-size:1.1em;">{name}</div>
+<div style="color:#94a3b8;font-size:.85em;margin-top:4px;">
+🏢 Ngành: <strong style="color:#F5D97A;">{sector}</strong> ·
+📊 Sàn: <strong style="color:#F5D97A;">{exchange}</strong> ·
+Mã: <strong>{ticker}</strong></div></div>""", unsafe_allow_html=True)
     st.markdown("### 💼 Chỉ số tài chính cốt lõi")
     c = st.columns(5)
     c[0].metric("Giá", f"{fin_data.get('price', 0):,.0f} đ")
@@ -1885,7 +1985,6 @@ def render_tab_overview(ticker, fin_data):
     c[2].metric("BVPS", f"{fin_data.get('bvps', 0):,.0f}")
     c[3].metric("P/E", f"{fin_data.get('pe_ttm', 0):.2f}")
     c[4].metric("P/B", f"{fin_data.get('pb', 0):.2f}")
-
     c = st.columns(4)
     c[0].metric("ROE", f"{fin_data.get('roe_2025', 0):.2f}%")
     c[1].metric("ROA", f"{fin_data.get('roa_2025', 0):.2f}%")
@@ -1893,13 +1992,11 @@ def render_tab_overview(ticker, fin_data):
     if casa is not None: c[2].metric("CASA", f"{casa:.1f}%")
     else: c[2].metric("Biên LN", f"{fin_data.get('margin', 0):.1f}%")
     c[3].metric("Nợ/VCSH", f"{fin_data.get('de', 0):.2f}")
-
     c = st.columns(4)
     c[0].metric("Doanh thu / TOI", _fmt_ty(fin_data.get("toi_6t2026", 0)))
     c[1].metric("LNST 2025", _fmt_ty(fin_data.get("lnst_2025", 0)))
     c[2].metric("Tổng tài sản", _fmt_ty(fin_data.get("total_assets_30062026", 0)))
     c[3].metric("Vốn hóa", _fmt_ty(fin_data.get("market_cap", 0)))
-
     st.markdown("---")
     st.markdown("#### 🎯 Radar — Sức mạnh doanh nghiệp")
     radar = {
@@ -1924,12 +2021,11 @@ def render_tab_overview(ticker, fin_data):
             height=420, font=dict(color="#e2e8f0"))
         st.plotly_chart(fig, use_container_width=True)
 
-
 def render_tab_search():
     st.subheader("🔎 TRA CỨU NHANH THÔNG TIN DOANH NGHIỆP")
     st.markdown("Nhập mã cổ phiếu để xem các chỉ số cơ bản.")
     search_input = st.text_input("Nhập mã cổ phiếu (VD: TCB):", "",
-                                  key="search_ticker").strip().upper()
+                                 key="search_ticker").strip().upper()
     if search_input:
         if search_input in FINANCIAL_DATA_2026:
             st.success(f"✅ Tìm thấy **{search_input}**")
@@ -1951,7 +2047,6 @@ def render_tab_search():
         else:
             st.error(f"❌ Không tìm thấy **{search_input}**. Danh sách: {', '.join(ALL_TICKERS)}")
 
-
 def render_tab_ml(ticker, fin_data):
     st.subheader(f"🤖 MACHINE LEARNING — {ticker}")
     if not fin_data:
@@ -1972,12 +2067,11 @@ def render_tab_ml(ticker, fin_data):
     c1, c2 = st.columns([2, 1])
     with c1:
         st.markdown(f"""<div class="glass-card" style="border-left:5px solid {color};">
-        <h4 style="margin:0;color:{color};">{label}</h4>
-        <p style="color:#94a3b8;font-size:.88em;margin-top:8px;">
-        Phân tích: ROE, ROA, Biên LN gộp, Nợ/VCSH.</p></div>""",
-            unsafe_allow_html=True)
+<h4 style="margin:0;color:{color};">{label}</h4>
+<p style="color:#94a3b8;font-size:.88em;margin-top:8px;">
+Phân tích: ROE, ROA, Biên LN gộp, Nợ/VCSH.</p></div>""",
+                      unsafe_allow_html=True)
     with c2: st.metric("Độ tin cậy", f"{conf:.1f}%")
-
     st.markdown("---")
     st.markdown("### 📈 Dự báo EPS (Ensemble)")
     ml_eps = predict_eps_ensemble(roe, roa, margin, de)
@@ -1986,7 +2080,6 @@ def render_tab_ml(ticker, fin_data):
     c[1].metric("Lợi nhuận", _fmt_ty(fin_data.get("lnst_2025", 0)))
     c[2].metric("EPS hiện tại", f"{eps:,.0f}" if eps > 0 else "N/A")
     c[3].metric("EPS dự báo", f"{ml_eps:,.0f}")
-
     st.markdown("---")
     st.markdown("### 🧮 Định giá đa nhân tố")
     hy = compute_hybrid_valuation(price, eps, bvps, roe, roa)
@@ -1996,7 +2089,6 @@ def render_tab_ml(ticker, fin_data):
     c[2].metric("Hybrid + Ensemble", f"{hy['hybrid']:,.0f} đ" if hy["hybrid"] else "N/A")
     if hy["hybrid"] > 0 and price > 0:
         st.metric("Biên an toàn Hybrid", f"{hy['mos']:+.1f}%")
-
 
 def render_tab_dl(ticker, fin_data):
     st.subheader(f"🧠 DEEP LEARNING — Dự báo 4 quý — {ticker}")
@@ -2027,11 +2119,10 @@ def render_tab_dl(ticker, fin_data):
                              name="EPS", line=dict(color="#f59e0b", width=3),
                              yaxis="y2"))
     fig.update_layout(template="plotly_dark", paper_bgcolor="#050914",
-                     plot_bgcolor="#0a1220", height=400, font=dict(color="#e2e8f0"),
-                     yaxis=dict(title="DT / LN (tỷ đ)", gridcolor="#1f2937"),
-                     yaxis2=dict(title="EPS (VNĐ/cp)", overlaying="y", side="right"))
+                      plot_bgcolor="#0a1220", height=400, font=dict(color="#e2e8f0"),
+                      yaxis=dict(title="DT / LN (tỷ đ)", gridcolor="#1f2937"),
+                      yaxis2=dict(title="EPS (VNĐ/cp)", overlaying="y", side="right"))
     st.plotly_chart(fig, use_container_width=True)
-
 
 def render_tab_data(ticker, fin_data):
     st.subheader(f"🗂️ DỮ LIỆU CHI TIẾT — {ticker}")
@@ -2064,41 +2155,35 @@ def render_tab_data(ticker, fin_data):
         ("Loại SLCP", "Chính thức" if fin_data.get("shares_is_official") else "Ước tính"),
     ]
     _safe_dataframe(pd.DataFrame(rows, columns=["Chỉ tiêu", "Giá trị"]),
-                 use_container_width=True, hide_index=True)
-
-    # Export CSV
+                    use_container_width=True, hide_index=True)
     csv = pd.DataFrame(rows, columns=["Chỉ tiêu", "Giá trị"]).to_csv(
         index=False, encoding="utf-8-sig").encode("utf-8-sig")
     st.download_button(f"📥 Tải CSV ({ticker})", data=csv,
                        file_name=f"FINEX_{ticker}.csv", mime="text/csv")
-
     st.markdown("---")
     render_embedded_database_explorer()
 
-
 # ============================================================================
 # 11B. LEGACY CUSTOMER INTRO + EMBEDDED DATABASE EXPLORER
-# Tích hợp các phần giới thiệu và tra cứu dữ liệu từ giao diện code gốc.
-# Trình khám phá dùng nguồn dữ liệu hiện tại của FINEX.
 # ============================================================================
 def render_customer_intro():
     """Khối giới thiệu khách hàng/đối tác từ giao diện code gốc."""
     st.markdown("""
-    <div style="background:linear-gradient(135deg,rgba(212,175,55,.14),rgba(30,64,175,.12));
-    border:1px solid #334155;border-radius:18px;padding:24px 26px;margin:12px 0 18px 0;">
-      <div style="font-size:12px;letter-spacing:1.8px;color:#D4AF37;font-weight:800;">
-        FINTECH GROUP · FINEX VN TERMINAL
-      </div>
-      <h2 style="border:0;padding:8px 0 2px 0;margin:0;color:#F8FAFC!important;">
-        Công nghệ kiến tạo giá trị tài chính
-      </h2>
-      <p style="color:#CBD5E1;max-width:900px;line-height:1.75;margin:8px 0 0 0;">
-        Nền tảng hỗ trợ nhà đầu tư và chuyên viên phân tích chuẩn hóa dữ liệu báo cáo tài chính,
-        theo dõi chỉ tiêu doanh nghiệp, trực quan hóa xu hướng và tham khảo nhiều phương pháp định giá.
-        Mọi kết quả phụ thuộc vào độ đầy đủ, tính chính xác và thời điểm cập nhật của dữ liệu đầu vào.
-      </p>
-    </div>
-    """, unsafe_allow_html=True)
+<div style="background:linear-gradient(135deg,rgba(212,175,55,.14),rgba(30,64,175,.12));
+border:1px solid #334155;border-radius:18px;padding:24px 26px;margin:12px 0 18px 0;">
+<div style="font-size:12px;letter-spacing:1.8px;color:#D4AF37;font-weight:800;">
+FINTECH GROUP · FINEX VN TERMINAL
+</div>
+<h2 style="border:0;padding:8px 0 2px 0;margin:0;color:#F8FAFC!important;">
+Công nghệ kiến tạo giá trị tài chính
+</h2>
+<p style="color:#CBD5E1;max-width:900px;line-height:1.75;margin:8px 0 0 0;">
+Nền tảng hỗ trợ nhà đầu tư và chuyên viên phân tích chuẩn hóa dữ liệu báo cáo tài chính,
+theo dõi chỉ tiêu doanh nghiệp, trực quan hóa xu hướng và tham khảo nhiều phương pháp định giá.
+Mọi kết quả phụ thuộc vào độ đầy đủ, tính chính xác và thời điểm cập nhật của dữ liệu đầu vào.
+</p>
+</div>
+""", unsafe_allow_html=True)
     c1, c2, c3 = st.columns(3)
     c1.markdown("**📊 Phân tích dữ liệu**")
     c1.caption("Tra cứu chỉ tiêu, kỳ báo cáo và lịch sử dữ liệu doanh nghiệp.")
@@ -2113,7 +2198,6 @@ def render_customer_intro():
         cc1.markdown("**Email:** Trananhhquan2122001@gmail.com")
         cc2.markdown("**Zalo:** 0342 167 380")
         st.caption("Thông tin liên hệ để khách hàng chủ động kết nối.")
-
 
 def render_embedded_database_explorer():
     """Tra cứu toàn bộ mã đang có trong nguồn dữ liệu nhúng và tải bảng CSV."""
@@ -2150,7 +2234,7 @@ def render_embedded_database_explorer():
     df = pd.DataFrame(rows)
     col1, col2 = st.columns(2)
     col1.metric("Số mã đang hiển thị", f"{len(df):,}")
-    col2.metric("Nguồn", "Dữ liệu nhúng FINEX")
+    col2.metric("Nguồn", _FINEX_DATA_SOURCE)
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.download_button(
         "📥 Tải dữ liệu đang hiển thị (CSV)",
@@ -2161,25 +2245,32 @@ def render_embedded_database_explorer():
     )
     render_customer_intro()
 
-
 def render_legacy_about_section():
     """Giới thiệu công nghệ, VIP và tuyên bố pháp lý theo nội dung người dùng cung cấp."""
     st.markdown("---")
     st.markdown("""<div style="background:linear-gradient(135deg,#172554,#0f172a);border:1px solid #60a5fa;border-left:5px solid #f59e0b;padding:16px 18px;border-radius:12px;color:#f8fafc;line-height:1.75;margin-bottom:12px"><strong style="color:#fbbf24">⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM (DISCLAIMER):</strong><br/>Tất cả thông tin, dữ liệu và kết quả định giá trên nền tảng <strong>FINEX VN Terminal</strong> chỉ mang tính chất <strong>tham khảo</strong>, phục vụ mục đích <strong>học thuật và nghiên cứu</strong>. Chúng tôi <strong>không đưa ra bất kỳ khuyến nghị mua, bán hay nắm giữ</strong> bất kỳ loại tài sản nào. Nhà đầu tư tự chịu trách nhiệm hoàn toàn về các quyết định của mình.</div>""", unsafe_allow_html=True)
     with st.expander("ℹ️ GIỚI THIỆU CÔNG NGHỆ, GÓI VIP & TUYÊN BỐ PHÁP LÝ (BẤM ĐỂ MỞ RỘNG)", expanded=False):
         st.markdown("### 🚀 Về Công Nghệ & Nhà Sáng Lập")
-        st.markdown("- **Hệ thống:** **FINEX VN Terminal** – Nền tảng tự động hóa xử lý Báo cáo tài chính và Định giá doanh nghiệp theo phương pháp **Benjamin Graham & Philip Fisher**.\n- **Công nghệ:** Ứng dụng mô hình tính toán dữ liệu lớn (Big Data Processing) kết hợp thuật toán phân tích chỉ số tài chính tự động.\n- **Nhà sáng lập:** **Trần Anh Quân** (*Founder & Lead Developer*).")
+        st.markdown("- **Hệ thống:** **FINEX VN Terminal** – Nền tảng tự động hóa xử lý Báo cáo tài chính và Định giá doanh nghiệp theo phương pháp **Benjamin Graham & Philip Fisher**.")
+        st.markdown("- **Công nghệ:** Ứng dụng mô hình tính toán dữ liệu lớn (Big Data Processing) kết hợp thuật toán phân tích chỉ số tài chính tự động.")
+        st.markdown("- **Nhà sáng lập:** **Trần Anh Quân** (*Founder & Lead Developer*).")
         st.markdown("### 💎 Gói Hội viên VIP (299.000 VNĐ / Tháng)")
-        st.markdown("- 🔓 **Dữ liệu BCTC làm sạch (2018–2026):** quyền truy cập phụ thuộc dữ liệu scraper thực tế được tải và phạm vi dịch vụ đang cung cấp; không tuyên bố đủ toàn thị trường nếu dữ liệu chưa có.\n- 🧮 **Tính năng phân tích:** mô hình dự báo tăng trưởng dài hạn, định giá Excess Return & Graham Number khi dữ liệu đầu vào và mô-đun tương ứng khả dụng.\n- 💬 **Hỗ trợ kỹ thuật 1:1** và cập nhật dữ liệu báo cáo tài chính quý mới nhất khi nguồn scraper thu thập được.")
+        st.markdown("- 🔓 **Dữ liệu BCTC làm sạch (2018–2026):** quyền truy cập phụ thuộc dữ liệu scraper thực tế được tải và phạm vi dịch vụ đang cung cấp.")
+        st.markdown("- 🧮 **Tính năng phân tích:** mô hình dự báo tăng trưởng dài hạn, định giá Excess Return & Graham Number khi dữ liệu đầu vào và mô-đun tương ứng khả dụng.")
+        st.markdown("- 💬 **Hỗ trợ kỹ thuật 1:1** và cập nhật dữ liệu báo cáo tài chính quý mới nhất.")
         st.markdown("---")
-        st.markdown("""<div style="background:linear-gradient(145deg,rgba(239,68,68,.13),rgba(15,23,42,.95));border:1px solid #7f1d1d;border-left:4px solid #ef4444;padding:14px 16px;border-radius:8px;color:#e2e8f0;font-size:.9em;line-height:1.7"><strong style="color:#fca5a5">⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ (DISCLAIMER):</strong><br/>1. <strong>Tính chất công cụ:</strong> FINEX VN Terminal là công cụ công nghệ/phần mềm hỗ trợ xử lý và hiển thị dữ liệu tài chính công khai từ báo cáo tài chính chính thức. Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư chứng khoán và <strong>KHÔNG</strong> cung cấp khuyến nghị Mua, Bán hay Giữ cổ phiếu cụ thể.<br/>2. <strong>Trách nhiệm cá nhân:</strong> Mọi kết quả định giá, chỉ số an toàn (MOS) hay dự báo tăng trưởng chỉ mang tính mô phỏng lý thuyết tham khảo học thuật. Nhà đầu tư tự chịu trách nhiệm hoàn toàn đối với quyết định quản lý tài sản và giao dịch cá nhân trên thị trường tài chính.</div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:linear-gradient(145deg,rgba(239,68,68,.13),rgba(15,23,42,.95));border:1px solid #7f1d1d;border-left:4px solid #ef4444;padding:14px 16px;border-radius:8px;color:#e2e8f0;font-size:.9em;line-height:1.7"><strong style="color:#fca5a5">⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ (DISCLAIMER):</strong><br/>1. <strong>Tính chất công cụ:</strong> FINEX VN Terminal là công cụ công nghệ/phần mềm hỗ trợ xử lý và hiển thị dữ liệu tài chính công khai. Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư chứng khoán.<br/>2. <strong>Trách nhiệm cá nhân:</strong> Mọi kết quả định giá chỉ mang tính mô phỏng lý thuyết tham khảo học thuật. Nhà đầu tư tự chịu trách nhiệm hoàn toàn.</div>""", unsafe_allow_html=True)
         st.markdown("### 📱 Kết nối với chúng tôi")
         st.markdown("💬 Zalo [0327 625 853](https://zalo.me/0327625853)")
-
 
 # ============================================================================
 # 12. DIVIDEND CALCULATORS
 # ============================================================================
+def _ticker_label(ticker):
+    rows = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"] == ticker] if not _FINEX_LONG_DF.empty else pd.DataFrame()
+    industry = str(rows["Tên ngành"].dropna().iloc[0]) if not rows.empty and "Tên ngành" in rows.columns and rows["Tên ngành"].notna().any() else "Chưa phân ngành"
+    return f"{ticker}  |  {industry}"
+
 def render_cash_dividend_ui():
     st.markdown("## 💵 MÁY TÍNH CỔ TỨC TIỀN MẶT")
     st.markdown("*Tính cổ tức nhận được dựa trên vốn và giá.*")
@@ -2190,16 +2281,16 @@ def render_cash_dividend_ui():
                               format_func=_ticker_label, key="stock_div_ticker") if ALL_TICKERS else ""
     with c2: price = st.selectbox("Giá (VNĐ):", DEFAULT_PRICE_LIST, index=4)
     with c3: capital = st.number_input("Vốn (VNĐ):", min_value=MIN_CAPITAL_VND,
-                                        max_value=MAX_CAPITAL_VND, step=CAPITAL_STEP_VND,
-                                        value=1_000_000_000, format="%d")
+                                       max_value=MAX_CAPITAL_VND, step=CAPITAL_STEP_VND,
+                                       value=1_000_000_000, format="%d")
     st.markdown("---")
     c4, c5 = st.columns(2)
     with c4: tax = st.number_input("Thuế TNCN (%):", min_value=0.0, max_value=10.0,
-                                    value=5.0, step=0.1)
+                                   value=5.0, step=0.1)
     with c5: div_pct = st.slider("Tỷ lệ cổ tức (% Mệnh giá):",
-                                  min_value=MIN_DIVIDEND_PERCENT,
-                                  max_value=MAX_DIVIDEND_PERCENT,
-                                  step=DIVIDEND_PERCENT_STEP, value=15)
+                                 min_value=MIN_DIVIDEND_PERCENT,
+                                 max_value=MAX_DIVIDEND_PERCENT,
+                                 step=DIVIDEND_PERCENT_STEP, value=15)
     cash_ps = PAR_VALUE_DEFAULT * div_pct / 100
     shares = _buyable_shares(capital, price)
     res = _cash_dividend_actual(shares, cash_ps, tax)
@@ -2237,9 +2328,8 @@ def render_cash_dividend_ui():
                      title="Cổ tức thực nhận theo vốn",
                      color="Thực nhận (triệu)", color_continuous_scale="Greens")
         fig.update_layout(template="plotly_dark", plot_bgcolor="#0a1220",
-                         paper_bgcolor="#050914", font=dict(color="#e2e8f0"))
+                          paper_bgcolor="#050914", font=dict(color="#e2e8f0"))
         st.plotly_chart(fig, use_container_width=True)
-
 
 def render_stock_dividend_ui():
     st.markdown("## 📈 MÁY TÍNH CỔ TỨC BẰNG CỔ PHIẾU")
@@ -2248,10 +2338,10 @@ def render_stock_dividend_ui():
     with c1:
         ticker = st.selectbox("Chọn mã cổ phiếu:", ALL_TICKERS,
                               index=ALL_TICKERS.index("TCB") if "TCB" in ALL_TICKERS else 0,
-                              format_func=_ticker_label, key="stock_div_ticker") if ALL_TICKERS else ""
+                              format_func=_ticker_label, key="stock_div_ticker2") if ALL_TICKERS else ""
     with c2: owned = st.number_input("Số CP đang sở hữu:", min_value=MIN_OWNED_SHARES,
-                                      max_value=MAX_OWNED_SHARES, step=10_000,
-                                      value=100_000, format="%d")
+                                     max_value=MAX_OWNED_SHARES, step=10_000,
+                                     value=100_000, format="%d")
     ratio = st.slider("Tỷ lệ cổ tức CP (%):", min_value=MIN_DIVIDEND_PERCENT,
                       max_value=MAX_DIVIDEND_PERCENT,
                       step=DIVIDEND_PERCENT_STEP, value=15)
@@ -2280,24 +2370,25 @@ def render_stock_dividend_ui():
                      title="Tổng số CP sau chia cổ tức theo tỷ lệ",
                      color="CP nhận thêm", color_continuous_scale="Blues")
         fig.update_layout(template="plotly_dark", paper_bgcolor="#050914",
-                         plot_bgcolor="#0a1220", font=dict(color="#e2e8f0"))
+                          plot_bgcolor="#0a1220", font=dict(color="#e2e8f0"))
         st.plotly_chart(fig, use_container_width=True)
         _safe_dataframe(df_scn, use_container_width=True, hide_index=True)
-
-
 
 def _finex_original_rows(ticker, report_type=None, period_type=None, year=None):
     """Trả về dòng CSV nguyên bản, không nội suy/đổi tên chỉ tiêu."""
     if _FINEX_LONG_DF is None or _FINEX_LONG_DF.empty:
         return pd.DataFrame()
     d = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"].astype(str).str.upper() == str(ticker).upper()].copy()
-    if report_type and report_type != "Tất cả":
+    if report_type and report_type != "Tất cả" and "Loại báo cáo" in d.columns:
         d = d[d["Loại báo cáo"].astype(str) == report_type]
-    if period_type and period_type != "Tất cả":
+    if period_type and period_type != "Tất cả" and "Loại kỳ" in d.columns:
         d = d[d["Loại kỳ"].astype(str) == period_type]
     if year and year != "Tất cả":
         d = d[pd.to_numeric(d["Năm"], errors="coerce") == int(year)]
-    return d.sort_values(["Năm", "Ngày kỳ", "Chỉ tiêu tiếng Việt"], kind="stable")
+    sort_cols = ["Năm"]
+    if "Ngày kỳ" in d.columns: sort_cols.append("Ngày kỳ")
+    if "Chỉ tiêu tiếng Việt" in d.columns: sort_cols.append("Chỉ tiêu tiếng Việt")
+    return d.sort_values(sort_cols, kind="stable") if sort_cols else d
 
 def _render_original_financial_statements(ticker):
     st.markdown("### 🧾 Dữ liệu báo cáo gốc từ CSV")
@@ -2307,30 +2398,25 @@ def _render_original_financial_statements(ticker):
         st.warning("Không tìm thấy dòng dữ liệu gốc cho mã này.")
         return
     c1, c2, c3 = st.columns(3)
-    reports = ["Tất cả"] + sorted(raw["Loại báo cáo"].dropna().astype(str).unique().tolist())
-    periods = ["Tất cả"] + sorted(raw["Loại kỳ"].dropna().astype(str).unique().tolist())
-    years = ["Tất cả"] + sorted(raw["Năm"].dropna().astype(int).unique().tolist(), reverse=True)
+    reports = ["Tất cả"] + (sorted(raw["Loại báo cáo"].dropna().astype(str).unique().tolist()) if "Loại báo cáo" in raw.columns else [])
+    periods = ["Tất cả"] + (sorted(raw["Loại kỳ"].dropna().astype(str).unique().tolist()) if "Loại kỳ" in raw.columns else [])
+    years = ["Tất cả"] + (sorted(raw["Năm"].dropna().astype(int).unique().tolist(), reverse=True) if "Năm" in raw.columns else [])
     with c1: report = st.selectbox("Loại báo cáo", reports, key=f"raw_report_{ticker}")
     with c2: period = st.selectbox("Loại kỳ", periods, key=f"raw_period_{ticker}")
     with c3: year = st.selectbox("Năm", years, key=f"raw_year_{ticker}")
     view = _finex_original_rows(ticker, report, period, year)
-    st.caption(f"{len(view):,} dòng dữ liệu · {view['Ngày kỳ'].nunique()} kỳ báo cáo · Nguồn: {_FINEX_DATA_SOURCE}")
+    display_cols = [c for c in ["Mã chứng khoán", "Tên ngành", "Loại báo cáo", "Loại kỳ", "Năm", "Ngày kỳ", "Chỉ tiêu tiếng Việt", "Giá trị"] if c in view.columns]
+    n_periods = view["Ngày kỳ"].nunique() if "Ngày kỳ" in view.columns else 0
+    st.caption(f"{len(view):,} dòng dữ liệu · {n_periods} kỳ báo cáo · Nguồn: {_FINEX_DATA_SOURCE}")
     if not view.empty:
-        _safe_dataframe(view[["Mã chứng khoán", "Tên ngành", "Loại báo cáo", "Loại kỳ", "Năm", "Ngày kỳ", "Chỉ tiêu tiếng Việt", "Giá trị"]],
-                        use_container_width=True, hide_index=True)
+        _safe_dataframe(view[display_cols], use_container_width=True, hide_index=True)
         csv_bytes = view.to_csv(index=False).encode("utf-8-sig")
         st.download_button("⬇️ Tải dữ liệu gốc đang lọc (CSV)", data=csv_bytes,
                            file_name=f"FINEX_{ticker}_BCTC_goc.csv", mime="text/csv",
                            key=f"download_raw_{ticker}")
 
-def _ticker_label(ticker):
-    rows = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"] == ticker] if not _FINEX_LONG_DF.empty else pd.DataFrame()
-    industry = str(rows["Tên ngành"].dropna().iloc[0]) if not rows.empty and rows["Tên ngành"].notna().any() else "Chưa phân ngành"
-    return f"{ticker}  |  {industry}"
-
-
 def render_bctc_ui():
-    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH — 102 DOANH NGHIỆP")
+    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH — DOANH NGHIỆP")
     if not ALL_TICKERS:
         st.error("Chưa tải được danh sách mã từ CSV nguồn.")
         st.caption(_FINEX_DATA_ERROR)
@@ -2340,9 +2426,10 @@ def render_bctc_ui():
     fin = get_financial_data(ticker)
     st.markdown(f"### {ticker} — {COMPANY_INFO.get(ticker, {}).get('name', ticker)}")
     raw_ticker = _finex_original_rows(ticker)
-    st.info(f"Đang xem dữ liệu của **{ticker}** · {len(raw_ticker):,} dòng CSV gốc · Ngành: {_ticker_label(ticker).split('|',1)[-1].strip()}")
+    industry_label = _ticker_label(ticker).split('|', 1)[-1].strip() if '|' in _ticker_label(ticker) else "N/A"
+    st.info(f"Đang xem dữ liệu của **{ticker}** · {len(raw_ticker):,} dòng CSV gốc · Ngành: {industry_label}")
     st.markdown("### Chỉ số tổng hợp")
-    st.caption("Các chỉ số tổng hợp chỉ hiển thị khi có dữ liệu phù hợp trong CSV. Đối chiếu số liệu chi tiết tại mục dữ liệu báo cáo gốc bên dưới.")
+    st.caption("Các chỉ số tổng hợp chỉ hiển thị khi có dữ liệu phù hợp trong CSV.")
     c = st.columns(5)
     c[0].metric("EPS", f"{fin.get('eps_ttm', 0):,.0f}" if fin.get("eps_ttm", 0) else "N/A")
     c[1].metric("BVPS", f"{fin.get('bvps', 0):,.0f}" if fin.get("bvps", 0) else "N/A")
@@ -2360,7 +2447,6 @@ def render_crisis_ui():
                        key="crisis_sel_main")
     render_crisis_section(sel)
 
-
 # ============================================================================
 # 13. SIDEBAR
 # ============================================================================
@@ -2368,20 +2454,25 @@ def render_sidebar():
     with st.sidebar:
         st.markdown(
             """<div style='text-align:center;padding:14px 0 10px 0;
-            border-bottom:1px solid #1f2937;margin-bottom:12px;'>
-            <div style='color:#D4AF37;font-size:1.6em;font-weight:800;
-            letter-spacing:2px;'>FINEX</div>
-            <div style='color:#94a3b8;font-size:.72em;letter-spacing:3px;
-            text-transform:uppercase;'>Vietnam Terminal</div>
-            </div>""", unsafe_allow_html=True)
-
-        with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=False):
-            st.markdown(f"- **Nguồn dữ liệu scraper:** `{_FINEX_DATA_SOURCE}`")
-            if _FINEX_DATA_ERROR: st.caption("Chi tiết nguồn dữ liệu: " + _FINEX_DATA_ERROR)
-            if not ALL_TICKERS: st.warning("Chưa có dữ liệu scraper. Kiểm tra file finex_financial_data.csv đã được workflow commit lên GitHub chưa; có thể đặt FINEX_DATA_URL làm đường dẫn Raw GitHub.")
+border-bottom:1px solid #1f2937;margin-bottom:12px;'>
+<div style='color:#D4AF37;font-size:1.6em;font-weight:800;
+letter-spacing:2px;'>FINEX</div>
+<div style='color:#94a3b8;font-size:.72em;letter-spacing:3px;
+text-transform:uppercase;'>Vietnam Terminal</div>
+</div>""", unsafe_allow_html=True)
+        with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=True):
+            st.markdown(f"- **Nguồn dữ liệu đang dùng:** `{_FINEX_DATA_SOURCE}`")
+            if _FINEX_DATA_ERROR: st.caption("Chi tiết: " + _FINEX_DATA_ERROR)
+            if not ALL_TICKERS:
+                st.warning("Chưa có dữ liệu. Hãy đặt file `data/vietnam_stock_database_tong_hop.csv` vào thư mục dự án.")
             st.markdown(f"- **Số mã có dữ liệu:** `{len(ALL_TICKERS)}`")
-            st.markdown("- **Nguồn dữ liệu ưu tiên:** `GitHub scraper CSV` (không dùng dữ liệu demo)")
-            st.markdown(f"- **PostgreSQL cổ tức:** `{'Thư viện đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
+            st.markdown(f"- **Số dòng CSV:** `{len(_FINEX_LONG_DF):,}`")
+            st.markdown("- **Thứ tự ưu tiên nguồn:**")
+            st.markdown("  1. 🥇 `data/vietnam_stock_database_tong_hop.csv` (local tổng hợp)")
+            st.markdown("  2. 🥈 `FINEX_DATA_URL` (env)")
+            st.markdown("  3. 🥉 GitHub API → `finex_financial_data.csv`")
+            st.markdown("  4. 🏅 Local fallback `finex_financial_data.csv`")
+            st.markdown(f"- **PostgreSQL cổ tức:** `{'Đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
             try:
                 _graham_status = _safe_import_graham().get("loaded", False)
                 _backtest_status = _safe_import_backtest().get("loaded", False)
@@ -2389,19 +2480,15 @@ def render_sidebar():
                 _graham_status = _backtest_status = False
             st.markdown(f"- **Graham/DCF engine gốc:** `{'Đã nạp' if _graham_status else 'Fallback tích hợp'}`")
             st.markdown(f"- **Backtest engine gốc:** `{'Đã nạp' if _backtest_status else 'Chưa khả dụng'}`")
-            st.caption("GitHub scraper CSV là nguồn ưu tiên. Không có dữ liệu dự phòng khai báo sẵn trong code; chỉ tiêu thiếu được để trống/N/A.")
-
-        # Coverage summary for the embedded dataset
         with st.expander("📚 DỮ LIỆU TÀI CHÍNH ĐANG DÙNG", expanded=False):
-            st.caption(f"Nguồn đang dùng: {_FINEX_DATA_SOURCE}. Dữ liệu được tải trực tiếp từ repository GitHub trước khi xét file local.")
+            st.caption(f"Nguồn: {_FINEX_DATA_SOURCE}")
             st.markdown(f"**✅ Số mã thực tế đọc được:** `{len(ALL_TICKERS)}`")
             st.markdown(f"**📄 Số dòng dữ liệu:** `{len(_FINEX_LONG_DF):,}`")
-            coverage = (_FINEX_LONG_DF.groupby("Loại báo cáo")["Mã chứng khoán"]
-                        .nunique().reset_index(name="Số mã") if not _FINEX_LONG_DF.empty
-                        else pd.DataFrame(columns=["Loại báo cáo", "Số mã"]))
-            _safe_dataframe(coverage, use_container_width=True, hide_index=True)
-            st.caption(f"**Mã đọc từ nguồn:** {', '.join(ALL_TICKERS)}")
-
+            if not _FINEX_LONG_DF.empty and "Loại báo cáo" in _FINEX_LONG_DF.columns:
+                coverage = (_FINEX_LONG_DF.groupby("Loại báo cáo")["Mã chứng khoán"]
+                            .nunique().reset_index(name="Số mã"))
+                _safe_dataframe(coverage, use_container_width=True, hide_index=True)
+            st.caption(f"**Mã đọc từ nguồn:** {', '.join(ALL_TICKERS[:50])}{'...' if len(ALL_TICKERS) > 50 else ''}")
         st.markdown("---")
         st.markdown("### 🧮 CHỨC NĂNG")
         app_mode = st.radio(
@@ -2409,14 +2496,11 @@ def render_sidebar():
             ["🏛️ Terminal", "💵 Cổ tức tiền mặt", "📈 Cổ tức cổ phiếu",
              "📚 BCTC / DỮ LIỆU TÀI CHÍNH", "📉 Khủng hoảng lịch sử"],
             key="app_mode")
-
         st.markdown("---")
         if st.button("🚀 Nâng cấp VIP", use_container_width=True, type="primary"):
             st.session_state.show_vip_dialog = True; st.rerun()
-
         render_profiler_panel()
-        return app_mode
-
+    return app_mode
 
 # ============================================================================
 # 14. MAIN
@@ -2428,9 +2512,7 @@ def main():
     st.session_state.setdefault("show_partner_dialog", False)
     st.session_state.setdefault("show_vip_dialog", False)
     st.session_state.setdefault("selected_plan", None)
-
     app_mode = render_sidebar()
-
     # ROUTE MODES
     if app_mode == "💵 Cổ tức tiền mặt":
         render_header(); render_cash_dividend_ui(); return
@@ -2440,20 +2522,19 @@ def main():
         render_header(); render_bctc_ui(); return
     if app_mode == "📉 Khủng hoảng lịch sử":
         render_header(); render_crisis_ui(); return
-
     # === TERMINAL MODE ===
     render_header()
     if _FINEX_LONG_DF.empty:
-        st.error("Không kết nối được CSV dữ liệu tài chính gốc. Các chỉ số định giá sẽ không được trình bày như dữ liệu xác thực.")
+        st.error("Không kết nối được CSV dữ liệu tài chính. Hãy kiểm tra file `data/vietnam_stock_database_tong_hop.csv`.")
         if _FINEX_DATA_ERROR: st.caption(_FINEX_DATA_ERROR)
     else:
         status_cols = st.columns(3)
-        status_cols[0].metric("Mã có dữ liệu", f"{len(ALL_TICKERS)}/102")
+        status_cols[0].metric("Mã có dữ liệu", f"{len(ALL_TICKERS)}")
         status_cols[1].metric("Dòng dữ liệu gốc", f"{len(_FINEX_LONG_DF):,}")
-        status_cols[2].metric("Kỳ báo cáo", f"{_FINEX_LONG_DF['Ngày kỳ'].nunique():,}")
+        n_periods = _FINEX_LONG_DF["Ngày kỳ"].nunique() if "Ngày kỳ" in _FINEX_LONG_DF.columns else 0
+        status_cols[2].metric("Kỳ báo cáo", f"{n_periods:,}")
         if not _FINEX_TICKER_COUNT_OK:
-            st.warning(f"CSV hiện có {len(ALL_TICKERS)} mã, khác mục tiêu 102 mã. Hệ thống chỉ hiển thị mã thực sự có trong CSV, không tự thêm mã giả.")
-
+            st.info(f"CSV hiện có {len(ALL_TICKERS)} mã (mục tiêu 102). Hệ thống hiển thị đúng mã thực tế có trong CSV.")
     # Header row: partners + ticker
     col_broker, col_ticker = st.columns([1.2, 1], gap="large")
     with col_broker:
@@ -2461,12 +2542,12 @@ def main():
     with col_ticker:
         st.markdown(
             """<div style='background:linear-gradient(145deg,#111C2E 0%,#0F1829 100%);
-            border:1px solid #1F2A44;border-left:3px solid #22C55E;border-radius:12px;
-            padding:16px 18px;'>
-            <div style='color:#22C55E;font-weight:800;font-size:1.05em;
-            margin-bottom:12px;'>📋 DANH SÁCH CỔ PHIẾU</div>
-            <p style='color:#64748B;font-size:.82em;margin-bottom:10px;'>
-            Chọn mã để phân tích</p></div>""", unsafe_allow_html=True)
+border:1px solid #1F2A44;border-left:3px solid #22C55E;border-radius:12px;
+padding:16px 18px;'>
+<div style='color:#22C55E;font-weight:800;font-size:1.05em;
+margin-bottom:12px;'>📋 DANH SÁCH CỔ PHIẾU</div>
+<p style='color:#64748B;font-size:.82em;margin-bottom:10px;'>
+Chọn mã để phân tích</p></div>""", unsafe_allow_html=True)
         if ALL_TICKERS:
             try:
                 idx = ALL_TICKERS.index(st.session_state.selected_ticker)
@@ -2477,26 +2558,21 @@ def main():
                                   key="ticker_main", label_visibility="collapsed")
             if chosen != st.session_state.selected_ticker:
                 st.session_state.selected_ticker = chosen; st.rerun()
-
-            fin_data = get_financial_data(chosen)
-            render_ticker_info_card(chosen, fin_data)
-
+    fin_data = get_financial_data(st.session_state.selected_ticker)
+    render_ticker_info_card(st.session_state.selected_ticker, fin_data)
     # Dialogs
     if st.session_state.get("show_partner_dialog", False):
         partner_detail_dialog()
     if st.session_state.get("show_vip_dialog", False):
         vip_upgrade_dialog()
-
     # CTA banner 1
     render_cta_banner(
         "Mở khóa toàn bộ sức mạnh FINEX",
         "Nâng cấp Pro Trader để mở ML/DL forecast, xuất PDF, API và nhiều hơn nữa!",
         "💎 Xem các gói ưu đãi", "header")
-
     # VNINDEX CHART
     with prof("📈 VNINDEX chart"):
         render_dynamic_chart()
-
     # Quick metrics
     ticker = st.session_state.selected_ticker
     fin_data = get_financial_data(ticker)
@@ -2509,12 +2585,10 @@ def main():
     c[4].metric("P/B", f"{fin_data.get('pb', 0):.2f}")
     c[5].metric("ROE", f"{fin_data.get('roe_2025', 0):.2f}%")
     c[6].metric("ROA", f"{fin_data.get('roa_2025', 0):.2f}%")
-
     st.markdown("#### 📌 Tỷ suất cổ tức")
     c = st.columns(2)
     c[0].metric("Tỷ suất cổ tức", f"{fin_data.get('div_yield', 0):.2f}%")
     c[1].metric("Cổ tức (VNĐ/cp)", f"{fin_data.get('div_per_share', 0):,.0f}")
-
     # Health assessment
     st.markdown("---")
     st.markdown("### 🚦 ĐÁNH GIÁ SỨC KHỎE DOANH NGHIỆP")
@@ -2530,7 +2604,6 @@ def main():
     elif pb > 1.5: health_checks.append(f"ℹ️ P/B cao ({pb:.2f})")
     if health_checks:
         for h in health_checks: st.markdown(f"- {h}")
-
     # 7 TABS
     tabs = st.tabs(["🧮 ĐỊNH GIÁ", "📈 DỰ BÁO", "📊 TỔNG QUAN",
                     "🔎 TRA CỨU", "🤖 ML", "🧠 DL", "🗂️ DỮ LIỆU"])
@@ -2548,16 +2621,13 @@ def main():
         with prof("🧠 DL"): render_tab_dl(ticker, fin_data)
     with tabs[6]:
         with prof("🗂️ Dữ liệu"): render_tab_data(ticker, fin_data)
-
     # CTA banner 2
     render_cta_banner(
         "Bạn đã xem hết tính năng?",
         "Nâng cấp ngay để mở khóa Xuất PDF, Tối ưu danh mục, API!",
         "💎 Chọn gói phù hợp", "middle")
-
     # VIP pricing
     render_vip_section_main()
-
     # Bottom sections
     st.markdown("---")
     with prof("✅ Accuracy"): render_accuracy_section(ticker)
@@ -2565,27 +2635,24 @@ def main():
     with prof("📌 Undervalued"): render_undervalued_stocks()
     st.markdown("---")
     render_document_section()
-
     # Crisis section
     st.markdown("---")
     st.markdown(
         """<div style='text-align:center;padding:16px 0 8px 0;'>
-        <h2 style='color:#ef4444;margin:0;'>📉 BÀI HỌC TỪ CÁC CUỘC KHỦNG HOẢNG LỊCH SỬ</h2>
-        <p style='color:#94a3b8;font-size:.95em;margin-top:8px;'>
-        Phân tích cú sốc thị trường · Phản ứng nhà điều hành · Stress Test danh mục</p>
-        </div>""", unsafe_allow_html=True)
+<h2 style='color:#ef4444;margin:0;'>📉 BÀI HỌC TỪ CÁC CUỘC KHỦNG HOẢNG LỊCH SỬ</h2>
+<p style='color:#94a3b8;font-size:.95em;margin-top:8px;'>
+Phân tích cú sốc thị trường · Phản ứng nhà điều hành · Stress Test danh mục</p>
+</div>""", unsafe_allow_html=True)
     crisis_keys = list(HISTORICAL_CRISES.keys())
     default_idx = crisis_keys.index("COVID_2020") if "COVID_2020" in crisis_keys else 0
     sel_cr = st.selectbox("🔍 Chọn khủng hoảng:", crisis_keys,
                           index=default_idx, key="crisis_main")
     render_crisis_section(sel_cr)
-
     # CTA banner 3
     render_cta_banner(
         "Sẵn sàng nâng tầm phân tích đầu tư?",
         "Tham gia cùng hàng ngàn nhà đầu tư chuyên nghiệp đang dùng FINEX mỗi ngày!",
         "🚀 Nâng cấp ngay hôm nay", "footer")
-
     # Footer
     render_full_footer()
     render_legacy_about_section()
