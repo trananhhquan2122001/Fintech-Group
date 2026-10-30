@@ -346,143 +346,7 @@ def _make_fin_data(**kwargs):
     base.update(kwargs)
     return base
 
-FINANCIAL_DATA_2026 = {
-    "FPT": _make_fin_data(
-        price=120000, market_cap=180_000, shares_outstanding=1_500_000_000,
-        eps_ttm=5200, pe_ttm=23.0, pb=4.8, bvps=25000,
-        roe_2025=22.0, roa_2025=10.0, margin=40.0, de=0.6,
-        total_assets_30062026=70_000, equity=38_000,
-        toi_6t2026=30000, lntt_6t2026=6000, lnst_6t2026=5000,
-        lnst_2024=7000, lnst_2025=8500, growth_2025_2024=21.4,
-        div_per_share=2000, div_yield=1.7,
-        industry="Công nghệ thông tin",
-    ),
-    "TCB": _make_fin_data(
-        price=35000, market_cap=245_000, shares_outstanding=7_000_000_000,
-        eps_ttm=3500, pe_ttm=10.0, pb=1.25, bvps=28000,
-        roe_2025=15.5, roa_2025=1.8, margin=45.0, de=8.0, casa_30062026=35.0,
-        total_assets_30062026=800_000, equity=180_000,
-        toi_6t2026=25000, lntt_6t2026=14000, lnst_6t2026=12000,
-        lnst_2024=19000, lnst_2025=22000, growth_2025_2024=15.8,
-        div_per_share=1500, div_yield=4.3,
-        industry="Ngân hàng",
-    ),
-    "HPG": _make_fin_data(
-        price=27000, market_cap=170_000, shares_outstanding=6_400_000_000,
-        eps_ttm=1800, pe_ttm=15.0, pb=1.6, bvps=17000,
-        roe_2025=10.5, roa_2025=5.0, margin=15.0, de=1.2,
-        total_assets_30062026=220_000, equity=108_000,
-        toi_6t2026=70000, lntt_6t2026=9000, lnst_6t2026=7000,
-        lnst_2024=8000, lnst_2025=12000, growth_2025_2024=50.0,
-        div_per_share=500, div_yield=1.85,
-        industry="Sản xuất thép",
-    ),
-    "VNM": _make_fin_data(
-        price=68000, market_cap=141_000, shares_outstanding=2_080_000_000,
-        eps_ttm=4200, pe_ttm=16.2, pb=3.1, bvps=22000,
-        roe_2025=24.0, roa_2025=15.0, margin=42.0, de=0.3,
-        total_assets_30062026=60_000, equity=45_000,
-        toi_6t2026=32000, lntt_6t2026=6000, lnst_6t2026=4500,
-        lnst_2024=8500, lnst_2025=8700, growth_2025_2024=2.4,
-        div_per_share=3850, div_yield=5.66,
-        industry="Tiêu dùng",
-    ),
-    "VCB": _make_fin_data(
-        price=90000, market_cap=504_000, shares_outstanding=5_600_000_000,
-        eps_ttm=6500, pe_ttm=13.8, pb=2.0, bvps=45000,
-        roe_2025=18.5, roa_2025=1.5, margin=42.0, de=9.0, casa_30062026=38.0,
-        total_assets_30062026=1_800_000, equity=180_000,
-        toi_6t2026=40000, lntt_6t2026=22000, lnst_6t2026=19000,
-        lnst_2024=33000, lnst_2025=36000, growth_2025_2024=9.1,
-        div_per_share=1000, div_yield=1.11,
-        industry="Ngân hàng",
-    ),
-    "MWG": _make_fin_data(
-        price=55000, market_cap=80_300, shares_outstanding=1_460_000_000,
-        eps_ttm=2200, pe_ttm=25.0, pb=3.1, bvps=18000,
-        roe_2025=15.0, roa_2025=6.0, margin=20.0, de=1.5,
-        total_assets_30062026=45_000, equity=26_000,
-        toi_6t2026=65000, lntt_6t2026=2500, lnst_6t2026=2000,
-        lnst_2024=2500, lnst_2025=3200, growth_2025_2024=28.0,
-        div_per_share=500, div_yield=0.91,
-        industry="Bán lẻ",
-    ),
-    "SSI": _make_fin_data(
-        price=32000, market_cap=64_000, shares_outstanding=2_000_000_000,
-        eps_ttm=1800, pe_ttm=17.8, pb=2.1, bvps=15000,
-        roe_2025=14.0, roa_2025=5.0, margin=55.0, de=1.8,
-        total_assets_30062026=60_000, equity=25_000,
-        toi_6t2026=7000, lntt_6t2026=2200, lnst_6t2026=1800,
-        lnst_2024=3000, lnst_2025=3600, growth_2025_2024=20.0,
-        div_per_share=1000, div_yield=3.13,
-        industry="Chứng khoán",
-    ),
-    "ACB": _make_fin_data(
-        price=24000, market_cap=107_000, shares_outstanding=4_470_000_000,
-        eps_ttm=3200, pe_ttm=7.5, pb=1.33, bvps=18000,
-        roe_2025=18.0, roa_2025=2.0, margin=40.0, de=7.5, casa_30062026=25.0,
-        total_assets_30062026=750_000, equity=140_000,
-        toi_6t2026=25000, lntt_6t2026=12000, lnst_6t2026=10000,
-        lnst_2024=16000, lnst_2025=18000, growth_2025_2024=12.5,
-        div_per_share=1500, div_yield=6.25,
-        industry="Ngân hàng",
-    ),
-    "VIC": _make_fin_data(
-        price=45000, market_cap=171_000, shares_outstanding=3_800_000_000,
-        eps_ttm=1500, pe_ttm=30.0, pb=1.4, bvps=32000,
-        roe_2025=5.0, roa_2025=1.5, margin=25.0, de=2.0,
-        total_assets_30062026=700_000, equity=120_000,
-        toi_6t2026=90000, lntt_6t2026=4000, lnst_6t2026=3200,
-        lnst_2024=4500, lnst_2025=5700, growth_2025_2024=26.7,
-        div_per_share=0, div_yield=0.0,
-        industry="Bất động sản",
-    ),
-    "VHM": _make_fin_data(
-        price=42000, market_cap=183_000, shares_outstanding=4_350_000_000,
-        eps_ttm=4500, pe_ttm=9.3, pb=1.5, bvps=28000,
-        roe_2025=16.0, roa_2025=5.0, margin=35.0, de=1.3,
-        total_assets_30062026=450_000, equity=122_000,
-        toi_6t2026=45000, lntt_6t2026=13000, lnst_6t2026=10000,
-        lnst_2024=17000, lnst_2025=19500, growth_2025_2024=14.7,
-        div_per_share=1000, div_yield=2.38,
-        industry="Bất động sản",
-    ),
-    "GAS": _make_fin_data(
-        price=72000, market_cap=169_000, shares_outstanding=2_350_000_000,
-        eps_ttm=6800, pe_ttm=10.6, pb=2.1, bvps=35000,
-        roe_2025=20.0, roa_2025=12.0, margin=25.0, de=0.4,
-        total_assets_30062026=90_000, equity=82_000,
-        toi_6t2026=55000, lntt_6t2026=11000, lnst_6t2026=8500,
-        lnst_2024=14000, lnst_2025=16000, growth_2025_2024=14.3,
-        div_per_share=3000, div_yield=4.17,
-        industry="Năng lượng",
-    ),
-    "MSN": _make_fin_data(
-        price=78000, market_cap=111_000, shares_outstanding=1_420_000_000,
-        eps_ttm=3500, pe_ttm=22.3, pb=3.5, bvps=22000,
-        roe_2025=15.0, roa_2025=5.0, margin=30.0, de=1.7,
-        total_assets_30062026=140_000, equity=31_000,
-        toi_6t2026=40000, lntt_6t2026=3500, lnst_6t2026=2800,
-        lnst_2024=4500, lnst_2025=5000, growth_2025_2024=11.1,
-        div_per_share=1000, div_yield=1.28,
-        industry="Tiêu dùng",
-    ),
-}
-
-COMPANY_INFO = {
-    "FPT": {"name": "CTCP FPT", "exchange": "HOSE"},
-    "TCB": {"name": "Ngân hàng TMCP Kỹ Thương", "exchange": "HOSE"},
-    "HPG": {"name": "CTCP Tập đoàn Hòa Phát", "exchange": "HOSE"},
-    "VNM": {"name": "CTCP Sữa Việt Nam", "exchange": "HOSE"},
-    "VCB": {"name": "Ngân hàng TMCP Ngoại thương VN", "exchange": "HOSE"},
-    "MWG": {"name": "CTCP Đầu tư Thế Giới Di Động", "exchange": "HOSE"},
-    "SSI": {"name": "CTCP Chứng khoán SSI", "exchange": "HOSE"},
-    "ACB": {"name": "Ngân hàng TMCP Á Châu", "exchange": "HOSE"},
-    "VIC": {"name": "CTCP Tập đoàn Vingroup", "exchange": "HOSE"},
-    "VHM": {"name": "CTCP Vinhomes", "exchange": "HOSE"},
-    "GAS": {"name": "Tổng Công ty Khí Việt Nam", "exchange": "HOSE"},
-    "MSN": {"name": "CTCP Tập đoàn Masan", "exchange": "HOSE"},
-}
+# Financial data is loaded exclusively from the GitHub scraper output below.
 
 # ==========================================================================
 # SOURCE-OF-TRUTH LOADER: scraper output CSV (long format)
@@ -491,47 +355,74 @@ COMPANY_INFO = {
 # Old 9-CSV loader and hard-coded ticker fallback are intentionally disabled.
 # ==========================================================================
 _FINEX_LONG_DF = pd.DataFrame()
-_FINEX_DATA_SOURCE = "Chưa tìm thấy CSV đầu ra của scraper"
+_FINEX_DATA_SOURCE = "Chưa kết nối được dữ liệu GitHub"
 _FINEX_DATA_ERROR = ""
+GITHUB_OWNER = os.getenv("FINEX_GITHUB_OWNER", "trananhhquan2122001")
+GITHUB_REPO = os.getenv("FINEX_GITHUB_REPO", "Fintech-Group")
+GITHUB_BRANCH = os.getenv("FINEX_GITHUB_BRANCH", "main")
+GITHUB_DATA_FILENAME = os.getenv("FINEX_GITHUB_DATA_FILENAME", "finex_financial_data.csv")
 
-@st.cache_data(ttl=900, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def _load_scraper_long_csv():
+    """GitHub-first loader. Never falls back to hard-coded demo data or legacy 9 CSVs."""
     import io
+    import json
     import urllib.request
+
+    def fetch(url, timeout=30):
+        req = urllib.request.Request(url, headers={"User-Agent": "FINEX-VN-Terminal/2.0"})
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return response.read()
+
+    errors = []
     configured_url = os.getenv("FINEX_DATA_URL", "").strip()
-    candidates = []
+    urls = []
     if configured_url:
-        candidates.append((configured_url, True))
-    for name in ("finex_financial_data.csv", "financial_data.csv", "vn30_41_fin_long.csv", "scraped_financial_data.csv"):
+        urls.append((configured_url, "FINEX_DATA_URL"))
+
+    # Locate the exact named scraper output in the repository tree.
+    # GitHub Actions artifacts are not public raw files; the workflow must commit/publish this CSV.
+    tree_url = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/git/trees/{GITHUB_BRANCH}?recursive=1"
+    try:
+        tree = json.loads(fetch(tree_url, timeout=20).decode("utf-8"))
+        matches = [x["path"] for x in tree.get("tree", [])
+                   if x.get("type") == "blob" and x.get("path", "").split("/")[-1].lower() == GITHUB_DATA_FILENAME.lower()]
+        if matches:
+            # Prefer a data/ or output/ location if duplicates exist.
+            matches.sort(key=lambda p: (0 if any(part.lower() in ("data", "output", "datasets") for part in p.split("/")) else 1, len(p)))
+            path = matches[0]
+            urls.append((f"https://raw.githubusercontent.com/{GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}/{path}", f"GitHub:{path}"))
+        else:
+            errors.append(f"Không tìm thấy {GITHUB_DATA_FILENAME} trong repository {GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}")
+    except Exception as exc:
+        errors.append(f"GitHub API: {exc}")
+
+    # Local file is only an offline emergency source, after GitHub sources.
+    local_names = (GITHUB_DATA_FILENAME, "finex_financial_data.csv")
+    for name in dict.fromkeys(local_names):
         local = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
         if os.path.isfile(local):
-            candidates.append((local, False))
-    errors = []
-    for source, is_url in candidates:
+            urls.append((local, f"Local fallback:{name}"))
+
+    for source, label in urls:
         try:
-            if is_url:
-                req = urllib.request.Request(source, headers={"User-Agent": "FINEX-VN-Terminal/1.0"})
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    raw = resp.read()
-                frame = pd.read_csv(io.BytesIO(raw), low_memory=False)
-                label = source
-            else:
-                frame = pd.read_csv(source, low_memory=False, encoding="utf-8-sig")
-                label = os.path.basename(source)
+            raw = fetch(source) if source.startswith(("http://", "https://")) else open(source, "rb").read()
+            frame = pd.read_csv(io.BytesIO(raw), low_memory=False, encoding="utf-8-sig")
             required = {"Mã chứng khoán", "Loại báo cáo", "Năm", "Chỉ tiêu tiếng Việt", "Giá trị"}
-            if not required.issubset(set(frame.columns)):
-                errors.append(f"{label}: thiếu cột bắt buộc")
+            if not required.issubset(frame.columns):
+                errors.append(f"{label}: thiếu cột bắt buộc {sorted(required - set(frame.columns))}")
                 continue
             frame["Mã chứng khoán"] = frame["Mã chứng khoán"].astype(str).str.upper().str.strip()
             frame["Năm"] = pd.to_numeric(frame["Năm"], errors="coerce")
             frame["Giá trị"] = pd.to_numeric(frame["Giá trị"], errors="coerce")
             frame = frame.dropna(subset=["Mã chứng khoán", "Năm", "Giá trị"])
+            frame = frame[frame["Mã chứng khoán"].str.fullmatch(r"[A-Z0-9]{3,5}", na=False)]
             if frame.empty:
-                errors.append(f"{label}: CSV không có dòng dữ liệu hợp lệ")
+                errors.append(f"{label}: không có dòng dữ liệu hợp lệ")
                 continue
             return frame, label, ""
         except Exception as exc:
-            errors.append(f"{source}: {exc}")
+            errors.append(f"{label}: {exc}")
     return pd.DataFrame(), "Không có nguồn CSV scraper hợp lệ", "; ".join(errors)
 
 def _norm_indicator(value):
@@ -596,6 +487,8 @@ _SCRAPED_FINANCIAL_DATA = _build_data_from_scraper(_FINEX_LONG_DF)
 FINANCIAL_DATA_2026 = _SCRAPED_FINANCIAL_DATA
 COMPANY_INFO = {ticker: {"name": ticker, "exchange": "Chưa xác định"} for ticker in FINANCIAL_DATA_2026}
 ALL_TICKERS = sorted(FINANCIAL_DATA_2026.keys())
+EXPECTED_SOURCE_TICKERS = 102
+_FINEX_TICKER_COUNT_OK = len(ALL_TICKERS) == EXPECTED_SOURCE_TICKERS
 
 def get_financial_data(ticker):
     """Return only scraper CSV values; never enrich with demo/snapshot fallback."""
@@ -2291,7 +2184,10 @@ def render_cash_dividend_ui():
     st.markdown("## 💵 MÁY TÍNH CỔ TỨC TIỀN MẶT")
     st.markdown("*Tính cổ tức nhận được dựa trên vốn và giá.*")
     c1, c2, c3 = st.columns(3)
-    with c1: ticker = st.text_input("Mã CP:", value="TCB").upper().strip()
+    with c1:
+        ticker = st.selectbox("Chọn mã cổ phiếu:", ALL_TICKERS,
+                              index=ALL_TICKERS.index("TCB") if "TCB" in ALL_TICKERS else 0,
+                              format_func=_ticker_label, key="stock_div_ticker") if ALL_TICKERS else ""
     with c2: price = st.selectbox("Giá (VNĐ):", DEFAULT_PRICE_LIST, index=4)
     with c3: capital = st.number_input("Vốn (VNĐ):", min_value=MIN_CAPITAL_VND,
                                         max_value=MAX_CAPITAL_VND, step=CAPITAL_STEP_VND,
@@ -2349,7 +2245,10 @@ def render_stock_dividend_ui():
     st.markdown("## 📈 MÁY TÍNH CỔ TỨC BẰNG CỔ PHIẾU")
     st.markdown("*Tính số CP nhận thêm từ chia cổ tức bằng CP.*")
     c1, c2 = st.columns(2)
-    with c1: ticker = st.text_input("Mã CP:", value="TCB").upper().strip()
+    with c1:
+        ticker = st.selectbox("Chọn mã cổ phiếu:", ALL_TICKERS,
+                              index=ALL_TICKERS.index("TCB") if "TCB" in ALL_TICKERS else 0,
+                              format_func=_ticker_label, key="stock_div_ticker") if ALL_TICKERS else ""
     with c2: owned = st.number_input("Số CP đang sở hữu:", min_value=MIN_OWNED_SHARES,
                                       max_value=MAX_OWNED_SHARES, step=10_000,
                                       value=100_000, format="%d")
@@ -2386,37 +2285,72 @@ def render_stock_dividend_ui():
         _safe_dataframe(df_scn, use_container_width=True, hide_index=True)
 
 
+
+def _finex_original_rows(ticker, report_type=None, period_type=None, year=None):
+    """Trả về dòng CSV nguyên bản, không nội suy/đổi tên chỉ tiêu."""
+    if _FINEX_LONG_DF is None or _FINEX_LONG_DF.empty:
+        return pd.DataFrame()
+    d = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"].astype(str).str.upper() == str(ticker).upper()].copy()
+    if report_type and report_type != "Tất cả":
+        d = d[d["Loại báo cáo"].astype(str) == report_type]
+    if period_type and period_type != "Tất cả":
+        d = d[d["Loại kỳ"].astype(str) == period_type]
+    if year and year != "Tất cả":
+        d = d[pd.to_numeric(d["Năm"], errors="coerce") == int(year)]
+    return d.sort_values(["Năm", "Ngày kỳ", "Chỉ tiêu tiếng Việt"], kind="stable")
+
+def _render_original_financial_statements(ticker):
+    st.markdown("### 🧾 Dữ liệu báo cáo gốc từ CSV")
+    st.caption("Bảng dưới hiển thị trực tiếp các dòng đã thu thập trong CSV: không tự tạo chỉ tiêu, không tự điền số 0 cho dữ liệu thiếu.")
+    raw = _finex_original_rows(ticker)
+    if raw.empty:
+        st.warning("Không tìm thấy dòng dữ liệu gốc cho mã này.")
+        return
+    c1, c2, c3 = st.columns(3)
+    reports = ["Tất cả"] + sorted(raw["Loại báo cáo"].dropna().astype(str).unique().tolist())
+    periods = ["Tất cả"] + sorted(raw["Loại kỳ"].dropna().astype(str).unique().tolist())
+    years = ["Tất cả"] + sorted(raw["Năm"].dropna().astype(int).unique().tolist(), reverse=True)
+    with c1: report = st.selectbox("Loại báo cáo", reports, key=f"raw_report_{ticker}")
+    with c2: period = st.selectbox("Loại kỳ", periods, key=f"raw_period_{ticker}")
+    with c3: year = st.selectbox("Năm", years, key=f"raw_year_{ticker}")
+    view = _finex_original_rows(ticker, report, period, year)
+    st.caption(f"{len(view):,} dòng dữ liệu · {view['Ngày kỳ'].nunique()} kỳ báo cáo · Nguồn: {_FINEX_DATA_SOURCE}")
+    if not view.empty:
+        _safe_dataframe(view[["Mã chứng khoán", "Tên ngành", "Loại báo cáo", "Loại kỳ", "Năm", "Ngày kỳ", "Chỉ tiêu tiếng Việt", "Giá trị"]],
+                        use_container_width=True, hide_index=True)
+        csv_bytes = view.to_csv(index=False).encode("utf-8-sig")
+        st.download_button("⬇️ Tải dữ liệu gốc đang lọc (CSV)", data=csv_bytes,
+                           file_name=f"FINEX_{ticker}_BCTC_goc.csv", mime="text/csv",
+                           key=f"download_raw_{ticker}")
+
+def _ticker_label(ticker):
+    rows = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"] == ticker] if not _FINEX_LONG_DF.empty else pd.DataFrame()
+    industry = str(rows["Tên ngành"].dropna().iloc[0]) if not rows.empty and rows["Tên ngành"].notna().any() else "Chưa phân ngành"
+    return f"{ticker}  |  {industry}"
+
+
 def render_bctc_ui():
-    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH")
-    ticker = st.selectbox("Chọn mã:", ALL_TICKERS, key="bctc_ticker")
+    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH — 102 DOANH NGHIỆP")
+    if not ALL_TICKERS:
+        st.error("Chưa tải được danh sách mã từ CSV nguồn.")
+        st.caption(_FINEX_DATA_ERROR)
+        return
+    ticker = st.selectbox("Tìm và chọn mã cổ phiếu:", ALL_TICKERS,
+                          format_func=_ticker_label, key="bctc_ticker")
     fin = get_financial_data(ticker)
-    st.markdown(f"### {ticker} — {COMPANY_INFO.get(ticker, {}).get('name', '')}")
-
-    tabs = st.tabs(["💵 LCTT", "📈 KQKD", "📊 BCDKT"])
-    with tabs[0]:
-        st.markdown("**Lưu chuyển tiền tệ**")
-        c = st.columns(3)
-        # Chỉ hiển thị dữ liệu LCTT gốc nếu nguồn cung cấp; không tự suy diễn từ LNST/tổng tài sản.
-        c[0].metric("OCF (6T/2026)", _fmt_ty(fin.get("ocf_6t2026")) if fin.get("ocf_6t2026") is not None else "N/A")
-        c[1].metric("CapEx", _fmt_ty(fin.get("capex_6t2026")) if fin.get("capex_6t2026") is not None else "N/A")
-        c[2].metric("FCF", _fmt_ty(fin.get("fcf_6t2026")) if fin.get("fcf_6t2026") is not None else "N/A")
-    with tabs[1]:
-        st.markdown("**Kết quả kinh doanh**")
-        c = st.columns(3)
-        c[0].metric("Doanh thu / TOI 6T", _fmt_ty(fin.get("toi_6t2026", 0)))
-        c[1].metric("LNTT 6T", _fmt_ty(fin.get("lntt_6t2026", 0)))
-        c[2].metric("LNST 6T", _fmt_ty(fin.get("lnst_6t2026", 0)))
-        c = st.columns(3)
-        c[0].metric("LNST 2024", _fmt_ty(fin.get("lnst_2024", 0)))
-        c[1].metric("LNST 2025", _fmt_ty(fin.get("lnst_2025", 0)))
-        c[2].metric("Tăng trưởng 25/24", f"{fin.get('growth_2025_2024', 0):+.1f}%")
-    with tabs[2]:
-        st.markdown("**Bảng cân đối kế toán**")
-        c = st.columns(3)
-        c[0].metric("Tổng tài sản", _fmt_ty(fin.get("total_assets_30062026", 0)))
-        c[1].metric("Vốn CSH", _fmt_ty(fin.get("equity", 0)))
-        c[2].metric("SLCP", f"{fin.get('shares_outstanding', 0)/1e9:.2f} tỷ")
-
+    st.markdown(f"### {ticker} — {COMPANY_INFO.get(ticker, {}).get('name', ticker)}")
+    raw_ticker = _finex_original_rows(ticker)
+    st.info(f"Đang xem dữ liệu của **{ticker}** · {len(raw_ticker):,} dòng CSV gốc · Ngành: {_ticker_label(ticker).split('|',1)[-1].strip()}")
+    st.markdown("### Chỉ số tổng hợp")
+    st.caption("Các chỉ số tổng hợp chỉ hiển thị khi có dữ liệu phù hợp trong CSV. Đối chiếu số liệu chi tiết tại mục dữ liệu báo cáo gốc bên dưới.")
+    c = st.columns(5)
+    c[0].metric("EPS", f"{fin.get('eps_ttm', 0):,.0f}" if fin.get("eps_ttm", 0) else "N/A")
+    c[1].metric("BVPS", f"{fin.get('bvps', 0):,.0f}" if fin.get("bvps", 0) else "N/A")
+    c[2].metric("ROE", f"{fin.get('roe_2025', 0):.2f}%" if fin.get("roe_2025", 0) else "N/A")
+    c[3].metric("P/E", f"{fin.get('pe_ttm', 0):.2f}" if fin.get("pe_ttm", 0) else "N/A")
+    c[4].metric("P/B", f"{fin.get('pb', 0):.2f}" if fin.get("pb", 0) else "N/A")
+    st.markdown("---")
+    _render_original_financial_statements(ticker)
 
 def render_crisis_ui():
     st.markdown("## 📉 BÀI HỌC TỪ CÁC CUỘC KHỦNG HOẢNG LỊCH SỬ")
@@ -2444,9 +2378,9 @@ def render_sidebar():
         with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=False):
             st.markdown(f"- **Nguồn dữ liệu scraper:** `{_FINEX_DATA_SOURCE}`")
             if _FINEX_DATA_ERROR: st.caption("Chi tiết nguồn dữ liệu: " + _FINEX_DATA_ERROR)
-            if not ALL_TICKERS: st.warning("Chưa có dữ liệu scraper. Hãy đặt FINEX_DATA_URL hoặc thêm finex_financial_data.csv cạnh app.py.")
+            if not ALL_TICKERS: st.warning("Chưa có dữ liệu scraper. Kiểm tra file finex_financial_data.csv đã được workflow commit lên GitHub chưa; có thể đặt FINEX_DATA_URL làm đường dẫn Raw GitHub.")
             st.markdown(f"- **Số mã có dữ liệu:** `{len(ALL_TICKERS)}`")
-            st.markdown(f"- **Snapshot bổ sung tùy chọn:** `{'Đã import' if _HAS_SNAPSHOT else 'Chưa khả dụng'}`")
+            st.markdown("- **Nguồn dữ liệu ưu tiên:** `GitHub scraper CSV` (không dùng dữ liệu demo)")
             st.markdown(f"- **PostgreSQL cổ tức:** `{'Thư viện đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
             try:
                 _graham_status = _safe_import_graham().get("loaded", False)
@@ -2455,20 +2389,18 @@ def render_sidebar():
                 _graham_status = _backtest_status = False
             st.markdown(f"- **Graham/DCF engine gốc:** `{'Đã nạp' if _graham_status else 'Fallback tích hợp'}`")
             st.markdown(f"- **Backtest engine gốc:** `{'Đã nạp' if _backtest_status else 'Chưa khả dụng'}`")
-            st.caption("Dữ liệu nhúng trong mã nguồn là nguồn ưu tiên; snapshot tương thích chỉ bổ sung trường còn thiếu.")
+            st.caption("GitHub scraper CSV là nguồn ưu tiên. Không có dữ liệu dự phòng khai báo sẵn trong code; chỉ tiêu thiếu được để trống/N/A.")
 
         # Coverage summary for the embedded dataset
         with st.expander("📚 DỮ LIỆU TÀI CHÍNH ĐANG DÙNG", expanded=False):
-            st.caption("Nguồn ưu tiên: dữ liệu tài chính được khai báo trong mã nguồn FINEX hiện tại.")
-            st.markdown(f"**✅ Đã nạp:** `12` mã demo")
-            st.markdown(f"**🏢 Tổng mã:** `{len(ALL_TICKERS)}`")
-            coverage = pd.DataFrame([
-                {"Loại": "KQKD", "Số mã": len(ALL_TICKERS), "Chỉ tiêu": 8},
-                {"Loại": "BCDKT", "Số mã": len(ALL_TICKERS), "Chỉ tiêu": 5},
-                {"Loại": "LCTT", "Số mã": len(ALL_TICKERS), "Chỉ tiêu": 3},
-            ])
+            st.caption(f"Nguồn đang dùng: {_FINEX_DATA_SOURCE}. Dữ liệu được tải trực tiếp từ repository GitHub trước khi xét file local.")
+            st.markdown(f"**✅ Số mã thực tế đọc được:** `{len(ALL_TICKERS)}`")
+            st.markdown(f"**📄 Số dòng dữ liệu:** `{len(_FINEX_LONG_DF):,}`")
+            coverage = (_FINEX_LONG_DF.groupby("Loại báo cáo")["Mã chứng khoán"]
+                        .nunique().reset_index(name="Số mã") if not _FINEX_LONG_DF.empty
+                        else pd.DataFrame(columns=["Loại báo cáo", "Số mã"]))
             _safe_dataframe(coverage, use_container_width=True, hide_index=True)
-            st.caption(f"**Mã:** {', '.join(ALL_TICKERS)}")
+            st.caption(f"**Mã đọc từ nguồn:** {', '.join(ALL_TICKERS)}")
 
         st.markdown("---")
         st.markdown("### 🧮 CHỨC NĂNG")
@@ -2491,7 +2423,7 @@ def render_sidebar():
 # ============================================================================
 def main():
     inject_css()
-    st.session_state.setdefault("selected_ticker", "FPT")
+    st.session_state.setdefault("selected_ticker", ALL_TICKERS[0] if ALL_TICKERS else "")
     st.session_state.setdefault("selected_partner", None)
     st.session_state.setdefault("show_partner_dialog", False)
     st.session_state.setdefault("show_vip_dialog", False)
@@ -2511,6 +2443,16 @@ def main():
 
     # === TERMINAL MODE ===
     render_header()
+    if _FINEX_LONG_DF.empty:
+        st.error("Không kết nối được CSV dữ liệu tài chính gốc. Các chỉ số định giá sẽ không được trình bày như dữ liệu xác thực.")
+        if _FINEX_DATA_ERROR: st.caption(_FINEX_DATA_ERROR)
+    else:
+        status_cols = st.columns(3)
+        status_cols[0].metric("Mã có dữ liệu", f"{len(ALL_TICKERS)}/102")
+        status_cols[1].metric("Dòng dữ liệu gốc", f"{len(_FINEX_LONG_DF):,}")
+        status_cols[2].metric("Kỳ báo cáo", f"{_FINEX_LONG_DF['Ngày kỳ'].nunique():,}")
+        if not _FINEX_TICKER_COUNT_OK:
+            st.warning(f"CSV hiện có {len(ALL_TICKERS)} mã, khác mục tiêu 102 mã. Hệ thống chỉ hiển thị mã thực sự có trong CSV, không tự thêm mã giả.")
 
     # Header row: partners + ticker
     col_broker, col_ticker = st.columns([1.2, 1], gap="large")
@@ -2530,7 +2472,8 @@ def main():
                 idx = ALL_TICKERS.index(st.session_state.selected_ticker)
             except ValueError:
                 idx = 0
-            chosen = st.selectbox("Chọn mã:", ALL_TICKERS, index=idx,
+            chosen = st.selectbox("Tìm kiếm / chọn mã:", ALL_TICKERS, index=idx,
+                                  format_func=_ticker_label,
                                   key="ticker_main", label_visibility="collapsed")
             if chosen != st.session_state.selected_ticker:
                 st.session_state.selected_ticker = chosen; st.rerun()
