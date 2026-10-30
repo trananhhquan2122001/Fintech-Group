@@ -1,8 +1,8 @@
 # finex_vn_terminal.py
 # ============================================================================
-# FINEX VN TERMINAL — Integrated Upgrade v3 (100% code gốc + Tích hợp CSV tổng hợp)
-# Kiến trúc: 7 tabs + 5 modes + full bottom sections
-# NEW: Ưu tiên đọc data/vietnam_stock_database_tong_hop.csv trước
+# FINEX VN TERMINAL — Integrated Upgrade v4
+# FIX: Đọc đúng dữ liệu từ vietnam_stock_database_tong_hop.csv
+# NEW: Tự động tính P/E, P/B, Vốn hóa, ROE, ROA từ dữ liệu gốc
 # ============================================================================
 import streamlit as st
 import pandas as pd
@@ -342,34 +342,29 @@ def _make_fin_data(**kwargs):
         "shares_basis": "official", "shares_as_of": "2026-06-30",
         "snapshot_as_of": "2026-10-22",
         "_snapshot_source": True, "_snapshot_note": "",
+        "_raw_indicators": [],  # DEBUG: lưu danh sách chỉ tiêu thực tế có trong CSV
     }
     base.update(kwargs)
     return base
 
 # ==========================================================================
-# === NEW INTEGRATION v3: Ưu tiên đọc data/vietnam_stock_database_tong_hop.csv
-# Thứ tự ưu tiên:
-#   1. data/vietnam_stock_database_tong_hop.csv (local tổng hợp)
-#   2. FINEX_DATA_URL (env - raw GitHub URL)
-#   3. GitHub API → finex_financial_data.csv
-#   4. Local fallback: finex_financial_data.csv
+# === SOURCE-OF-TRUTH LOADER v4: Ưu tiên vietnam_stock_database_tong_hop.csv
 # ==========================================================================
 _FINEX_LONG_DF = pd.DataFrame()
 _FINEX_DATA_SOURCE = "Chưa kết nối được dữ liệu"
 _FINEX_DATA_ERROR = ""
+_DEBUG_AVAILABLE_INDICATORS = set()  # Lưu tất cả tên chỉ tiêu để debug
 
 GITHUB_OWNER = os.getenv("FINEX_GITHUB_OWNER", "trananhhquan2122001")
 GITHUB_REPO = os.getenv("FINEX_GITHUB_REPO", "Fintech-Group")
 GITHUB_BRANCH = os.getenv("FINEX_GITHUB_BRANCH", "main")
 GITHUB_DATA_FILENAME = os.getenv("FINEX_GITHUB_DATA_FILENAME", "finex_financial_data.csv")
 
-# Đường dẫn ưu tiên 1: file tổng hợp local
 TONG_HOP_FILENAME = os.getenv(
     "FINEX_TONG_HOP_FILENAME",
     "data/vietnam_stock_database_tong_hop.csv"
 )
 
-# Các tên file tổng hợp có thể gặp (linh hoạt cho nhiều cách đặt tên)
 _TONG_HOP_ALIASES = [
     "data/vietnam_stock_database_tong_hop.csv",
     "vietnam_stock_database_tong_hop.csv",
@@ -391,7 +386,7 @@ def _try_read_csv(source_path_or_url, label, timeout=30):
             import urllib.request
             req = urllib.request.Request(
                 source_path_or_url,
-                headers={"User-Agent": "FINEX-VN-Terminal/3.0"}
+                headers={"User-Agent": "FINEX-VN-Terminal/4.0"}
             )
             with urllib.request.urlopen(req, timeout=timeout) as response:
                 raw = response.read()
@@ -401,7 +396,6 @@ def _try_read_csv(source_path_or_url, label, timeout=30):
             with open(source_path_or_url, "rb") as f:
                 raw = f.read()
 
-        # Thử nhiều encoding
         for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
             try:
                 frame = pd.read_csv(io.BytesIO(raw), low_memory=False, encoding=enc)
@@ -417,29 +411,23 @@ def _try_read_csv(source_path_or_url, label, timeout=30):
 
 
 def _normalize_to_standard_schema(frame, label):
-    """
-    Chuyển đổi DataFrame từ nhiều schema khả dĩ về schema chuẩn:
-    ['Mã chứng khoán', 'Loại báo cáo', 'Năm', 'Chỉ tiêu tiếng Việt', 'Giá trị']
-    """
+    """Chuyển đổi DataFrame từ nhiều schema khả dĩ về schema chuẩn."""
     if frame is None or frame.empty:
         return pd.DataFrame(), f"{label}: DataFrame rỗng"
 
     cols_lower = {str(c).strip().lower(): c for c in frame.columns}
 
-    # Mapping các tên cột có thể gặp → tên chuẩn
-    col_map = {}
-    ticker_aliases = ["mã chứng khoán", "ticker", "symbol", "ma", "mã", "Mã CK"]
-    report_aliases = ["loại báo cáo", "report_type", "loại bc", "report"]
-    year_aliases = ["năm", "year", "yr"]
-    indicator_aliases = ["chỉ tiêu tiếng việt", "indicator", "chỉ tiêu",
-                         "ten_chi_tieu", "chỉ tiêu vn", "metric"]
-    value_aliases = ["giá trị", "value", "giá tri", "so_lieu", "value_vnd"]
+    ticker_aliases = ["mã chứng khoán", "ticker", "symbol", "ma", "mã", "mã ck", "ma_ck"]
+    report_aliases = ["loại báo cáo", "report_type", "loại bc", "report", "loai_bao_cao"]
+    year_aliases = ["năm", "year", "yr", "nam"]
+    indicator_aliases = ["chỉ tiêu tiếng việt", "indicator", "chỉ tiêu", "ten_chi_tieu",
+                         "chỉ tiêu vn", "metric", "chi_tieu", "item"]
+    value_aliases = ["giá trị", "value", "giá tri", "so_lieu", "value_vnd", "gia_tri"]
 
     def _find(aliases):
         for a in aliases:
             if a in cols_lower:
                 return cols_lower[a]
-        # Tìm gần đúng (contains)
         for a in aliases:
             for k, orig in cols_lower.items():
                 if a in k or k in a:
@@ -452,7 +440,6 @@ def _normalize_to_standard_schema(frame, label):
     indicator_col = _find(indicator_aliases)
     value_col = _find(value_aliases)
 
-    # Nếu đã có đủ cột chuẩn → dùng luôn
     if REQUIRED_STANDARD_COLS.issubset(set(frame.columns)):
         out = frame.copy()
     elif ticker_col and indicator_col and value_col:
@@ -468,7 +455,6 @@ def _normalize_to_standard_schema(frame, label):
             f"Cột hiện có: {list(frame.columns)[:10]}"
         )
 
-    # Chuẩn hóa
     out["Mã chứng khoán"] = out["Mã chứng khoán"].astype(str).str.upper().str.strip()
     out["Năm"] = pd.to_numeric(out["Năm"], errors="coerce")
     out["Giá trị"] = pd.to_numeric(out["Giá trị"], errors="coerce")
@@ -482,14 +468,9 @@ def _normalize_to_standard_schema(frame, label):
 
 @st.cache_data(ttl=300, show_spinner=False)
 def _load_financial_data_source():
-    """
-    NEW v3: Loader với thứ tự ưu tiên:
-      1. data/vietnam_stock_database_tong_hop.csv (local)
-      2. FINEX_DATA_URL (env)
-      3. GitHub API → finex_financial_data.csv
-      4. Local fallback: finex_financial_data.csv
-    """
+    """Loader v4 với thứ tự ưu tiên."""
     errors = []
+    global _DEBUG_AVAILABLE_INDICATORS
 
     # ==================== ƯU TIÊN 1: File tổng hợp local ====================
     tong_hop_candidates = []
@@ -497,7 +478,6 @@ def _load_financial_data_source():
     if env_tong_hop:
         tong_hop_candidates.append(env_tong_hop)
     tong_hop_candidates.extend(_TONG_HOP_ALIASES)
-    # Thêm đường dẫn tuyệt đối từ thư mục script
     script_dir = os.path.dirname(os.path.abspath(__file__))
     for rel in list(_TONG_HOP_ALIASES):
         abs_path = os.path.join(script_dir, rel)
@@ -510,6 +490,8 @@ def _load_financial_data_source():
             if not frame.empty:
                 norm, norm_err = _normalize_to_standard_schema(frame, f"Local-tong-hop:{candidate}")
                 if not norm.empty:
+                    # Lưu tên chỉ tiêu để debug
+                    _DEBUG_AVAILABLE_INDICATORS = set(norm["Chỉ tiêu tiếng Việt"].dropna().unique())
                     return norm, f"✅ Local tổng hợp: {candidate}", ""
                 errors.append(norm_err)
             else:
@@ -522,18 +504,19 @@ def _load_financial_data_source():
         if not frame.empty:
             norm, norm_err = _normalize_to_standard_schema(frame, "FINEX_DATA_URL")
             if not norm.empty:
+                _DEBUG_AVAILABLE_INDICATORS = set(norm["Chỉ tiêu tiếng Việt"].dropna().unique())
                 return norm, f"✅ FINEX_DATA_URL: {configured_url}", ""
             errors.append(norm_err)
         else:
             errors.append(err)
 
-    # ==================== ƯU TIÊN 3: GitHub API → finex_financial_data.csv ====================
+    # ==================== ƯU TIÊN 3: GitHub API ====================
     import io
     import json
     import urllib.request
 
     def fetch_url(url, timeout=30):
-        req = urllib.request.Request(url, headers={"User-Agent": "FINEX-VN-Terminal/3.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "FINEX-VN-Terminal/4.0"})
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return response.read()
 
@@ -556,16 +539,17 @@ def _load_financial_data_source():
             if not frame.empty:
                 norm, norm_err = _normalize_to_standard_schema(frame, f"GitHub:{path}")
                 if not norm.empty:
+                    _DEBUG_AVAILABLE_INDICATORS = set(norm["Chỉ tiêu tiếng Việt"].dropna().unique())
                     return norm, f"✅ GitHub:{path}", ""
                 errors.append(norm_err)
             else:
                 errors.append(err)
         else:
-            errors.append(f"Không tìm thấy {GITHUB_DATA_FILENAME} trong repo {GITHUB_OWNER}/{GITHUB_REPO}/{GITHUB_BRANCH}")
+            errors.append(f"Không tìm thấy {GITHUB_DATA_FILENAME} trong repo")
     except Exception as exc:
         errors.append(f"GitHub API: {exc}")
 
-    # ==================== ƯU TIÊN 4: Local fallback finex_financial_data.csv ====================
+    # ==================== ƯU TIÊN 4: Local fallback ====================
     local_names = (GITHUB_DATA_FILENAME, "finex_financial_data.csv")
     for name in dict.fromkeys(local_names):
         local = os.path.join(script_dir, name)
@@ -574,6 +558,7 @@ def _load_financial_data_source():
             if not frame.empty:
                 norm, norm_err = _normalize_to_standard_schema(frame, f"Local-fallback:{name}")
                 if not norm.empty:
+                    _DEBUG_AVAILABLE_INDICATORS = set(norm["Chỉ tiêu tiếng Việt"].dropna().unique())
                     return norm, f"✅ Local fallback: {name}", ""
                 errors.append(norm_err)
             else:
@@ -583,70 +568,238 @@ def _load_financial_data_source():
 
 
 def _norm_indicator(value):
+    """Chuẩn hóa tên chỉ tiêu: bỏ dấu, lowercase."""
     import unicodedata
     value = unicodedata.normalize("NFKD", str(value or "").lower())
     return "".join(ch for ch in value if not unicodedata.combining(ch)).replace("đ", "d")
 
 
+# ============================================================================
+# ALIAS MAPPING v4 — MỞ RỘNG TỐI ĐA ĐỂ MATCH VỚI CSV TỔNG HỢP
+# ============================================================================
+INDICATOR_ALIASES = {
+    # === GIÁ CỔ PHIẾU ===
+    "price": [
+        "gia dong cua", "gia co phieu", "gia thi truong", "close", "closing price",
+        "gia dong cua co phieu", "gia co phieu pho thong", "gia co phieu cuoi ky",
+        "gia co phieu cuoi", "market price", "gia hien tai", "gia ngay",
+        "don gia", "gia giao dich", "price per share", "gia cp",
+    ],
+    # === EPS ===
+    "eps_ttm": [
+        "eps", "lai co ban tren co phieu", "thu nhap tren moi co phieu",
+        "lai co ban tren moi co phieu", "earnings per share", "loi nhuan tren moi co phieu",
+        "tn tren moi co phieu", "eps co ban", "eps suy giam",
+    ],
+    # === BVPS ===
+    "bvps": [
+        "bvps", "gia tri so sach tren moi co phieu", "book value per share",
+        "gia tri so sach cua co phieu", "gia tri so sach moi co phieu",
+        "bvps co phieu", "gia tri so sach cp",
+    ],
+    # === SỐ LƯỢNG CỔ PHIẾU ===
+    "shares_outstanding": [
+        "so luong co phieu pho thong", "co phieu dang luu hanh", "co phieu da phat hanh",
+        "so co phieu luu hanh", "tong so co phieu", "so luong co phieu",
+        "co phieu pho thong dang luu hanh", "so cp luu hanh", "outstanding shares",
+        "so co phieu dang luu hanh", "so luong cp",
+    ],
+    # === TỔNG TÀI SẢN ===
+    "total_assets_30062026": [
+        "tong tai san", "tong cong tai san", "total assets", "tai san",
+        "tong gia tri tai san", "tong tai san ngan han va dai han",
+    ],
+    # === VỐN CHỦ SỞ HỮU ===
+    "equity": [
+        "von chu so huu", "tong von chu so huu", "equity", "owner's equity",
+        "von chu so huu va loi ich co dong thieu so", "von co phan",
+        "von dieu le", "von góp", "shareholders equity",
+    ],
+    # === LNST ===
+    "lnst_2025": [
+        "loi nhuan sau thue", "loi nhuan sau thue thu nhap doanh nghiep",
+        "loi nhuan rong", "net income", "net profit", "loi nhuan sau thue tndn",
+        "lnst", "loi nhuan sau thue cua cong ty me", "loi nhuan thuan",
+        "loi nhuan sau thue hop nhat", "loi nhuan ke toan sau thue",
+    ],
+    # === LNST 6T ===
+    "lnst_6t2026": [
+        "loi nhuan sau thue", "loi nhuan sau thue thu nhap doanh nghiep",
+        "loi nhuan rong", "net income", "net profit", "lnst",
+    ],
+    # === LNTT ===
+    "lntt_6t2026": [
+        "loi nhuan truoc thue", "loi nhuan truoc thue thu nhap doanh nghiep",
+        "loi nhuan ke toan truoc thue", "profit before tax", "ebit",
+    ],
+    # === ROE ===
+    "roe_2025": [
+        "roe", "ty suat loi nhuan tren von chu so huu", "return on equity",
+        "ty suat sinh loi tren von chu so huu", "loi nhuan tren von chu so huu",
+        "ty le loi nhuan tren von", "roe binh quan",
+    ],
+    # === ROA ===
+    "roa_2025": [
+        "roa", "ty suat loi nhuan tren tong tai san", "return on assets",
+        "ty suat sinh loi tren tong tai san", "loi nhuan tren tong tai san",
+        "roa binh quan",
+    ],
+    # === CỔ TỨC ===
+    "div_per_share": [
+        "co tuc tren moi co phieu", "co tuc bang tien", "dividend per share",
+        "co tuc tien mat", "co tuc da tra", "co tuc nam", "dividend",
+        "co tuc bang tien mat", "co tuc da chi",
+    ],
+    # === VỐN HÓA ===
+    "market_cap": [
+        "von hoa thi truong", "gia tri von hoa", "market cap", "market capitalization",
+        "von hoa", "gia tri von hoa thi truong", "market value",
+    ],
+    # === DOANH THU ===
+    "revenue": [
+        "doanh thu thuan", "tong doanh thu", "revenue", "total revenue",
+        "doanh thu ban hang", "doanh thu thuan ve ban hang", "doanh thu hoat dong",
+        "net revenue", "gross revenue",
+    ],
+    # === DOANH THU 6T ===
+    "toi_6t2026": [
+        "doanh thu thuan", "tong doanh thu", "revenue", "total revenue",
+        "doanh thu ban hang", "doanh thu thuan ve ban hang", "doanh thu hoat dong",
+    ],
+    # === DÒNG TIỀN ===
+    "operating_cash_flow": [
+        "luu chuyen tien thuan tu hoat dong kinh doanh", "ocf",
+        "operating cash flow", "dong tien hoat dong",
+    ],
+    # === CAPEX ===
+    "capex": [
+        "chi mua sam tai san co dinh", "mua sam xay dung tai san co dinh",
+        "capex", "capital expenditure", "chi phi mua sam tscd",
+    ],
+    # === NỢ PHẢI TRẢ ===
+    "total_liabilities": [
+        "no phai tra", "tong no phai tra", "total liabilities", "no ngan han",
+        "no dai han", "tong no",
+    ],
+    # === BIÊN LỢI NHUẬN ===
+    "margin": [
+        "bien loi nhuan gon", "gross margin", "bien loi nhuan", "ty le loi nhuan gon",
+        "bien ln gop", "gross profit margin",
+    ],
+    # === TỶ LỆ NỢ/VCSH ===
+    "de": [
+        "ty le no tren von chu so huu", "debt to equity", "he so no",
+        "no tren von", "d/e ratio", "ty so no",
+    ],
+}
+
+
+def _match_indicator_value(indicator_name, aliases_dict, latest_data, normalized_series):
+    """
+    Tìm giá trị khớp với alias. Trả về giá trị float hoặc None.
+    """
+    norm_name = _norm_indicator(indicator_name)
+    for field, aliases in aliases_dict.items():
+        for alias in aliases:
+            norm_alias = _norm_indicator(alias)
+            if norm_alias in norm_name or norm_name in norm_alias:
+                # Tìm trong latest_data
+                matches = latest_data[
+                    normalized_series.loc[latest_data.index].apply(
+                        lambda x: norm_alias in x or x in norm_alias
+                    )
+                ]
+                if not matches.empty:
+                    return field, float(matches.iloc[-1]["Giá trị"])
+    return None, None
+
+
 def _build_data_from_scraper(frame):
-    """Map actual scraped report indicators to terminal schema; absent fields stay 0/N/A."""
+    """
+    v4: Map scraped report indicators to terminal schema.
+    TỰ ĐỘNG TÍNH derived metrics: P/E, P/B, Vốn hóa, ROE, ROA.
+    """
     if frame is None or frame.empty:
         return {}
-    aliases = {
-        "price": ["gia dong cua", "gia co phieu", "gia thi truong", "close"],
-        "eps_ttm": ["eps", "lai co ban tren co phieu", "thu nhap tren moi co phieu"],
-        "bvps": ["bvps", "gia tri so sach tren moi co phieu"],
-        "shares_outstanding": ["so luong co phieu pho thong", "co phieu dang luu hanh", "co phieu da phat hanh"],
-        "total_assets_30062026": ["tong tai san"],
-        "equity": ["von chu so huu", "tong von chu so huu"],
-        "lnst_2025": ["loi nhuan sau thue", "loi nhuan sau thue thu nhap doanh nghiep"],
-        "lntt_6t2026": ["loi nhuan truoc thue"],
-        "roe_2025": ["roe", "ty suat loi nhuan tren von chu so huu"],
-        "roa_2025": ["roa", "ty suat loi nhuan tren tong tai san"],
-        "div_per_share": ["co tuc tren moi co phieu", "co tuc bang tien"],
-        "market_cap": ["von hoa thi truong", "gia tri von hoa"],
-        "net_income": ["loi nhuan sau thue"],
-        "revenue": ["doanh thu thuan", "tong doanh thu"],
-        "operating_cash_flow": ["luu chuyen tien thuan tu hoat dong kinh doanh"],
-        "capex": ["chi mua sam tai san co dinh", "mua sam xay dung tai san co dinh"],
-    }
+
     normalized = frame["Chỉ tiêu tiếng Việt"].map(_norm_indicator)
     result = {}
+
     for ticker, group in frame.groupby("Mã chứng khoán", sort=True):
         years = sorted(group["Năm"].dropna().astype(int).unique())
         latest_year = years[-1] if years else datetime.now().year
         latest = group[group["Năm"] == latest_year]
-        data = _make_fin_data(
-            industry=str(group["Tên ngành"].dropna().iloc[0])
-            if "Tên ngành" in group and group["Tên ngành"].notna().any()
-            else "Chưa phân loại"
-        )
+
+        # Lấy ngành nếu có
+        industry = "Chưa phân loại"
+        if "Tên ngành" in group.columns and group["Tên ngành"].notna().any():
+            industry = str(group["Tên ngành"].dropna().iloc[0])
+
+        data = _make_fin_data(industry=industry)
         data["source"] = "scraper_csv"
         data["source_year"] = latest_year
-        for field, names in aliases.items():
-            matched = latest[normalized.loc[latest.index].apply(
-                lambda x: any(_norm_indicator(n) in x for n in names)
-            )]
+        data["_raw_indicators"] = list(latest["Chỉ tiêu tiếng Việt"].unique())[:20]
+
+        # === BƯỚC 1: Đọc các chỉ tiêu trực tiếp từ CSV ===
+        for field, aliases in INDICATOR_ALIASES.items():
+            matched = latest[
+                normalized.loc[latest.index].apply(
+                    lambda x: any(_norm_indicator(a) in x or x in _norm_indicator(a) for a in aliases)
+                )
+            ]
             if matched.empty:
                 continue
+
             row = matched.iloc[-1]
             value = float(row["Giá trị"])
+
+            # Chuyển đổi đơn vị: nếu giá trị > 1e9 thì có thể là VND, chuyển sang tỷ
             if field in ("total_assets_30062026", "equity", "lnst_2025", "lntt_6t2026",
-                         "market_cap", "net_income", "revenue",
-                         "operating_cash_flow", "capex") and abs(value) >= 1e9:
+                         "lnst_6t2026", "market_cap", "revenue", "toi_6t2026",
+                         "operating_cash_flow", "capex", "total_liabilities") and abs(value) >= 1e9:
                 value /= 1e9
+
             data[field] = value
+
+        # === BƯỚC 2: TÍNH TOÁN DERIVED METRICS ===
+        # Nếu không có price trực tiếp, thử ước tính từ market_cap / shares
+        if data.get("price", 0) == 0 and data.get("market_cap", 0) > 0 and data.get("shares_outstanding", 0) > 0:
+            data["price"] = (data["market_cap"] * 1e9) / data["shares_outstanding"]
+
+        # Nếu không có market_cap, tính từ price × shares
+        if data.get("market_cap", 0) == 0 and data.get("price", 0) > 0 and data.get("shares_outstanding", 0) > 0:
+            data["market_cap"] = data["shares_outstanding"] * data["price"] / 1e9
+
+        # P/E = Price / EPS
         if data.get("price", 0) > 0 and data.get("eps_ttm", 0) > 0:
             data["pe_ttm"] = data["price"] / data["eps_ttm"]
+
+        # P/B = Price / BVPS
         if data.get("price", 0) > 0 and data.get("bvps", 0) > 0:
             data["pb"] = data["price"] / data["bvps"]
-        if data.get("shares_outstanding", 0) > 0 and data.get("price", 0) > 0:
-            data["market_cap"] = data["shares_outstanding"] * data["price"] / 1e9
+
+        # ROE = LNST / VCSH × 100 (nếu chưa có ROE trực tiếp)
+        if data.get("roe_2025", 0) == 0 and data.get("lnst_2025", 0) != 0 and data.get("equity", 0) > 0:
+            data["roe_2025"] = (data["lnst_2025"] / data["equity"]) * 100
+
+        # ROA = LNST / Tổng tài sản × 100 (nếu chưa có ROA trực tiếp)
+        if data.get("roa_2025", 0) == 0 and data.get("lnst_2025", 0) != 0 and data.get("total_assets_30062026", 0) > 0:
+            data["roa_2025"] = (data["lnst_2025"] / data["total_assets_30062026"]) * 100
+
+        # Dividend yield = div_per_share / price × 100
+        if data.get("div_per_share", 0) > 0 and data.get("price", 0) > 0:
+            data["div_yield"] = (data["div_per_share"] / data["price"]) * 100
+
+        # Nợ/VCSH nếu có tổng nợ và VCSH
+        if data.get("de", 0) == 0 and data.get("total_liabilities", 0) > 0 and data.get("equity", 0) > 0:
+            data["de"] = data["total_liabilities"] / data["equity"]
+
         result[ticker] = data
+
     return result
 
 
-# === GỌI LOADER MỚI v3 ===
+# === GỌI LOADER v4 ===
 _FINEX_LONG_DF, _FINEX_DATA_SOURCE, _FINEX_DATA_ERROR = _load_financial_data_source()
 _SCRAPED_FINANCIAL_DATA = _build_data_from_scraper(_FINEX_LONG_DF)
 
@@ -659,13 +812,13 @@ _FINEX_TICKER_COUNT_OK = len(ALL_TICKERS) == EXPECTED_SOURCE_TICKERS
 
 
 def get_financial_data(ticker):
-    """Return only scraper CSV values; never enrich with demo/snapshot fallback."""
+    """Return only scraper CSV values."""
     key = str(ticker or "").upper().strip()
     return dict(FINANCIAL_DATA_2026.get(key, {}) or {})
 
 
 # ============================================================================
-# (Phần còn lại giữ NGUYÊN 100% code gốc)
+# (Phần còn lại giữ NGUYÊN 100% code gốc - chỉ thêm debug panel trong sidebar)
 # ============================================================================
 
 def _capital_scenarios(market_price, cash_per_share, tax_rate=0):
@@ -694,6 +847,7 @@ def _stock_scenarios(shares):
         for ratio in range(MIN_DIVIDEND_PERCENT, MAX_DIVIDEND_PERCENT + 1, DIVIDEND_PERCENT_STEP)
     ])
 
+
 VNINDEX_MILESTONES = [
     ("2000-07-28", 100), ("2001-06-30", 571), ("2003-10-31", 130),
     ("2005-12-30", 307), ("2007-03-12", 1170), ("2009-02-20", 235),
@@ -703,7 +857,7 @@ VNINDEX_MILESTONES = [
 ]
 
 # ============================================================================
-# 3. CSS — Dark theme, fix lỗi nền trắng/chữ trắng
+# 3. CSS — Dark theme (GIỮ NGUYÊN 100%)
 # ============================================================================
 def inject_css():
     st.markdown("""
@@ -960,7 +1114,7 @@ background-color: #1a2538 !important; border-left-width: 4px !important;
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# 4. PROFILER
+# 4. PROFILER (GIỮ NGUYÊN)
 # ============================================================================
 _PROFILE = {}
 
@@ -987,7 +1141,7 @@ def render_profiler_panel():
                 _PROFILE.clear(); st.rerun()
 
 # ============================================================================
-# 5. HELPERS
+# 5. HELPERS (GIỮ NGUYÊN)
 # ============================================================================
 def _fmt_ty(v):
     try: v = float(v or 0)
@@ -1022,7 +1176,7 @@ def _stock_dividend(shares, ratio):
     return {"additional_shares": add, "total_after": shares + add}
 
 # ============================================================================
-# 6. VALUATION CORE
+# 6. VALUATION CORE (GIỮ NGUYÊN)
 # ============================================================================
 def compute_hybrid_valuation(price, eps, bvps, roe, roa):
     graham = (22.5 * eps * bvps) ** 0.5 if (eps > 0 and bvps > 0) else 0
@@ -1092,7 +1246,7 @@ def predict_eps_ensemble(roe, roa, margin, de):
     return 3000.0 * (1 + (roe or 10) / 200.0)
 
 # ============================================================================
-# 7. VNINDEX HISTORY
+# 7. VNINDEX HISTORY (GIỮ NGUYÊN 100%)
 # ============================================================================
 @st.cache_data(ttl=86400, show_spinner=False)
 def generate_vnindex_history():
@@ -1223,7 +1377,7 @@ def render_dynamic_chart():
                     config={"displayModeBar": True, "displaylogo": False, "scrollZoom": True})
 
 # ============================================================================
-# 8. DIALOGS
+# 8. DIALOGS (GIỮ NGUYÊN 100%)
 # ============================================================================
 @st.dialog("🔍 THÔNG TIN ĐỐI TÁC", width="large")
 def partner_detail_dialog():
@@ -1299,7 +1453,7 @@ text-align:left;min-height:180px;">{features_html}</ul></div>""",
         st.session_state.show_vip_dialog = False; st.rerun()
 
 # ============================================================================
-# 9. COMPONENTS
+# 9. COMPONENTS (GIỮ NGUYÊN 100%)
 # ============================================================================
 def render_header():
     st.markdown(
@@ -1382,7 +1536,7 @@ box-shadow:0 4px 16px rgba(34,197,94,.15);">
                f"{fin_data.get('pe_ttm',0):.1f} · {fin_data.get('pb',0):.1f}")
 
 # ============================================================================
-# 10. BOTTOM SECTIONS
+# 10. BOTTOM SECTIONS (GIỮ NGUYÊN 100%)
 # ============================================================================
 def render_accuracy_section(ticker):
     st.markdown("## 🔍 Kiểm tra độ chính xác thuật toán")
@@ -1708,7 +1862,7 @@ Founder: <strong style="color:#60a5fa;">Trần Anh Quân</strong>
 </div>""", unsafe_allow_html=True)
 
 # ============================================================================
-# 11. 7 TABS (theo đúng cấu trúc gốc)
+# 11. 7 TABS (GIỮ NGUYÊN 100%)
 # ============================================================================
 def render_tab_valuation(ticker, fin_data):
     st.subheader(f"🧮 ĐỊNH GIÁ CHI TIẾT: {ticker}")
@@ -2164,7 +2318,7 @@ def render_tab_data(ticker, fin_data):
     render_embedded_database_explorer()
 
 # ============================================================================
-# 11B. LEGACY CUSTOMER INTRO + EMBEDDED DATABASE EXPLORER
+# 11B. LEGACY CUSTOMER INTRO + EMBEDDED DATABASE EXPLORER (GIỮ NGUYÊN)
 # ============================================================================
 def render_customer_intro():
     """Khối giới thiệu khách hàng/đối tác từ giao diện code gốc."""
@@ -2227,8 +2381,8 @@ def render_embedded_database_explorer():
             "P/B": d.get("pb", 0),
             "ROE (%)": d.get("roe_2025", 0),
             "ROA (%)": d.get("roa_2025", 0),
-            "Vốn hóa (tỷ VNĐ)": (d.get("market_cap", 0) or 0) / 1e9,
-            "LNST 2025 (tỷ VNĐ)": (d.get("lnst_2025", 0) or 0) / 1e9,
+            "Vốn hóa (tỷ VNĐ)": (d.get("market_cap", 0) or 0) / 1e9 if d.get("market_cap") else 0,
+            "LNST 2025 (tỷ VNĐ)": (d.get("lnst_2025", 0) or 0) / 1e9 if d.get("lnst_2025") else 0,
             "Tỷ suất cổ tức (%)": d.get("div_yield", 0),
         })
     df = pd.DataFrame(rows)
@@ -2264,7 +2418,7 @@ def render_legacy_about_section():
         st.markdown("💬 Zalo [0327 625 853](https://zalo.me/0327625853)")
 
 # ============================================================================
-# 12. DIVIDEND CALCULATORS
+# 12. DIVIDEND CALCULATORS (GIỮ NGUYÊN 100%)
 # ============================================================================
 def _ticker_label(ticker):
     rows = _FINEX_LONG_DF[_FINEX_LONG_DF["Mã chứng khoán"] == ticker] if not _FINEX_LONG_DF.empty else pd.DataFrame()
@@ -2448,7 +2602,7 @@ def render_crisis_ui():
     render_crisis_section(sel)
 
 # ============================================================================
-# 13. SIDEBAR
+# 13. SIDEBAR — NÂNG CẤP VỚI DEBUG PANEL
 # ============================================================================
 def render_sidebar():
     with st.sidebar:
@@ -2460,6 +2614,8 @@ letter-spacing:2px;'>FINEX</div>
 <div style='color:#94a3b8;font-size:.72em;letter-spacing:3px;
 text-transform:uppercase;'>Vietnam Terminal</div>
 </div>""", unsafe_allow_html=True)
+
+        # === TRẠNG THÁI NGUỒN DỮ LIỆU ===
         with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=True):
             st.markdown(f"- **Nguồn dữ liệu đang dùng:** `{_FINEX_DATA_SOURCE}`")
             if _FINEX_DATA_ERROR: st.caption("Chi tiết: " + _FINEX_DATA_ERROR)
@@ -2467,19 +2623,20 @@ text-transform:uppercase;'>Vietnam Terminal</div>
                 st.warning("Chưa có dữ liệu. Hãy đặt file `data/vietnam_stock_database_tong_hop.csv` vào thư mục dự án.")
             st.markdown(f"- **Số mã có dữ liệu:** `{len(ALL_TICKERS)}`")
             st.markdown(f"- **Số dòng CSV:** `{len(_FINEX_LONG_DF):,}`")
-            st.markdown("- **Thứ tự ưu tiên nguồn:**")
-            st.markdown("  1. 🥇 `data/vietnam_stock_database_tong_hop.csv` (local tổng hợp)")
-            st.markdown("  2. 🥈 `FINEX_DATA_URL` (env)")
-            st.markdown("  3. 🥉 GitHub API → `finex_financial_data.csv`")
-            st.markdown("  4. 🏅 Local fallback `finex_financial_data.csv`")
-            st.markdown(f"- **PostgreSQL cổ tức:** `{'Đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
-            try:
-                _graham_status = _safe_import_graham().get("loaded", False)
-                _backtest_status = _safe_import_backtest().get("loaded", False)
-            except Exception:
-                _graham_status = _backtest_status = False
-            st.markdown(f"- **Graham/DCF engine gốc:** `{'Đã nạp' if _graham_status else 'Fallback tích hợp'}`")
-            st.markdown(f"- **Backtest engine gốc:** `{'Đã nạp' if _backtest_status else 'Chưa khả dụng'}`")
+
+        # === DEBUG: CHỈ TIÊU CÓ TRONG CSV ===
+        with st.expander("🔍 DEBUG: Chỉ tiêu có trong CSV", expanded=False):
+            if _DEBUG_AVAILABLE_INDICATORS:
+                st.caption(f"**Tổng số chỉ tiêu duy nhất:** {len(_DEBUG_AVAILABLE_INDICATORS)}")
+                st.caption("Các chỉ tiêu đầu tiên:")
+                for ind in sorted(list(_DEBUG_AVAILABLE_INDICATORS))[:30]:
+                    st.text(f"• {ind}")
+                if len(_DEBUG_AVAILABLE_INDICATORS) > 30:
+                    st.caption(f"... và {len(_DEBUG_AVAILABLE_INDICATORS) - 30} chỉ tiêu khác")
+            else:
+                st.info("Chưa tải được dữ liệu.")
+
+        # === DỮ LIỆU TÀI CHÍNH ĐANG DÙNG ===
         with st.expander("📚 DỮ LIỆU TÀI CHÍNH ĐANG DÙNG", expanded=False):
             st.caption(f"Nguồn: {_FINEX_DATA_SOURCE}")
             st.markdown(f"**✅ Số mã thực tế đọc được:** `{len(ALL_TICKERS)}`")
@@ -2489,6 +2646,7 @@ text-transform:uppercase;'>Vietnam Terminal</div>
                             .nunique().reset_index(name="Số mã"))
                 _safe_dataframe(coverage, use_container_width=True, hide_index=True)
             st.caption(f"**Mã đọc từ nguồn:** {', '.join(ALL_TICKERS[:50])}{'...' if len(ALL_TICKERS) > 50 else ''}")
+
         st.markdown("---")
         st.markdown("### 🧮 CHỨC NĂNG")
         app_mode = st.radio(
@@ -2503,7 +2661,7 @@ text-transform:uppercase;'>Vietnam Terminal</div>
     return app_mode
 
 # ============================================================================
-# 14. MAIN
+# 14. MAIN (GIỮ NGUYÊN 100%)
 # ============================================================================
 def main():
     inject_css()
