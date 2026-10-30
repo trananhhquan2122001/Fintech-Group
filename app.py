@@ -1,6 +1,6 @@
 # finex_vn_terminal.py
 # ============================================================================
-# FINEX VN TERMINAL — Full Rewrite (80% features từ code gốc)
+# FINEX VN TERMINAL — Integrated Upgrade v2 (80% features từ code gốc)
 # Kiến trúc: 7 tabs + 5 modes + full bottom sections
 # ============================================================================
 
@@ -219,14 +219,7 @@ PARTNERS = {
         "url": "https://tcinvest.tcbs.com.vn/guest/login?openAccount=true&referralcode=105C925853",
         "color": "#1E88E5",
     },
-    "SSI": {
-        "display_name": "SSI",
-        "full_name": "Công ty Cổ phần Chứng khoán SSI",
-        "strengths": "Chứng khoán lâu đời nhất Việt Nam, hệ thống nghiên cứu hàng đầu.",
-        "margin_policy": "Margin đa dạng, ưu đãi cho khách hàng VIP và tổ chức.",
-        "referral_code": "SSIQUAN2122", "url": "https://www.ssi.com.vn/mo-tai-khoan",
-        "color": "#F59E0B",
-    },
+
 }
 
 VIP_PACKAGES = [
@@ -566,23 +559,36 @@ def inject_css():
             font-feature-settings: "tnum" 1;
         }
         .stApp {
-            background: radial-gradient(ellipse at top left, rgba(96,165,250,.08) 0%, transparent 45%),
-                        radial-gradient(ellipse at top right, rgba(212,175,55,.08) 0%, transparent 45%),
-                        linear-gradient(180deg, #050914 0%, #0a0f19 50%, #0b1220 100%) !important;
+            background: radial-gradient(ellipse at top left, rgba(56,189,248,.13) 0%, transparent 45%),
+                        radial-gradient(ellipse at top right, rgba(250,204,21,.10) 0%, transparent 45%),
+                        linear-gradient(180deg, #101827 0%, #111c2e 50%, #0f172a 100%) !important;
             color: #e2e8f0 !important;
         }
         .main .block-container { padding-top: 1.2rem; max-width: 1560px; }
-        h1 { color: #60a5fa !important; font-weight: 800 !important; font-size: 1.85em !important; }
-        h2 { color: #93c5fd !important; border-bottom: 1px solid #1f2937;
+        h1 { color: #7dd3fc !important; font-weight: 800 !important; font-size: 1.85em !important; }
+        h2 { color: #bae6fd !important; border-bottom: 1px solid #334155;
              padding-bottom: 8px; font-weight: 700 !important; }
         h3 { color: #bfdbfe !important; font-weight: 700 !important; font-size: 1.22em !important; }
         h4, h5, h6 { color: #dbeafe !important; font-weight: 700 !important; }
         .stMarkdown, .stMarkdown p, .stMarkdown span, p, label { color: #e2e8f0 !important; }
-        .stCaption, [data-testid="stCaptionContainer"] { color: #94a3b8 !important; }
+        .stCaption, [data-testid="stCaptionContainer"] { color: #cbd5e1 !important; }
+        [data-baseweb="select"] > div, [data-baseweb="input"] > div,
+        [data-testid="stNumberInput"] input, [data-testid="stTextInput"] input {
+            background-color: #172338 !important; color: #f8fafc !important;
+            border-color: #64748b !important;
+        }
+        .stButton > button, [data-testid="stDownloadButton"] > button {
+            border-radius: 9px !important; border: 1px solid #64748b !important;
+            font-weight: 650 !important;
+        }
+        .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg,#0ea5e9,#2563eb) !important;
+            color: #ffffff !important; border: 0 !important;
+        }
 
         [data-testid="stMetric"] {
-            background: linear-gradient(145deg, #1a2538 0%, #111827 100%);
-            border: 1px solid #334155; border-left: 3px solid #D4AF37;
+            background: linear-gradient(145deg, #24344d 0%, #172338 100%);
+            border: 1px solid #475569; border-left: 3px solid #FACC15;
             border-radius: 10px; padding: 14px 16px;
             box-shadow: 0 2px 10px rgba(0,0,0,.45);
             transition: all .2s ease;
@@ -1537,8 +1543,6 @@ def render_full_footer():
             border-radius:6px;font-size:.85em;font-weight:700;">VPS</span>
             <span style="background:#1a2538;color:#3b82f6;padding:4px 10px;
             border-radius:6px;font-size:.85em;font-weight:700;">TCBS</span>
-            <span style="background:#1a2538;color:#f59e0b;padding:4px 10px;
-            border-radius:6px;font-size:.85em;font-weight:700;">SSI</span>
             </div>
             <div>🎓 <strong style="color:#F5D97A;">Học thuật:</strong> Miễn phí SV</div>
             <div>💼 <strong style="color:#F5D97A;">Doanh nghiệp:</strong> API</div>
@@ -2088,6 +2092,114 @@ def render_tab_data(ticker, fin_data):
     st.download_button(f"📥 Tải CSV ({ticker})", data=csv,
                        file_name=f"FINEX_{ticker}.csv", mime="text/csv")
 
+    st.markdown("---")
+    render_embedded_database_explorer()
+
+
+# ============================================================================
+# 11B. LEGACY CUSTOMER INTRO + EMBEDDED DATABASE EXPLORER
+# Tích hợp các phần giới thiệu và tra cứu dữ liệu từ giao diện code gốc.
+# Trình khám phá dùng nguồn dữ liệu hiện tại của FINEX.
+# ============================================================================
+def render_customer_intro():
+    """Khối giới thiệu khách hàng/đối tác từ giao diện code gốc."""
+    st.markdown("""
+    <div style="background:linear-gradient(135deg,rgba(212,175,55,.14),rgba(30,64,175,.12));
+    border:1px solid #334155;border-radius:18px;padding:24px 26px;margin:12px 0 18px 0;">
+      <div style="font-size:12px;letter-spacing:1.8px;color:#D4AF37;font-weight:800;">
+        FINTECH GROUP · FINEX VN TERMINAL
+      </div>
+      <h2 style="border:0;padding:8px 0 2px 0;margin:0;color:#F8FAFC!important;">
+        Công nghệ kiến tạo giá trị tài chính
+      </h2>
+      <p style="color:#CBD5E1;max-width:900px;line-height:1.75;margin:8px 0 0 0;">
+        Nền tảng hỗ trợ nhà đầu tư và chuyên viên phân tích chuẩn hóa dữ liệu báo cáo tài chính,
+        theo dõi chỉ tiêu doanh nghiệp, trực quan hóa xu hướng và tham khảo nhiều phương pháp định giá.
+        Mọi kết quả phụ thuộc vào độ đầy đủ, tính chính xác và thời điểm cập nhật của dữ liệu đầu vào.
+      </p>
+    </div>
+    """, unsafe_allow_html=True)
+    c1, c2, c3 = st.columns(3)
+    c1.markdown("**📊 Phân tích dữ liệu**")
+    c1.caption("Tra cứu chỉ tiêu, kỳ báo cáo và lịch sử dữ liệu doanh nghiệp.")
+    c2.markdown("**🧮 Định giá & rủi ro**")
+    c2.caption("Kết hợp các mô hình có sẵn trong FINEX; kết quả chỉ mang tính tham khảo.")
+    c3.markdown("**🤝 Hợp tác & trải nghiệm**")
+    c3.caption("Trao đổi nhu cầu sử dụng, thử nghiệm sản phẩm hoặc hợp tác phát triển.")
+    with st.container(border=True):
+        st.markdown("#### Kết nối FINTECH GROUP")
+        st.write("Dành cho nhà đầu tư, sinh viên công nghệ/tài chính, đối tác dữ liệu và khách hàng doanh nghiệp.")
+        cc1, cc2 = st.columns(2)
+        cc1.markdown("**Email:** Trananhhquan2122001@gmail.com")
+        cc2.markdown("**Zalo:** 0342 167 380")
+        st.caption("Thông tin liên hệ để khách hàng chủ động kết nối.")
+
+
+def render_embedded_database_explorer():
+    """Tra cứu toàn bộ mã đang có trong nguồn dữ liệu nhúng và tải bảng CSV."""
+    st.markdown("### 🗂️ Trung tâm dữ liệu tài chính")
+    st.caption("Lọc mã cổ phiếu, so sánh chỉ tiêu và xuất bảng dữ liệu hiện có trong FINEX.")
+    tickers = list(dict.fromkeys(ALL_TICKERS))
+    if not tickers:
+        st.info("Chưa có mã cổ phiếu trong nguồn dữ liệu hiện tại.")
+        return
+    search = st.text_input("🔎 Tìm mã cổ phiếu", key="embedded_db_search").strip().upper()
+    visible = [t for t in tickers if search in t.upper()] if search else tickers
+    if not visible:
+        st.warning("Không tìm thấy mã phù hợp.")
+        return
+    rows = []
+    for t in visible:
+        d = get_financial_data(t) or {}
+        info = COMPANY_INFO.get(t, {}) if isinstance(COMPANY_INFO, dict) else {}
+        rows.append({
+            "Mã": t,
+            "Doanh nghiệp": info.get("name", t),
+            "Ngành": info.get("sector", info.get("industry", "Chưa phân loại")),
+            "Giá (VNĐ)": d.get("price", 0),
+            "EPS (VNĐ)": d.get("eps_ttm", 0),
+            "BVPS (VNĐ)": d.get("bvps", 0),
+            "P/E": d.get("pe_ttm", 0),
+            "P/B": d.get("pb", 0),
+            "ROE (%)": d.get("roe_2025", 0),
+            "ROA (%)": d.get("roa_2025", 0),
+            "Vốn hóa (tỷ VNĐ)": (d.get("market_cap", 0) or 0) / 1e9,
+            "LNST 2025 (tỷ VNĐ)": (d.get("lnst_2025", 0) or 0) / 1e9,
+            "Tỷ suất cổ tức (%)": d.get("div_yield", 0),
+        })
+    df = pd.DataFrame(rows)
+    col1, col2 = st.columns(2)
+    col1.metric("Số mã đang hiển thị", f"{len(df):,}")
+    col2.metric("Nguồn", "Dữ liệu nhúng FINEX")
+    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.download_button(
+        "📥 Tải dữ liệu đang hiển thị (CSV)",
+        data=df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig"),
+        file_name="FINEX_embedded_financial_database.csv",
+        mime="text/csv",
+        key="download_embedded_database",
+    )
+    render_customer_intro()
+
+
+def render_legacy_about_section():
+    """Phần giới thiệu công nghệ, hội viên và pháp lý lấy từ cuối code gốc."""
+    st.markdown("---")
+    with st.expander("ℹ️ GIỚI THIỆU CÔNG NGHỆ, GÓI VIP & TUYÊN BỐ PHÁP LÝ (BẤM ĐỂ MỞ RỘNG)", expanded=False):
+        col_about1, col_about2 = st.columns(2)
+        with col_about1:
+            st.markdown("""### 🚀 Về Công Nghệ & Nhà Sáng Lập
+* **Hệ thống:** **FINEX VN Terminal** – Nền tảng tự động hóa xử lý Báo cáo tài chính và Định giá doanh nghiệp theo phương pháp **Benjamin Graham & Philip Fisher**.
+* **Công nghệ:** Ứng dụng mô hình tính toán dữ liệu lớn (Big Data Processing) kết hợp thuật toán phân tích chỉ số tài chính tự động.
+* **Nhà sáng lập:** **Trần Anh Quân** (*Founder & Lead Developer*).""")
+        with col_about2:
+            st.markdown("""### 💎 Gói Hội viên VIP (299.000 VNĐ / Tháng)
+* 🔓 **Mở khóa dữ liệu BCTC làm sạch:** quyền truy cập tùy theo gói dịch vụ đang được cung cấp.
+* 🧮 **Tính năng phân tích:** mô hình dự báo tăng trưởng, định giá Excess Return và Graham Number khi các mô-đun tương ứng khả dụng.
+* 💬 **Hỗ trợ kỹ thuật:** kết nối đội ngũ FINTECH GROUP để trao đổi nhu cầu sử dụng và dữ liệu.""")
+        st.markdown("---")
+        st.markdown("""<div style="background:linear-gradient(145deg,rgba(239,68,68,0.10) 0%,rgba(239,68,68,0.04) 100%);border-left:4px solid #EF4444;padding:12px 16px;border-radius:4px;font-size:.85em;color:#CBD5E1;"><strong>⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ (DISCLAIMER):</strong><br/>1. <strong>Tính chất công cụ:</strong> FINEX VN Terminal là công cụ công nghệ hỗ trợ xử lý và hiển thị dữ liệu tài chính. Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư chứng khoán và <strong>KHÔNG</strong> cung cấp khuyến nghị Mua, Bán hay Giữ cổ phiếu cụ thể.<br/>2. <strong>Trách nhiệm cá nhân:</strong> Kết quả định giá, chỉ số an toàn và dự báo chỉ mang tính tham khảo; nhà đầu tư tự chịu trách nhiệm với quyết định của mình.</div>""", unsafe_allow_html=True)
+
 
 # ============================================================================
 # 12. DIVIDEND CALCULATORS
@@ -2192,20 +2304,19 @@ def render_stock_dividend_ui():
 
 
 def render_bctc_ui():
-    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH GỐC")
-    st.info("Nguồn ưu tiên hiện tại là FINANCIAL_DATA_2026 trong file này. Các số liệu LCTT/CapEx/FCF bên dưới là ước tính minh họa từ dữ liệu tổng hợp, không phải báo cáo tài chính gốc đã kiểm toán.")
+    st.markdown("## 📚 BÁO CÁO TÀI CHÍNH")
     ticker = st.selectbox("Chọn mã:", ALL_TICKERS, key="bctc_ticker")
     fin = get_financial_data(ticker)
     st.markdown(f"### {ticker} — {COMPANY_INFO.get(ticker, {}).get('name', '')}")
-    st.caption("Nguồn chính: FINANCIAL_DATA_2026 trong mã nguồn; các mục LCTT/CapEx/FCF ước tính cần thay bằng BCTC gốc trước khi dùng ra quyết định.")
 
     tabs = st.tabs(["💵 LCTT", "📈 KQKD", "📊 BCDKT"])
     with tabs[0]:
-        st.markdown("**Lưu chuyển tiền tệ (ước tính)**")
+        st.markdown("**Lưu chuyển tiền tệ**")
         c = st.columns(3)
-        c[0].metric("OCF (6T/2026)", _fmt_ty(fin.get("lnst_6t2026", 0) * 1.2))
-        c[1].metric("CapEx", _fmt_ty(fin.get("total_assets_30062026", 0) * 0.05))
-        c[2].metric("FCF", _fmt_ty(fin.get("lnst_6t2026", 0) * 0.9))
+        # Chỉ hiển thị dữ liệu LCTT gốc nếu nguồn cung cấp; không tự suy diễn từ LNST/tổng tài sản.
+        c[0].metric("OCF (6T/2026)", _fmt_ty(fin.get("ocf_6t2026")) if fin.get("ocf_6t2026") is not None else "N/A")
+        c[1].metric("CapEx", _fmt_ty(fin.get("capex_6t2026")) if fin.get("capex_6t2026") is not None else "N/A")
+        c[2].metric("FCF", _fmt_ty(fin.get("fcf_6t2026")) if fin.get("fcf_6t2026") is not None else "N/A")
     with tabs[1]:
         st.markdown("**Kết quả kinh doanh**")
         c = st.columns(3)
@@ -2259,11 +2370,11 @@ def render_sidebar():
                 _graham_status = _backtest_status = False
             st.markdown(f"- **Graham/DCF engine gốc:** `{'Đã nạp' if _graham_status else 'Fallback tích hợp'}`")
             st.markdown(f"- **Backtest engine gốc:** `{'Đã nạp' if _backtest_status else 'Chưa khả dụng'}`")
-            st.caption("Không đọc 9 file CSV cũ. Snapshot chỉ bổ sung trường còn thiếu, không ghi đè dữ liệu đã khai báo trong file này.")
+            st.caption("Dữ liệu nhúng trong mã nguồn là nguồn ưu tiên; snapshot tương thích chỉ bổ sung trường còn thiếu.")
 
         # Coverage summary for the embedded dataset
         with st.expander("📚 DỮ LIỆU TÀI CHÍNH ĐANG DÙNG", expanded=False):
-            st.caption("Nguồn ưu tiên: FINANCIAL_DATA_2026 trong file finex_vn_terminal.py")
+            st.caption("Nguồn ưu tiên: dữ liệu tài chính được khai báo trong mã nguồn FINEX hiện tại.")
             st.markdown(f"**✅ Đã nạp:** `12` mã demo")
             st.markdown(f"**🏢 Tổng mã:** `{len(ALL_TICKERS)}`")
             coverage = pd.DataFrame([
@@ -2449,6 +2560,7 @@ def main():
 
     # Footer
     render_full_footer()
+    render_legacy_about_section()
 
 
 if __name__ == "__main__":
