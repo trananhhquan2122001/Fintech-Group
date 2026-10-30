@@ -49,7 +49,7 @@ st.set_page_config(
 
 # ============================================================================
 # OPTIONAL INTEGRATIONS — snapshot, PostgreSQL, safe dataframe rendering
-# Primary data source remains FINANCIAL_DATA_2026 embedded in this file.
+# Primary source: long-format financial data CSV produced by the repository scraper; no embedded ticker fallback.
 # ============================================================================
 try:
     from du_lieu.doc_bctc_goc import (
@@ -484,36 +484,123 @@ COMPANY_INFO = {
     "MSN": {"name": "CTCP Tập đoàn Masan", "exchange": "HOSE"},
 }
 
+# ==========================================================================
+# SOURCE-OF-TRUTH LOADER: scraper output CSV (long format)
+# Configure FINEX_DATA_URL to the exact raw GitHub URL of the scraper output,
+# or commit the output as finex_financial_data.csv beside this application.
+# Old 9-CSV loader and hard-coded ticker fallback are intentionally disabled.
+# ==========================================================================
+_FINEX_LONG_DF = pd.DataFrame()
+_FINEX_DATA_SOURCE = "Chưa tìm thấy CSV đầu ra của scraper"
+_FINEX_DATA_ERROR = ""
+
+@st.cache_data(ttl=900, show_spinner=False)
+def _load_scraper_long_csv():
+    import io
+    import urllib.request
+    configured_url = os.getenv("FINEX_DATA_URL", "").strip()
+    candidates = []
+    if configured_url:
+        candidates.append((configured_url, True))
+    for name in ("finex_financial_data.csv", "financial_data.csv", "vn30_41_fin_long.csv", "scraped_financial_data.csv"):
+        local = os.path.join(os.path.dirname(os.path.abspath(__file__)), name)
+        if os.path.isfile(local):
+            candidates.append((local, False))
+    errors = []
+    for source, is_url in candidates:
+        try:
+            if is_url:
+                req = urllib.request.Request(source, headers={"User-Agent": "FINEX-VN-Terminal/1.0"})
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    raw = resp.read()
+                frame = pd.read_csv(io.BytesIO(raw), low_memory=False)
+                label = source
+            else:
+                frame = pd.read_csv(source, low_memory=False, encoding="utf-8-sig")
+                label = os.path.basename(source)
+            required = {"Mã chứng khoán", "Loại báo cáo", "Năm", "Chỉ tiêu tiếng Việt", "Giá trị"}
+            if not required.issubset(set(frame.columns)):
+                errors.append(f"{label}: thiếu cột bắt buộc")
+                continue
+            frame["Mã chứng khoán"] = frame["Mã chứng khoán"].astype(str).str.upper().str.strip()
+            frame["Năm"] = pd.to_numeric(frame["Năm"], errors="coerce")
+            frame["Giá trị"] = pd.to_numeric(frame["Giá trị"], errors="coerce")
+            frame = frame.dropna(subset=["Mã chứng khoán", "Năm", "Giá trị"])
+            if frame.empty:
+                errors.append(f"{label}: CSV không có dòng dữ liệu hợp lệ")
+                continue
+            return frame, label, ""
+        except Exception as exc:
+            errors.append(f"{source}: {exc}")
+    return pd.DataFrame(), "Không có nguồn CSV scraper hợp lệ", "; ".join(errors)
+
+def _norm_indicator(value):
+    import unicodedata
+    value = unicodedata.normalize("NFKD", str(value or "").lower())
+    return "".join(ch for ch in value if not unicodedata.combining(ch)).replace("đ", "d")
+
+def _build_data_from_scraper(frame):
+    """Map actual scraped report indicators to terminal schema; absent fields stay 0/N/A."""
+    if frame is None or frame.empty:
+        return {}
+    aliases = {
+        "price": ["gia dong cua", "gia co phieu", "gia thi truong", "close"],
+        "eps_ttm": ["eps", "lai co ban tren co phieu", "thu nhap tren moi co phieu"],
+        "bvps": ["bvps", "gia tri so sach tren moi co phieu"],
+        "shares_outstanding": ["so luong co phieu pho thong", "co phieu dang luu hanh", "co phieu da phat hanh"],
+        "total_assets_30062026": ["tong tai san"],
+        "equity": ["von chu so huu", "tong von chu so huu"],
+        "lnst_2025": ["loi nhuan sau thue", "loi nhuan sau thue thu nhap doanh nghiep"],
+        "lntt_6t2026": ["loi nhuan truoc thue"],
+        "roe_2025": ["roe", "ty suat loi nhuan tren von chu so huu"],
+        "roa_2025": ["roa", "ty suat loi nhuan tren tong tai san"],
+        "div_per_share": ["co tuc tren moi co phieu", "co tuc bang tien"],
+        "market_cap": ["von hoa thi truong", "gia tri von hoa"],
+        "net_income": ["loi nhuan sau thue"],
+        "revenue": ["doanh thu thuan", "tong doanh thu"],
+        "operating_cash_flow": ["luu chuyen tien thuan tu hoat dong kinh doanh"],
+        "capex": ["chi mua sam tai san co dinh", "mua sam xay dung tai san co dinh"],
+    }
+    normalized = frame["Chỉ tiêu tiếng Việt"].map(_norm_indicator)
+    result = {}
+    for ticker, group in frame.groupby("Mã chứng khoán", sort=True):
+        years = sorted(group["Năm"].dropna().astype(int).unique())
+        latest_year = years[-1] if years else datetime.now().year
+        latest = group[group["Năm"] == latest_year]
+        data = _make_fin_data(industry=str(group["Tên ngành"].dropna().iloc[0]) if "Tên ngành" in group and group["Tên ngành"].notna().any() else "Chưa phân loại")
+        data["source"] = "scraper_csv"
+        data["source_year"] = latest_year
+        for field, names in aliases.items():
+            matched = latest[normalized.loc[latest.index].apply(lambda x: any(_norm_indicator(n) in x for n in names))]
+            if matched.empty:
+                continue
+            row = matched.iloc[-1]
+            value = float(row["Giá trị"])
+            # Financial statements are generally VND; convert to billions for fields displayed as tỷ.
+            if field in ("total_assets_30062026", "equity", "lnst_2025", "lntt_6t2026", "market_cap", "net_income", "revenue", "operating_cash_flow", "capex") and abs(value) >= 1e9:
+                value /= 1e9
+            data[field] = value
+        # derive ratios only when required raw values exist in source; never fabricate missing inputs.
+        if data.get("price", 0) > 0 and data.get("eps_ttm", 0) > 0:
+            data["pe_ttm"] = data["price"] / data["eps_ttm"]
+        if data.get("price", 0) > 0 and data.get("bvps", 0) > 0:
+            data["pb"] = data["price"] / data["bvps"]
+        if data.get("shares_outstanding", 0) > 0 and data.get("price", 0) > 0:
+            data["market_cap"] = data["shares_outstanding"] * data["price"] / 1e9
+        result[ticker] = data
+    return result
+
+_FINEX_LONG_DF, _FINEX_DATA_SOURCE, _FINEX_DATA_ERROR = _load_scraper_long_csv()
+_SCRAPED_FINANCIAL_DATA = _build_data_from_scraper(_FINEX_LONG_DF)
+# The scraped dataset is the only active universe. No prefilled demo ticker list.
+FINANCIAL_DATA_2026 = _SCRAPED_FINANCIAL_DATA
+COMPANY_INFO = {ticker: {"name": ticker, "exchange": "Chưa xác định"} for ticker in FINANCIAL_DATA_2026}
 ALL_TICKERS = sorted(FINANCIAL_DATA_2026.keys())
 
 def get_financial_data(ticker):
-    """Prefer the embedded dataset; optional snapshot only fills missing/zero fields."""
+    """Return only scraper CSV values; never enrich with demo/snapshot fallback."""
     key = str(ticker or "").upper().strip()
-    base = dict(FINANCIAL_DATA_2026.get(key, {}) or {})
-    if not base:
-        return {}
-    if _HAS_SNAPSHOT:
-        try:
-            snap = get_latest_market_snapshot(key) or {}
-            field_map = {
-                "price_vnd": "price",
-                "market_cap_ty": "market_cap",
-                "shares": "shares_outstanding",
-                "dividend_yield_pct": "div_yield",
-                "pe": "pe_ttm",
-                "casa_pct": "casa_30062026",
-                "total_assets_ty": "total_assets_30062026",
-                "lntt_6m_ty": "lntt_6t2026",
-                "lnst_2024_ty": "lnst_2024",
-                "lnst_2025_ty": "lnst_2025",
-            }
-            for source_key, target_key in field_map.items():
-                if base.get(target_key) in (None, "", 0) and snap.get(source_key) not in (None, "", 0):
-                    base[target_key] = snap[source_key]
-            base["_snapshot_enrichment"] = bool(snap)
-        except Exception:
-            base["_snapshot_enrichment"] = False
-    return base
+    return dict(FINANCIAL_DATA_2026.get(key, {}) or {})
 
 def _capital_scenarios(market_price, cash_per_share, tax_rate=0):
     if market_price <= 0:
@@ -2183,22 +2270,18 @@ def render_embedded_database_explorer():
 
 
 def render_legacy_about_section():
-    """Phần giới thiệu công nghệ, hội viên và pháp lý lấy từ cuối code gốc."""
+    """Giới thiệu công nghệ, VIP và tuyên bố pháp lý theo nội dung người dùng cung cấp."""
     st.markdown("---")
+    st.markdown("""<div style="background:linear-gradient(135deg,#172554,#0f172a);border:1px solid #60a5fa;border-left:5px solid #f59e0b;padding:16px 18px;border-radius:12px;color:#f8fafc;line-height:1.75;margin-bottom:12px"><strong style="color:#fbbf24">⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM (DISCLAIMER):</strong><br/>Tất cả thông tin, dữ liệu và kết quả định giá trên nền tảng <strong>FINEX VN Terminal</strong> chỉ mang tính chất <strong>tham khảo</strong>, phục vụ mục đích <strong>học thuật và nghiên cứu</strong>. Chúng tôi <strong>không đưa ra bất kỳ khuyến nghị mua, bán hay nắm giữ</strong> bất kỳ loại tài sản nào. Nhà đầu tư tự chịu trách nhiệm hoàn toàn về các quyết định của mình.</div>""", unsafe_allow_html=True)
     with st.expander("ℹ️ GIỚI THIỆU CÔNG NGHỆ, GÓI VIP & TUYÊN BỐ PHÁP LÝ (BẤM ĐỂ MỞ RỘNG)", expanded=False):
-        col_about1, col_about2 = st.columns(2)
-        with col_about1:
-            st.markdown("""### 🚀 Về Công Nghệ & Nhà Sáng Lập
-* **Hệ thống:** **FINEX VN Terminal** – Nền tảng tự động hóa xử lý Báo cáo tài chính và Định giá doanh nghiệp theo phương pháp **Benjamin Graham & Philip Fisher**.
-* **Công nghệ:** Ứng dụng mô hình tính toán dữ liệu lớn (Big Data Processing) kết hợp thuật toán phân tích chỉ số tài chính tự động.
-* **Nhà sáng lập:** **Trần Anh Quân** (*Founder & Lead Developer*).""")
-        with col_about2:
-            st.markdown("""### 💎 Gói Hội viên VIP (299.000 VNĐ / Tháng)
-* 🔓 **Mở khóa dữ liệu BCTC làm sạch:** quyền truy cập tùy theo gói dịch vụ đang được cung cấp.
-* 🧮 **Tính năng phân tích:** mô hình dự báo tăng trưởng, định giá Excess Return và Graham Number khi các mô-đun tương ứng khả dụng.
-* 💬 **Hỗ trợ kỹ thuật:** kết nối đội ngũ FINTECH GROUP để trao đổi nhu cầu sử dụng và dữ liệu.""")
+        st.markdown("### 🚀 Về Công Nghệ & Nhà Sáng Lập")
+        st.markdown("- **Hệ thống:** **FINEX VN Terminal** – Nền tảng tự động hóa xử lý Báo cáo tài chính và Định giá doanh nghiệp theo phương pháp **Benjamin Graham & Philip Fisher**.\n- **Công nghệ:** Ứng dụng mô hình tính toán dữ liệu lớn (Big Data Processing) kết hợp thuật toán phân tích chỉ số tài chính tự động.\n- **Nhà sáng lập:** **Trần Anh Quân** (*Founder & Lead Developer*).")
+        st.markdown("### 💎 Gói Hội viên VIP (299.000 VNĐ / Tháng)")
+        st.markdown("- 🔓 **Dữ liệu BCTC làm sạch (2018–2026):** quyền truy cập phụ thuộc dữ liệu scraper thực tế được tải và phạm vi dịch vụ đang cung cấp; không tuyên bố đủ toàn thị trường nếu dữ liệu chưa có.\n- 🧮 **Tính năng phân tích:** mô hình dự báo tăng trưởng dài hạn, định giá Excess Return & Graham Number khi dữ liệu đầu vào và mô-đun tương ứng khả dụng.\n- 💬 **Hỗ trợ kỹ thuật 1:1** và cập nhật dữ liệu báo cáo tài chính quý mới nhất khi nguồn scraper thu thập được.")
         st.markdown("---")
-        st.markdown("""<div style="background:linear-gradient(145deg,rgba(239,68,68,0.10) 0%,rgba(239,68,68,0.04) 100%);border-left:4px solid #EF4444;padding:12px 16px;border-radius:4px;font-size:.85em;color:#CBD5E1;"><strong>⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ (DISCLAIMER):</strong><br/>1. <strong>Tính chất công cụ:</strong> FINEX VN Terminal là công cụ công nghệ hỗ trợ xử lý và hiển thị dữ liệu tài chính. Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư chứng khoán và <strong>KHÔNG</strong> cung cấp khuyến nghị Mua, Bán hay Giữ cổ phiếu cụ thể.<br/>2. <strong>Trách nhiệm cá nhân:</strong> Kết quả định giá, chỉ số an toàn và dự báo chỉ mang tính tham khảo; nhà đầu tư tự chịu trách nhiệm với quyết định của mình.</div>""", unsafe_allow_html=True)
+        st.markdown("""<div style="background:linear-gradient(145deg,rgba(239,68,68,.13),rgba(15,23,42,.95));border:1px solid #7f1d1d;border-left:4px solid #ef4444;padding:14px 16px;border-radius:8px;color:#e2e8f0;font-size:.9em;line-height:1.7"><strong style="color:#fca5a5">⚠️ TUYÊN BỐ MIỄN TRỪ TRÁCH NHIỆM PHÁP LÝ (DISCLAIMER):</strong><br/>1. <strong>Tính chất công cụ:</strong> FINEX VN Terminal là công cụ công nghệ/phần mềm hỗ trợ xử lý và hiển thị dữ liệu tài chính công khai từ báo cáo tài chính chính thức. Nền tảng <strong>KHÔNG</strong> phải tổ chức tư vấn đầu tư chứng khoán và <strong>KHÔNG</strong> cung cấp khuyến nghị Mua, Bán hay Giữ cổ phiếu cụ thể.<br/>2. <strong>Trách nhiệm cá nhân:</strong> Mọi kết quả định giá, chỉ số an toàn (MOS) hay dự báo tăng trưởng chỉ mang tính mô phỏng lý thuyết tham khảo học thuật. Nhà đầu tư tự chịu trách nhiệm hoàn toàn đối với quyết định quản lý tài sản và giao dịch cá nhân trên thị trường tài chính.</div>""", unsafe_allow_html=True)
+        st.markdown("### 📱 Kết nối với chúng tôi")
+        st.markdown("💬 Zalo [0327 625 853](https://zalo.me/0327625853)")
 
 
 # ============================================================================
@@ -2359,7 +2442,9 @@ def render_sidebar():
             </div>""", unsafe_allow_html=True)
 
         with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=False):
-            st.markdown("- **Nguồn chính:** `FINANCIAL_DATA_2026` trong file mới")
+            st.markdown(f"- **Nguồn dữ liệu scraper:** `{_FINEX_DATA_SOURCE}`")
+            if _FINEX_DATA_ERROR: st.caption("Chi tiết nguồn dữ liệu: " + _FINEX_DATA_ERROR)
+            if not ALL_TICKERS: st.warning("Chưa có dữ liệu scraper. Hãy đặt FINEX_DATA_URL hoặc thêm finex_financial_data.csv cạnh app.py.")
             st.markdown(f"- **Số mã có dữ liệu:** `{len(ALL_TICKERS)}`")
             st.markdown(f"- **Snapshot bổ sung tùy chọn:** `{'Đã import' if _HAS_SNAPSHOT else 'Chưa khả dụng'}`")
             st.markdown(f"- **PostgreSQL cổ tức:** `{'Thư viện đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
@@ -2567,5 +2652,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as _main_error:
-        st.error("FINEX gặp lỗi khi khởi tạo giao diện. Dữ liệu nguồn trong mã không bị thay đổi.")
+        st.error("FINEX gặp lỗi khi khởi tạo giao diện. Dữ liệu scraper gốc không bị thay đổi.")
         st.exception(_main_error)
