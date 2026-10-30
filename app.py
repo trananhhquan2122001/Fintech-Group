@@ -14,6 +14,31 @@ import os
 import time
 from datetime import datetime
 from contextlib import contextmanager
+from datetime import timedelta
+from decimal import Decimal, ROUND_FLOOR
+import json
+import math
+import threading
+import glob as _glob_v50
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+except Exception:
+    requests = None
+    HTTPAdapter = Retry = None
+try:
+    import websocket
+except Exception:
+    websocket = None
+try:
+    import psycopg2
+    from psycopg2 import pool as _pg_pool
+    _HAS_PSYCOPG2 = True
+except Exception:
+    psycopg2 = None
+    _pg_pool = None
+    _HAS_PSYCOPG2 = False
 
 st.set_page_config(
     page_title="FINEX VN Terminal - Công Nghệ Định Giá Doanh Nghiệp",
@@ -21,6 +46,134 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# ============================================================================
+# OPTIONAL INTEGRATIONS — snapshot, PostgreSQL, safe dataframe rendering
+# Primary data source remains FINANCIAL_DATA_2026 embedded in this file.
+# ============================================================================
+try:
+    from du_lieu.doc_bctc_goc import (
+        LATEST_MARKET_SNAPSHOT,
+        get_latest_market_snapshot,
+        _apply_latest_market_snapshot,
+    )
+    _HAS_SNAPSHOT = True
+except Exception:
+    LATEST_MARKET_SNAPSHOT = {}
+    _HAS_SNAPSHOT = False
+    def get_latest_market_snapshot(ticker):
+        return {}
+    def _apply_latest_market_snapshot(ticker, data):
+        return data
+
+def _safe_dataframe(data, **kwargs):
+    """Render a dataframe with fallbacks for environments lacking PyArrow."""
+    try:
+        st.dataframe(data, **kwargs)
+        return
+    except Exception:
+        pass
+    try:
+        if data is None or (hasattr(data, "empty") and data.empty):
+            st.info("Không có dữ liệu để hiển thị.")
+            return
+        try:
+            st.table(data)
+            return
+        except Exception:
+            pass
+        if hasattr(data, "to_html"):
+            st.markdown(data.to_html(index=False, escape=False), unsafe_allow_html=True)
+        else:
+            st.write(data)
+    except Exception:
+        st.write("Không thể hiển thị bảng dữ liệu ở môi trường hiện tại.")
+
+@st.cache_resource(show_spinner=False)
+def _get_db_connection_pool():
+    """Optional PostgreSQL pool; the app continues without database configuration."""
+    if not _HAS_PSYCOPG2:
+        return None
+    try:
+        secrets = getattr(st, "secrets", {})
+        def cfg(key, default):
+            try:
+                return secrets.get(key, os.getenv(key, default))
+            except Exception:
+                return os.getenv(key, default)
+        return _pg_pool.SimpleConnectionPool(
+            1, 5,
+            host=cfg("DB_HOST", "localhost"),
+            database=cfg("DB_NAME", "fintech_group"),
+            user=cfg("DB_USER", "postgres"),
+            password=cfg("DB_PASS", ""),
+            port=cfg("DB_PORT", "5432"),
+        )
+    except Exception:
+        return None
+
+def _fetch_dividend_events(ticker: str, dividend_type: str):
+    """Read an ACTIVE dividend event when the optional dividend_events table exists."""
+    pool_obj = _get_db_connection_pool()
+    if not pool_obj:
+        return None
+    conn = None
+    try:
+        conn = pool_obj.getconn()
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """SELECT ticker, dividend_type, cash_per_share, stock_ratio_percent,
+                          record_date, payment_date, status, source, updated_at
+                   FROM dividend_events
+                   WHERE ticker = %s AND dividend_type = %s AND status = 'ACTIVE'
+                   ORDER BY record_date DESC LIMIT 1""",
+                (str(ticker).upper().strip(), str(dividend_type).upper().strip()),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return pd.DataFrame([row], columns=[d[0] for d in cursor.description])
+    except Exception:
+        return None
+    finally:
+        if conn is not None:
+            try:
+                pool_obj.putconn(conn)
+            except Exception:
+                pass
+
+@st.cache_resource(show_spinner=False)
+def _safe_import_graham():
+    """Load the original FINEX Graham/DCF engine when its package exists."""
+    try:
+        from thuat_toan.dinh_gia_graham import (
+            check_signal_filters, get_undervalued_stocks, hybrid_valuation_ensemble,
+            calculate_dcf_valuation, run_dcf_scenarios, get_investment_verdict,
+        )
+        return {
+            "loaded": True, "check_signal_filters": check_signal_filters,
+            "get_undervalued_stocks": get_undervalued_stocks,
+            "hybrid_valuation_ensemble": hybrid_valuation_ensemble,
+            "calculate_dcf_valuation": calculate_dcf_valuation,
+            "run_dcf_scenarios": run_dcf_scenarios,
+            "get_investment_verdict": get_investment_verdict,
+        }
+    except Exception as exc:
+        return {"loaded": False, "reason": str(exc)}
+
+@st.cache_resource(show_spinner=False)
+def _safe_import_backtest():
+    """Load the original backtest engine only when available."""
+    try:
+        from lich_su.backtest_chien_luoc import (
+            calculate_technical_indicators, run_backtest_vectorbt,
+        )
+        return {
+            "loaded": True, "calculate_technical_indicators": calculate_technical_indicators,
+            "run_backtest_vectorbt": run_backtest_vectorbt,
+        }
+    except Exception as exc:
+        return {"loaded": False, "reason": str(exc)}
 
 # ============================================================================
 # 1. CONSTANTS
@@ -339,6 +492,60 @@ COMPANY_INFO = {
 }
 
 ALL_TICKERS = sorted(FINANCIAL_DATA_2026.keys())
+
+def get_financial_data(ticker):
+    """Prefer the embedded dataset; optional snapshot only fills missing/zero fields."""
+    key = str(ticker or "").upper().strip()
+    base = dict(FINANCIAL_DATA_2026.get(key, {}) or {})
+    if not base:
+        return {}
+    if _HAS_SNAPSHOT:
+        try:
+            snap = get_latest_market_snapshot(key) or {}
+            field_map = {
+                "price_vnd": "price",
+                "market_cap_ty": "market_cap",
+                "shares": "shares_outstanding",
+                "dividend_yield_pct": "div_yield",
+                "pe": "pe_ttm",
+                "casa_pct": "casa_30062026",
+                "total_assets_ty": "total_assets_30062026",
+                "lntt_6m_ty": "lntt_6t2026",
+                "lnst_2024_ty": "lnst_2024",
+                "lnst_2025_ty": "lnst_2025",
+            }
+            for source_key, target_key in field_map.items():
+                if base.get(target_key) in (None, "", 0) and snap.get(source_key) not in (None, "", 0):
+                    base[target_key] = snap[source_key]
+            base["_snapshot_enrichment"] = bool(snap)
+        except Exception:
+            base["_snapshot_enrichment"] = False
+    return base
+
+def _capital_scenarios(market_price, cash_per_share, tax_rate=0):
+    if market_price <= 0:
+        return pd.DataFrame()
+    rows = []
+    for capital in range(MIN_CAPITAL_VND, MAX_CAPITAL_VND + 1, CAPITAL_STEP_VND):
+        shares = _buyable_shares(capital, market_price)
+        divs = _cash_dividend_actual(shares, cash_per_share, tax_rate)
+        rows.append({
+            "Vốn đầu tư (VNĐ)": capital, "Giá thị trường (VNĐ)": market_price,
+            "Số cổ phiếu mua được": shares, "Cổ tức/CP (VNĐ)": cash_per_share,
+            "Cổ tức trước thuế (VNĐ)": divs["before_tax"],
+            "Thuế TNCN (VNĐ)": divs["tax"], "Cổ tức sau thuế (VNĐ)": divs["after_tax"],
+        })
+    return pd.DataFrame(rows)
+
+def _stock_scenarios(shares):
+    if shares <= 0:
+        return pd.DataFrame()
+    return pd.DataFrame([
+        {"Số cổ phiếu ban đầu": shares, "Tỷ lệ cổ tức (%)": ratio,
+         "Cổ phiếu nhận thêm": _stock_dividend(shares, ratio)["additional_shares"],
+         "Tổng cổ phiếu sau phát hành": _stock_dividend(shares, ratio)["total_after"]}
+        for ratio in range(MIN_DIVIDEND_PERCENT, MAX_DIVIDEND_PERCENT + 1, DIVIDEND_PERCENT_STEP)
+    ])
 
 VNINDEX_MILESTONES = [
     ("2000-07-28", 100), ("2001-06-30", 571), ("2003-10-31", 130),
@@ -1092,7 +1299,7 @@ def render_accuracy_section(ticker):
         {"Kỳ": "Q3/2024", "Định giá": "29.500đ", "Thực tế": "30.200đ",
          "Chính xác": "97.7%", "Trạng thái": "✅ Khớp"},
     ]
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    _safe_dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
 def render_undervalued_stocks():
@@ -1114,7 +1321,7 @@ def render_undervalued_stocks():
                 "MoS": f"{mos:+.1f}%" if graham else "N/A",
             })
     if rows:
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        _safe_dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     else:
         st.info("Chưa có cổ phiếu nào thỏa mãn tiêu chí.")
 
@@ -1436,6 +1643,34 @@ def render_tab_valuation(ticker, fin_data):
     c[2].metric("P/E band (×15)", f"{hy['pe_band']:,.0f}")
     c[3].metric("P/B band (×1.5)", f"{hy['pb_band']:,.0f}")
 
+    with st.expander("🧪 DCF 5 năm — kịch bản Bear / Base / Bull", expanded=False):
+        dcf_result = None
+        _graham_engine = _safe_import_graham()
+        if _graham_engine.get("loaded"):
+            try:
+                _external_dcf = _graham_engine["calculate_dcf_valuation"](ticker, fin_data)
+                if isinstance(_external_dcf, dict):
+                    dcf_result = _external_dcf
+            except Exception:
+                dcf_result = None
+        if dcf_result is None:
+            dcf_result = _simple_dcf_valuation(ticker, fin_data)
+        if dcf_result.get("error"):
+            st.warning(dcf_result["error"])
+        else:
+            sc = dcf_result.get("scenarios", {})
+            cols = st.columns(3)
+            rendered = False
+            for col, key, label in zip(cols, ["Bear", "Base", "Bull"], ["Thận trọng", "Cơ sở", "Tích cực"]):
+                item = sc.get(key, {}) if isinstance(sc, dict) else {}
+                if isinstance(item, dict) and "intrinsic_value_per_share" in item:
+                    col.metric(label, f"{item.get('intrinsic_value_per_share', 0):,.0f} đ/cp",
+                               delta=f"{item.get('upside_downside', 0)*100:+.1f}%")
+                    rendered = True
+            if not rendered:
+                st.json(dcf_result)
+            st.caption("Nếu engine DCF gốc không khả dụng, hệ thống dùng mô hình dự phòng minh họa; kiểm tra giả định dòng tiền, tăng trưởng và WACC trước khi ra quyết định.")
+
     st.markdown("---")
     st.markdown("### 🏆 Đánh giá chất lượng doanh nghiệp")
     checks, score, total = [], 0, 0
@@ -1503,7 +1738,7 @@ def render_tab_valuation(ticker, fin_data):
                 "FCFF (tỷ VND)": [f"{x:,.0f}" for x in b["fcff_projections"]],
                 "PV FCFF (tỷ VND)": [f"{x:,.0f}" for x in b["pv_fcff"]],
             })
-            st.dataframe(df_fcff, use_container_width=True, hide_index=True)
+            _safe_dataframe(df_fcff, use_container_width=True, hide_index=True)
 
         verdict = dcf["verdict"]
         v_color = "#22c55e" if "Buy" in verdict else ("#f59e0b" if verdict == "Hold" else "#ef4444")
@@ -1798,7 +2033,7 @@ def render_tab_dl(ticker, fin_data):
         "Lợi nhuận (tỷ đ)": [f"{v:,.0f}" for v in prof_f],
         "EPS (VNĐ/cp)": [f"{v:,.0f}" for v in eps_f],
     })
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    _safe_dataframe(df, use_container_width=True, hide_index=True)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=quarters, y=rev_f, mode="lines+markers",
                              name="Doanh thu", line=dict(color="#3b82f6", width=3)))
@@ -1844,7 +2079,7 @@ def render_tab_data(ticker, fin_data):
         ("Ngày giá", fin_data.get("price_as_of", "N/A")),
         ("Loại SLCP", "Chính thức" if fin_data.get("shares_is_official") else "Ước tính"),
     ]
-    st.dataframe(pd.DataFrame(rows, columns=["Chỉ tiêu", "Giá trị"]),
+    _safe_dataframe(pd.DataFrame(rows, columns=["Chỉ tiêu", "Giá trị"]),
                  use_container_width=True, hide_index=True)
 
     # Export CSV
@@ -1877,6 +2112,12 @@ def render_cash_dividend_ui():
     cash_ps = PAR_VALUE_DEFAULT * div_pct / 100
     shares = _buyable_shares(capital, price)
     res = _cash_dividend_actual(shares, cash_ps, tax)
+    db_event = _fetch_dividend_events(ticker, "CASH")
+    if db_event is not None and not db_event.empty:
+        st.success("Đã tìm thấy sự kiện cổ tức tiền mặt ACTIVE trong PostgreSQL.")
+        _safe_dataframe(db_event, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Chưa có sự kiện cổ tức tiền mặt ACTIVE trong PostgreSQL; kết quả được tính theo giả định bạn chọn.")
     st.markdown("### 📊 Kết quả")
     c = st.columns(4)
     c[0].metric("Số CP mua được", _fmt_shares(shares))
@@ -1893,7 +2134,7 @@ def render_cash_dividend_ui():
         rows.append({"Vốn (VNĐ)": _fmt_vnd(cap), "Số CP": _fmt_shares(sh),
                      "Trước thuế (VNĐ)": _fmt_vnd(r["before_tax"]),
                      "Sau thuế (VNĐ)": _fmt_vnd(r["after_tax"])})
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    _safe_dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
     if rows:
         df_plot = pd.DataFrame({
             "Vốn (tỷ)": [(MIN_CAPITAL_VND + i*CAPITAL_STEP_VND)/1e9 for i in range(len(rows))],
@@ -1921,6 +2162,12 @@ def render_stock_dividend_ui():
                       max_value=MAX_DIVIDEND_PERCENT,
                       step=DIVIDEND_PERCENT_STEP, value=15)
     res = _stock_dividend(owned, ratio)
+    db_event = _fetch_dividend_events(ticker, "STOCK")
+    if db_event is not None and not db_event.empty:
+        st.success("Đã tìm thấy sự kiện cổ tức bằng cổ phiếu ACTIVE trong PostgreSQL.")
+        _safe_dataframe(db_event, use_container_width=True, hide_index=True)
+    else:
+        st.caption("Chưa có sự kiện cổ tức bằng cổ phiếu ACTIVE trong PostgreSQL; kết quả là mô phỏng theo tỷ lệ đã chọn.")
     st.markdown("### 📊 Kết quả")
     c = st.columns(3)
     c[0].metric("Cổ phiếu ban đầu", _fmt_shares(owned))
@@ -1941,16 +2188,16 @@ def render_stock_dividend_ui():
         fig.update_layout(template="plotly_dark", paper_bgcolor="#050914",
                          plot_bgcolor="#0a1220", font=dict(color="#e2e8f0"))
         st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df_scn, use_container_width=True, hide_index=True)
+        _safe_dataframe(df_scn, use_container_width=True, hide_index=True)
 
 
 def render_bctc_ui():
     st.markdown("## 📚 BÁO CÁO TÀI CHÍNH GỐC")
-    st.info("📌 Trong bản demo này, dữ liệu BCTC gốc được thay bằng dữ liệu tổng hợp. "
-            "Trong production, kết nối 9 file CSV (LCTT/KQKD/BCDKT × 3 nhóm ngành).")
+    st.info("Nguồn ưu tiên hiện tại là FINANCIAL_DATA_2026 trong file này. Các số liệu LCTT/CapEx/FCF bên dưới là ước tính minh họa từ dữ liệu tổng hợp, không phải báo cáo tài chính gốc đã kiểm toán.")
     ticker = st.selectbox("Chọn mã:", ALL_TICKERS, key="bctc_ticker")
-    fin = FINANCIAL_DATA_2026.get(ticker, {})
+    fin = get_financial_data(ticker)
     st.markdown(f"### {ticker} — {COMPANY_INFO.get(ticker, {}).get('name', '')}")
+    st.caption("Nguồn chính: FINANCIAL_DATA_2026 trong mã nguồn; các mục LCTT/CapEx/FCF ước tính cần thay bằng BCTC gốc trước khi dùng ra quyết định.")
 
     tabs = st.tabs(["💵 LCTT", "📈 KQKD", "📊 BCDKT"])
     with tabs[0]:
@@ -2000,9 +2247,23 @@ def render_sidebar():
             text-transform:uppercase;'>Vietnam Terminal</div>
             </div>""", unsafe_allow_html=True)
 
-        # v58.1 BCTC report (demo)
-        with st.expander("📚 BÁO CÁO 9 FILE CSV GỐC", expanded=False):
-            st.caption("Bản demo: sử dụng dữ liệu tổng hợp")
+        with st.expander("🧭 TRẠNG THÁI NGUỒN DỮ LIỆU", expanded=False):
+            st.markdown("- **Nguồn chính:** `FINANCIAL_DATA_2026` trong file mới")
+            st.markdown(f"- **Số mã có dữ liệu:** `{len(ALL_TICKERS)}`")
+            st.markdown(f"- **Snapshot bổ sung tùy chọn:** `{'Đã import' if _HAS_SNAPSHOT else 'Chưa khả dụng'}`")
+            st.markdown(f"- **PostgreSQL cổ tức:** `{'Thư viện đã cài' if _HAS_PSYCOPG2 else 'Chưa cài psycopg2'}`")
+            try:
+                _graham_status = _safe_import_graham().get("loaded", False)
+                _backtest_status = _safe_import_backtest().get("loaded", False)
+            except Exception:
+                _graham_status = _backtest_status = False
+            st.markdown(f"- **Graham/DCF engine gốc:** `{'Đã nạp' if _graham_status else 'Fallback tích hợp'}`")
+            st.markdown(f"- **Backtest engine gốc:** `{'Đã nạp' if _backtest_status else 'Chưa khả dụng'}`")
+            st.caption("Không đọc 9 file CSV cũ. Snapshot chỉ bổ sung trường còn thiếu, không ghi đè dữ liệu đã khai báo trong file này.")
+
+        # Coverage summary for the embedded dataset
+        with st.expander("📚 DỮ LIỆU TÀI CHÍNH ĐANG DÙNG", expanded=False):
+            st.caption("Nguồn ưu tiên: FINANCIAL_DATA_2026 trong file finex_vn_terminal.py")
             st.markdown(f"**✅ Đã nạp:** `12` mã demo")
             st.markdown(f"**🏢 Tổng mã:** `{len(ALL_TICKERS)}`")
             coverage = pd.DataFrame([
@@ -2010,7 +2271,7 @@ def render_sidebar():
                 {"Loại": "BCDKT", "Số mã": len(ALL_TICKERS), "Chỉ tiêu": 5},
                 {"Loại": "LCTT", "Số mã": len(ALL_TICKERS), "Chỉ tiêu": 3},
             ])
-            st.dataframe(coverage, use_container_width=True, hide_index=True)
+            _safe_dataframe(coverage, use_container_width=True, hide_index=True)
             st.caption(f"**Mã:** {', '.join(ALL_TICKERS)}")
 
         st.markdown("---")
@@ -2018,7 +2279,7 @@ def render_sidebar():
         app_mode = st.radio(
             "Chọn chức năng:",
             ["🏛️ Terminal", "💵 Cổ tức tiền mặt", "📈 Cổ tức cổ phiếu",
-             "📚 BCTC GỐC", "📉 Khủng hoảng lịch sử"],
+             "📚 BCTC / DỮ LIỆU TÀI CHÍNH", "📉 Khủng hoảng lịch sử"],
             key="app_mode")
 
         st.markdown("---")
@@ -2047,7 +2308,7 @@ def main():
         render_header(); render_cash_dividend_ui(); return
     if app_mode == "📈 Cổ tức cổ phiếu":
         render_header(); render_stock_dividend_ui(); return
-    if app_mode == "📚 BCTC GỐC":
+    if app_mode == "📚 BCTC / DỮ LIỆU TÀI CHÍNH":
         render_header(); render_bctc_ui(); return
     if app_mode == "📉 Khủng hoảng lịch sử":
         render_header(); render_crisis_ui(); return
@@ -2078,7 +2339,7 @@ def main():
             if chosen != st.session_state.selected_ticker:
                 st.session_state.selected_ticker = chosen; st.rerun()
 
-            fin_data = FINANCIAL_DATA_2026.get(chosen, {})
+            fin_data = get_financial_data(chosen)
             render_ticker_info_card(chosen, fin_data)
 
     # Dialogs
@@ -2099,7 +2360,7 @@ def main():
 
     # Quick metrics
     ticker = st.session_state.selected_ticker
-    fin_data = FINANCIAL_DATA_2026.get(ticker, {})
+    fin_data = get_financial_data(ticker)
     st.markdown("#### 📊 Thông tin nhanh")
     c = st.columns(7)
     c[0].metric("Giá", f"{fin_data.get('price', 0):,.0f} đ")
@@ -2191,4 +2452,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as _main_error:
+        st.error("FINEX gặp lỗi khi khởi tạo giao diện. Dữ liệu nguồn trong mã không bị thay đổi.")
+        st.exception(_main_error)
