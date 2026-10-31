@@ -54,7 +54,7 @@ jobs:
           api = HfApi()
           
           api.upload_file(
-              path_or_file='vietnam_stock_database.xlsx',
+              path_or_fileobj='vietnam_stock_database.xlsx',
               path_in_repo='data/vietnam_stock_database.xlsx',
               repo_id='trananhquan2001/trananhquan-terminal',
               repo_type='space',
