@@ -3,7 +3,7 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    # Test tự động: Đặt vào 9:15 UTC (tức 16:15 chiều nay theo giờ Việt Nam)
+    # Lịch chạy định kỳ (Ví dụ: 9:15 UTC hàng ngày)
     - cron: '15 9 * * *'
 
 jobs:
@@ -26,13 +26,13 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir pandas requests yfinance openpyxl
+          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
 
       - name: Run Pro Scraper Script
         run: |
           python main.py
 
-      - name: Commit and push changes directly to main
+      - name: Commit and push changes to GitHub (Optional Backup)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -44,6 +44,25 @@ jobs:
           git add vietnam_stock_database.xlsx data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX 500 full 3 statements dataset [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX dataset [skip ci]"
           
           git push origin main
+
+      - name: Push Data Directly to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          from huggingface_hub import HfApi
+          api = HfApi()
+          
+          # Đẩy file Excel hoặc file CSV tổng hợp lên Hugging Face Space của bạn
+          api.upload_file(
+              path_or_file='vietnam_stock_database.xlsx',
+              path_in_repo='data/vietnam_stock_database.xlsx',
+              repo_id='trananhquan2001/trananhquan-terminal',
+              repo_type='space',
+              token='${{ secrets.HF_TOKEN }}'
+          )
+          print('Đã đẩy dữ liệu lên Hugging Face Space thành công!')
+          "
