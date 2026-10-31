@@ -3,7 +3,6 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    # Lịch chạy định kỳ (Ví dụ: 9:15 UTC hàng ngày)
     - cron: '15 9 * * *'
 
 jobs:
@@ -14,14 +13,12 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: true
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          update-environment: false
 
       - name: Install Dependencies
         run: |
@@ -56,7 +53,6 @@ jobs:
           from huggingface_hub import HfApi
           api = HfApi()
           
-          # Đẩy file Excel hoặc file CSV tổng hợp lên Hugging Face Space của bạn
           api.upload_file(
               path_or_file='vietnam_stock_database.xlsx',
               path_in_repo='data/vietnam_stock_database.xlsx',
