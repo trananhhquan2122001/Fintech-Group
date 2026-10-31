@@ -72,7 +72,8 @@ def load_500_tickers():
     print(f"🎯 [FINEX Enterprise Engine] Tổng số mã duy nhất chuẩn hóa cần xử lý: {len(unique_tickers)}")
     return unique_tickers
 
-def get_sector(symbol):
+def get_company_profile(symbol):
+    """Hàm ánh xạ tên doanh nghiệp và tên ngành tối ưu cho thị trường Việt Nam"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ"]
     bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF"]
@@ -81,14 +82,41 @@ def get_sector(symbol):
     oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW"]
     steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV"]
 
-    if symbol in tech_list: return "Công nghệ thông tin"
-    elif symbol in bank_list: return "Ngân hàng"
-    elif symbol in securities_list: return "Chứng khoán"
-    elif symbol in realestate_list: return "Bất động sản"
-    elif symbol in retail_list: return "Bán lẻ & Dịch vụ tiêu dùng"
-    elif symbol in oil_gas_list: return "Dầu khí & Năng lượng"
-    elif symbol in steel_materials: return "Vật liệu xây dựng & Hóa chất"
-    else: return "Công nghiệp, Sản xuất & Hàng tiêu dùng"
+    if symbol in tech_list: sector = "Công nghệ thông tin"
+    elif symbol in bank_list: sector = "Ngân hàng"
+    elif symbol in securities_list: sector = "Chứng khoán"
+    elif symbol in realestate_list: sector = "Bất động sản"
+    elif symbol in retail_list: sector = "Bán lẻ & Dịch vụ tiêu dùng"
+    elif symbol in oil_gas_list: sector = "Dầu khí & Năng lượng"
+    elif symbol in steel_materials: sector = "Vật liệu xây dựng & Hóa chất"
+    else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
+
+    # Tên doanh nghiệp chuẩn hóa theo mã
+    company_names = {
+        "HPG": "Công ty Cổ phần Tập đoàn Hòa Phát",
+        "VCB": "Ngân hàng Thương mại Cổ phần Ngoại thương Việt Nam",
+        "VHM": "Công ty Cổ phần Vinhomes",
+        "VIC": "Tập đoàn Vingroup - Công ty Cổ phần",
+        "FPT": "Công ty Cổ phần FPT",
+        "MWG": "Công ty Cổ phần Đầu tư Thế Giới Di Động",
+        "MSN": "Công ty Cổ phần Tập đoàn Masan",
+        "TCB": "Ngân hàng Thương mại Cổ phần Kỹ Thương Việt Nam",
+        "BID": "Ngân hàng Thương mại Cổ phần Đầu tư và Phát triển Việt Nam",
+        "CTG": "Ngân hàng Thương mại Cổ phần Công Thương Việt Nam",
+        "MBB": "Ngân hàng Thương mại Cổ phần Quân đội",
+        "ACB": "Ngân hàng Thương mại Cổ phần Á Châu",
+        "VPB": "Ngân hàng Thương mại Cổ phần Việt Nam Thịnh Vượng",
+        "GAS": "Tổng Công ty Khí Việt Nam - CTCP",
+        "VRE": "Công ty Cổ phần Vincom Retail",
+        "PNJ": "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận",
+        "SSI": "Công ty Cổ phần Chứng khoán SSI",
+        "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
+        "POW": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP",
+        "SAB": "Tổng công ty Cổ phần Bia - Rượu - Nước giải khát Sài Gòn"
+    }
+    
+    company_name = company_names.get(symbol, f"Công ty Cổ phần {symbol}")
+    return company_name, sector
 
 # TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH
 TRANSLATION_MAP = {
@@ -182,7 +210,7 @@ def translate_metric(metric_original):
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
     records = []
-    sector_name = get_sector(symbol)
+    company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
     try:
         if df is not None and not df.empty:
@@ -196,6 +224,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
                             except: continue
                             records.append({
                                 'Mã chứng khoán': symbol,
+                                'Tên doanh nghiệp': company_name,
                                 'Tên ngành': sector_name,
                                 'Loại báo cáo': statement_type_vn,
                                 'Loại kỳ': ky_bao_cao,
@@ -213,7 +242,7 @@ def main():
     all_master_records = []
     success_count, fail_count = 0, 0
      
-    # Chia batch 50 mã, có cơ chế checkpoint an toàn
+    # Duyệt toàn bộ danh sách 500 mã, bắt lỗi chặt chẽ từng mã để không bị ngắt quãng
     batch_size = 50
     for i in range(0, len(target_stocks), batch_size):
         batch = target_stocks[i:i+batch_size]
@@ -221,6 +250,7 @@ def main():
          
         for symbol in batch:
             try:
+                # Tạo đối tượng yfinance bọc session
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                  
                 # Cào toàn diện đủ 3 BCTC (Cả Năm và Quý)
@@ -232,14 +262,15 @@ def main():
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
                  
                 success_count += 1
-                time.sleep(0.06)
-            except Exception:
+                time.sleep(0.05) # Giữ tốc độ tối ưu tránh quá tải kết nối
+            except Exception as e:
+                # Bắt lỗi từng mã riêng biệt để luồng tiếp tục chạy đến hết 500 mã
                 fail_count += 1
                 continue
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất đồng thời tệp Excel & CSV nguyên bản cho FINEX Terminal...")
+    print("\n💾 Đang kết xuất đồng thời tệp Excel & CSV chuẩn hóa cho FINEX Terminal...")
     os.makedirs('data', exist_ok=True)
      
     # Xuất file Excel chuẩn cấu trúc
