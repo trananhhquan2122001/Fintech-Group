@@ -179,7 +179,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
             for col in df.columns:
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
-                # Bỏ giới hạn năm cũ, chấp nhận toàn bộ dữ liệu lịch sử sâu nhất có sẵn trên nguồn
                 if year_val.isdigit():
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
@@ -204,41 +203,55 @@ def main():
     target_stocks = load_130_tickers()
     all_master_records = []
     success_count, fail_count = 0, 0
+    failed_symbols = []
      
-    batch_size = 30
-    for i in range(0, len(target_stocks), batch_size):
-        batch = target_stocks[i:i+batch_size]
-        print(f"🔄 [FINEX Pipeline] Đang vét dữ liệu lịch sử sâu nhất cho batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
-         
-        for symbol in batch:
+    for idx, symbol in enumerate(target_stocks, 1):
+        print(f"[{idx}/{len(target_stocks)}] Đang vét lịch sử sâu nhất cho mã: {symbol}...")
+        success = False
+        
+        # Cơ chế thử lại tối đa 3 lần cho mỗi mã nếu gặp lỗi mạng/nghẽn kết nối
+        for attempt in range(3):
             try:
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                  
-                # Vét toàn bộ lịch sử Năm và Quý cho 3 BCTC gốc
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
-                all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
+                recs = []
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
                  
-                success_count += 1
-                time.sleep(0.05)
+                if recs:
+                    all_master_records.extend(recs)
+                    success_count += 1
+                    success = True
+                    break
+                else:
+                    time.sleep(0.5)
             except Exception:
-                fail_count += 1
-                continue
+                time.sleep(1.0)
+                
+        if not success:
+            fail_count += 1
+            failed_symbols.append(symbol)
+            print(f"❌ Bỏ qua mã do lỗi kết nối/trống dữ liệu: {symbol}")
+            
+        time.sleep(0.2) # Nghỉ ngắn an toàn giữa các mã để tránh bị Yahoo Finance khóa IP
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất tệp CSV tổng hợp chuẩn hóa: vietnam_stock_database_tong_hop.csv...")
+    print("\n💾 Đang kết xuất tệp CSV tổng hợp chuẩn hóa: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 VÉT DỮ LIỆU LỊCH SỬ THÀNH CÔNG CHO 130 MÃ!")
-    print(f" - Doanh nghiệp thành công: {success_count} | Lỗi/Bỏ qua: {fail_count}")
+    print(f" 🎉 HOÀN TẤT QUÁ TRÌNH CÀO 130 MÃ TRỌNG ĐIỂM!")
+    print(f" - Thành công: {success_count} | Thất bại: {fail_count}")
+    if failed_symbols:
+        print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
     print(f" - Tổng dung lượng bản ghi lịch sử: {len(df_master):,}")
     print(f"==================================================")
 
