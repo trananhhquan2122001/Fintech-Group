@@ -179,7 +179,8 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
             for col in df.columns:
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
-                if year_val.isdigit() and 2020 <= int(year_val) <= 2026:
+                # Bỏ giới hạn năm cũ, chấp nhận toàn bộ dữ liệu lịch sử sâu nhất có sẵn trên nguồn
+                if year_val.isdigit():
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
                             try: float_val = float(val)
@@ -199,32 +200,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
         pass
     return records
 
-def fetch_market_metrics(ticker_obj, symbol, sector):
-    """Trích xuất bổ sung Giá, Vốn hóa, CASA và tự động tính toán P/E, P/B, EPS, LN 3 năm"""
-    try:
-        info = ticker_obj.info
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0
-        market_cap = info.get('marketCap') or 0
-        eps = info.get('trailingEps') or 0
-        pe = info.get('trailingPE') or 0
-        pb = info.get('priceToBook') or 0
-        
-        # Tỷ lệ CASA giả lập thông minh cho nhóm Ngân hàng nếu yfinance chưa cấp trực tiếp
-        casa_ratio = 0.0
-        if sector == "Ngân hàng":
-            casa_ratio = info.get('casaRatio') or 18.5 # Giá trị trung bình ngành tham chiếu nếu thiếu
-            
-        return {
-            'Giá': current_price,
-            'Vốn hóa': market_cap,
-            'EPS': eps,
-            'P/E': pe,
-            'P/B': pb,
-            'Tỷ lệ CASA': casa_ratio
-        }
-    except:
-        return {'Giá': 0, 'Vốn hóa': 0, 'EPS': 0, 'P/E': 0, 'P/B': 0, 'Tỷ lệ CASA': 0}
-
 def main():
     target_stocks = load_130_tickers()
     all_master_records = []
@@ -233,13 +208,13 @@ def main():
     batch_size = 30
     for i in range(0, len(target_stocks), batch_size):
         batch = target_stocks[i:i+batch_size]
-        print(f"🔄 [FINEX Pipeline] Đang xử lý batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
+        print(f"🔄 [FINEX Pipeline] Đang vét dữ liệu lịch sử sâu nhất cho batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
          
         for symbol in batch:
             try:
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                  
-                # Cào trọn vẹn 3 báo cáo tài chính gốc (Cả Năm và Quý)
+                # Vét toàn bộ lịch sử Năm và Quý cho 3 BCTC gốc
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
@@ -258,14 +233,13 @@ def main():
     print("\n💾 Đang kết xuất tệp CSV tổng hợp chuẩn hóa: vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
-    # Xuất file CSV tổng hợp đúng yêu cầu đường dẫn mới
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT QUY TRÌNH CHO 130 MÃ TRỌNG ĐIỂM!")
+    print(f" 🎉 VÉT DỮ LIỆU LỊCH SỬ THÀNH CÔNG CHO 130 MÃ!")
     print(f" - Doanh nghiệp thành công: {success_count} | Lỗi/Bỏ qua: {fail_count}")
-    print(f" - Tổng dung lượng bản ghi chuẩn hóa: {len(df_master):,}")
+    print(f" - Tổng dung lượng bản ghi lịch sử: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
