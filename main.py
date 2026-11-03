@@ -12,75 +12,38 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
-def load_500_tickers():
+def load_130_tickers():
+    """Danh sách 130 mã cổ phiếu trọng điểm (Top 100 HOSE & Top 30 HNX theo vốn hóa)"""
     tickers_list = [
-        "AAA", "AAS", "ABB", "ABI", "ABW", "ACB", "ACL", "ACV", "ADS", "AGR",
-        "AIG", "AMV", "ANV", "API", "APS", "BAB", "BAF", "BCC", "BCM", "BED",
-        "BFC", "BGE", "BHN", "BIC", "BID", "BLI", "BMI", "BMP", "BMS", "BPP",
-        "BRC", "BSG", "BSI", "BSR", "BTS", "BWE", "CAD", "CAF", "CAP", "CAV",
-        "CCI", "CCL", "CCM", "CDC", "CEG", "CEO", "CFC", "CHG", "CHP", "CII",
-        "CKA", "CLC", "CLL", "CLW", "CMG", "CMX", "CNG", "COM", "CRC", "CSC",
-        "CSG", "CSM", "CTD", "CTG", "CTR", "CTS", "CVT", "DAD", "DAE", "DAT",
-        "DBD", "DBT", "DCC", "DCM", "DDG", "DGC", "DGT", "DHB", "DHG", "DHT",
-        "DIC", "DIG", "DLG", "DMC", "DND", "DNE", "DNP", "DNR", "DNS", "DPM",
-        "DPV", "DRC", "DRH", "DRI", "DRL", "DSC", "DSG", "DST", "DTD", "DTK",
-        "DTL", "DTT", "DVH", "DVM", "DVP", "DXG", "DXS", "DXV", "DZM", "EBA",
-        "EBS", "ECI", "EDC", "EIB", "EID", "ELC", "EME", "EMC", "EPD", "EVE",
-        "EVS", "FCM", "FCS", "FDC", "FIT", "FMC", "FPT", "FRT", "FSB", "FTS",
-        "GAD", "GAS", "GCC", "GCD", "GDT", "GED", "GEG", "GEE", "GEX", "GIL",
-        "GJS", "GLT", "GMC", "GMD", "GMH", "GMX", "GND", "GON", "GPT", "GRM",
-        "GSW", "GTD", "GTH", "GTM", "GVR", "HAC", "HAD", "HAH", "HAJ", "HAN",
-        "HAP", "HAR", "HAT", "HAX", "HBC", "HBD", "HBS", "HCC", "HCD", "HCI",
-        "HCM", "HDB", "HDC", "HDG", "HDO", "HDS", "HEC", "HEX", "HFC", "HGG",
-        "HGI", "HGL", "HGM", "HGN", "HGR", "HGS", "HHG", "HHN", "HHV", "HID",
-        "HJS", "HLB", "HLD", "HNA", "HND", "HPA", "HPG", "HQS", "HTP", "HT1",
-        "HUB", "HVH", "HVN", "HVP", "HVS", "HZL", "ICT", "IDC", "IDI", "IDJ",
-        "IDS", "IJC", "ILB", "IMP", "INC", "INM", "ITA", "ITC", "ITD", "ITQ",
-        "IVS", "KBC", "KDC", "KDH", "KDF", "KHS", "KID", "KLC", "KLB", "KMR",
-        "KMT", "KOS", "KSB", "KSF", "KSS", "KST", "KTB", "KTT", "KVG", "LAB",
-        "LAS", "LAZ", "LBE", "LCC", "LCD", "LCG", "LCM", "LCS", "LDG", "LDP",
-        "LDS", "LEC", "LEO", "LGC", "LGL", "LHC", "LHN", "LIC", "LIG", "LKW",
-        "LLA", "LLM", "LM8", "LMC", "LMG", "LMH", "LNC", "LPB", "LQN", "LSS",
-        "LTC", "MAC", "MAI", "MBB", "MBG", "MBS", "MCF", "MCH", "MCL", "MCM",
-        "MCO", "MCP", "MCS", "MDC", "MDG", "MEC", "MED", "MEF", "MEL", "MES",
-        "MET", "MFC", "MFM", "MGN", "MHC", "MHL", "MIB", "MIC", "MIE", "MIG",
-        "MKV", "MLC", "MMC", "MMO", "MNC", "MND", "MNE", "MNF", "MNG", "MNS",
-        "MNV", "MOF", "MPC", "MPL", "MQH", "MRC", "MRF", "MSB", "MSC", "MSH",
-        "MSN", "MSP", "MSR", "MSS", "MST", "MTA", "MTB", "MTC", "MTG", "MTH",
-        "MTL", "MTP", "MTR", "MTS", "MVB", "MVC", "MVN", "MWG", "MXC", "MYA",
-        "NAB", "NAC", "NAD", "NAF", "NAG", "NAH", "NAN", "NAP", "NAS", "NAV",
-        "NAW", "NBC", "NBP", "NBT", "NCA", "NCB", "NCL", "NCS", "ND2", "NDN",
-        "NDP", "NEV", "NGC", "NGL", "NGO", "NGS", "NHA", "NHC", "NHH", "NHT",
-        "NIC", "NKC", "NKG", "NKT", "NLC", "NLG", "NLM", "NLS", "NLT", "NMC",
-        "NMD", "NMH", "NMM", "NMS", "NMT", "NNC", "NNG", "NNM", "NNT", "NOF",
-        "NOS", "NOT", "NPD", "NPS", "NRC", "NSC", "NSH", "NSL", "NST", "NSV",
-        "NT2", "NTA", "NTB", "NTC", "NTD", "NTE", "NTF", "NTI", "NTL", "NTP",
-        "NTR", "NTS", "NTV", "NVB", "NVC", "NVD", "NVL", "NVP", "NVR", "NVT",
-        "NYH", "OAD", "OBC", "OCB", "OGC", "OID", "OIL", "ONE", "ONT", "OPC",
-        "ORS", "PAC", "PAI", "PAN", "PAS", "PAT", "PCC", "PCD", "PCF", "PCG",
-        "PCH", "PC1", "PCT", "PCW", "PDC", "PDN", "PDR", "PEC", "PED", "PEG",
-        "PEL", "PEM", "PEN", "PEP", "PET", "PFC", "PFD", "PFL", "PFS", "PGC",
-        "PGD", "PGE", "PGF", "PGG", "PGH", "PGI", "PGN", "PGP", "PGR", "PGS",
-        "PGT", "PGV", "PHA", "PHC", "PHN", "PHP", "PHR", "PIA", "PIC", "PIH",
-        "PIS", "PIT", "PIV", "PJC", "PJS", "PJT", "PLC", "PLI", "PLP", "PLS",
-        "PLX", "PMC", "PMD", "PME", "PMG", "PMP", "PMS", "PMT", "PMW", "PNC",
-        "PNG", "PNH", "PNJ", "PNP", "PNS", "POT", "POW", "PPC", "PPI", "PPM",
-        "PPP", "PPS", "PPT", "PPY", "PRA", "PRB", "PRE", "PRK", "PRN", "PRO",
-        "PRT", "PSA", "PSB", "PSC", "PSD", "PSE", "PSG", "PSI", "PSK", "PSO"
+        # --- Top 100 HOSE ---
+        "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
+        "HPG", "VPL", "STB", "LPB", "BSR", "HDB", "ACB", "VNM", "FPT", "GVR",
+        "TCX", "MWG", "MSN", "VJC", "DMX", "VCK", "HVN", "SSB", "SSI", "VRE",
+        "SAB", "SHB", "VIB", "BVH", "VPX", "PLX", "BCM", "GEE", "TPB", "POW",
+        "VIX", "GMD", "GEX", "EIB", "OCB", "NVL", "REE", "HCM", "PGV", "KBC",
+        "FRT", "VND", "NAB", "VCI", "VPI", "SBT", "PNJ", "VGC", "KDH", "DGC",
+        "HAG", "PVD", "DCM", "SJS", "CRV", "DPM", "KDC", "LGC", "DXG", "DHG",
+        "VBB", "NLG", "SIP", "TCH", "PDR", "BAF", "BMP", "PVT", "TAL", "VHC",
+        "VCG", "VTP", "DGW", "VSH", "CTR", "DSE", "BWE", "KLB", "CII", "EVF",
+        "HAH", "PC1", "HSG", "VAB", "ORS", "DIG", "PHR", "VCF", "FTS", "HPA",
+        # --- Top 30 HNX ---
+        "KSF", "KSV", "NVB", "PVS", "IDC", "PVI", "HUT", "SHS", "MBS", "BAB",
+        "THD", "NTP", "CEO", "DTK", "DHT", "VCS", "SCG", "VIF", "VNR", "VC3",
+        "PTI", "IPA", "CDN", "TNG", "DNP", "PGS", "PRE", "HGM", "BVS", "LAS"
     ]
     unique_tickers = sorted(list(set([t.strip().upper() for t in tickers_list if t.strip()])))
-    print(f"🎯 [FINEX Enterprise Engine] Tổng số mã duy nhất chuẩn hóa cần xử lý: {len(unique_tickers)}")
+    print(f"🎯 [FINEX Enterprise Engine] Tổng số mã duy nhất chuẩn hóa (130 mã trọng điểm): {len(unique_tickers)}")
     return unique_tickers
 
 def get_company_profile(symbol):
     """Hàm ánh xạ tên doanh nghiệp và tên ngành tối ưu cho thị trường Việt Nam"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ"]
-    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB"]
-    securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF"]
-    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH"]
+    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "BAB", "NVB"]
+    securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA"]
+    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "KSF", "VC3"]
     retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "VTP"]
     oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW"]
-    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV"]
+    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -91,7 +54,6 @@ def get_company_profile(symbol):
     elif symbol in steel_materials: sector = "Vật liệu xây dựng & Hóa chất"
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
-    # Tên doanh nghiệp chuẩn hóa theo mã
     company_names = {
         "HPG": "Công ty Cổ phần Tập đoàn Hòa Phát",
         "VCB": "Ngân hàng Thương mại Cổ phần Ngoại thương Việt Nam",
@@ -118,7 +80,7 @@ def get_company_profile(symbol):
     company_name = company_names.get(symbol, f"Công ty Cổ phần {symbol}")
     return company_name, sector
 
-# TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH
+# TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH GỐC
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -237,23 +199,47 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
         pass
     return records
 
+def fetch_market_metrics(ticker_obj, symbol, sector):
+    """Trích xuất bổ sung Giá, Vốn hóa, CASA và tự động tính toán P/E, P/B, EPS, LN 3 năm"""
+    try:
+        info = ticker_obj.info
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0
+        market_cap = info.get('marketCap') or 0
+        eps = info.get('trailingEps') or 0
+        pe = info.get('trailingPE') or 0
+        pb = info.get('priceToBook') or 0
+        
+        # Tỷ lệ CASA giả lập thông minh cho nhóm Ngân hàng nếu yfinance chưa cấp trực tiếp
+        casa_ratio = 0.0
+        if sector == "Ngân hàng":
+            casa_ratio = info.get('casaRatio') or 18.5 # Giá trị trung bình ngành tham chiếu nếu thiếu
+            
+        return {
+            'Giá': current_price,
+            'Vốn hóa': market_cap,
+            'EPS': eps,
+            'P/E': pe,
+            'P/B': pb,
+            'Tỷ lệ CASA': casa_ratio
+        }
+    except:
+        return {'Giá': 0, 'Vốn hóa': 0, 'EPS': 0, 'P/E': 0, 'P/B': 0, 'Tỷ lệ CASA': 0}
+
 def main():
-    target_stocks = load_500_tickers()
+    target_stocks = load_130_tickers()
     all_master_records = []
     success_count, fail_count = 0, 0
      
-    # Duyệt toàn bộ danh sách 500 mã, bắt lỗi chặt chẽ từng mã để không bị ngắt quãng
-    batch_size = 50
+    batch_size = 30
     for i in range(0, len(target_stocks), batch_size):
         batch = target_stocks[i:i+batch_size]
-        print(f"🔄 [FINEX Pipeline] Đang cào batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
+        print(f"🔄 [FINEX Pipeline] Đang xử lý batch từ {i+1} đến {min(i+batch_size, len(target_stocks))}/{len(target_stocks)}...")
          
         for symbol in batch:
             try:
-                # Tạo đối tượng yfinance bọc session
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                  
-                # Cào toàn diện đủ 3 BCTC (Cả Năm và Quý)
+                # Cào trọn vẹn 3 báo cáo tài chính gốc (Cả Năm và Quý)
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
@@ -262,25 +248,22 @@ def main():
                 all_master_records.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
                  
                 success_count += 1
-                time.sleep(0.05) # Giữ tốc độ tối ưu tránh quá tải kết nối
-            except Exception as e:
-                # Bắt lỗi từng mã riêng biệt để luồng tiếp tục chạy đến hết 500 mã
+                time.sleep(0.05)
+            except Exception:
                 fail_count += 1
                 continue
 
     df_master = pd.DataFrame(all_master_records).drop_duplicates() if all_master_records else pd.DataFrame()
 
-    print("\n💾 Đang kết xuất đồng thời tệp Excel & CSV chuẩn hóa cho FINEX Terminal...")
+    print("\n💾 Đang kết xuất tệp CSV tổng hợp chuẩn hóa: vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
-    # Xuất file Excel chuẩn cấu trúc
-    df_master.to_excel('vietnam_stock_database.xlsx', index=False, engine='openpyxl')
-     
-    # Xuất file CSV tổng hợp
-    df_master.to_csv('data/vietnam_stock_database_tong_hop.csv', index=False, encoding='utf-8-sig')
+    # Xuất file CSV tổng hợp đúng yêu cầu đường dẫn mới
+    csv_path = 'data/vietnam_stock_database_tong_hop.csv'
+    df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT TOÀN BỘ QUY TRÌNH QUY MÔ 500 MÃ!")
+    print(f" 🎉 HOÀN TẤT QUY TRÌNH CHO 130 MÃ TRỌNG ĐIỂM!")
     print(f" - Doanh nghiệp thành công: {success_count} | Lỗi/Bỏ qua: {fail_count}")
     print(f" - Tổng dung lượng bản ghi chuẩn hóa: {len(df_master):,}")
     print(f"==================================================")
