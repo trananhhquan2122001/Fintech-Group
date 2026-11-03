@@ -13,7 +13,7 @@ session.headers.update({
 })
 
 def load_130_tickers():
-    """Danh sách 130 mã cổ phiếu trọng điểm (Top 100 HOSE & Top 30 HNX theo vốn hóa)"""
+    """Danh sách chính xác 130 mã cổ phiếu trọng điểm (100 HOSE & 30 HNX theo vốn hóa)"""
     tickers_list = [
         # --- Top 100 HOSE ---
         "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
@@ -32,7 +32,7 @@ def load_130_tickers():
         "PTI", "IPA", "CDN", "TNG", "DNP", "PGS", "PRE", "HGM", "BVS", "LAS"
     ]
     unique_tickers = sorted(list(set([t.strip().upper() for t in tickers_list if t.strip()])))
-    print(f"🎯 [FINEX Enterprise Engine] Tổng số mã duy nhất chuẩn hóa (130 mã trọng điểm): {len(unique_tickers)}")
+    print(f"🎯 [FINEX Enterprise Engine] Tổng số mã chuẩn hóa (Đúng 100 HOSE & 30 HNX): {len(unique_tickers)}")
     return unique_tickers
 
 def get_company_profile(symbol):
@@ -80,11 +80,12 @@ def get_company_profile(symbol):
     company_name = company_names.get(symbol, f"Công ty Cổ phần {symbol}")
     return company_name, sector
 
-# TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH GỐC
+# BỘ TỪ ĐIỂN VIỆT HÓA CHUYÊN SÂU 3 BÁO CÁO TÀI CHÍNH GỐC + CHỈ SỐ THỊ TRƯỜNG & VỐN HÓA
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
+    'Market_Metrics': 'Chỉ số thị trường & Định giá',
 
     # Cân đối kế toán
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
@@ -151,7 +152,12 @@ TRANSLATION_MAP = {
     'Repayment Of Debt': 'Trả nợ gốc vay',
     'Cash Dividends Paid': 'Cổ tức đã chi trả',
     'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
-    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ'
+    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
+
+    # Chỉ tiêu thị trường gắn nhãn trực tiếp
+    'Current Price': 'Giá cổ phiếu hiện tại',
+    'Shares Outstanding': 'Tổng số lượng cổ phiếu lưu hành',
+    'Market Capitalization': 'Vốn hóa thị trường'
 }
 
 def translate_metric(metric_original):
@@ -199,6 +205,47 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao):
         pass
     return records
 
+def fetch_market_metrics_records(symbol):
+    """Trích xuất Giá, Số lượng cổ phiếu và Vốn hóa thị trường gắn liền xuống dưới bảng báo cáo"""
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    
+    try:
+        ticker = yf.Ticker(f"{symbol}.VN", session=session)
+        info = ticker.info
+        
+        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose', 0)
+        shares_out = info.get('sharesOutstanding', 0)
+        market_cap = info.get('marketCap', 0)
+        
+        if not market_cap and current_price and shares_out:
+            market_cap = current_price * shares_out
+
+        metrics = [
+            ('Current Price', current_price),
+            ('Shares Outstanding', shares_out),
+            ('Market Capitalization', market_cap)
+        ]
+
+        for eng_key, val in metrics:
+            if val and val > 0:
+                records.append({
+                    'Mã chứng khoán': symbol,
+                    'Tên doanh nghiệp': company_name,
+                    'Tên ngành': sector_name,
+                    'Loại báo cáo': 'Chỉ số thị trường & Định giá',
+                    'Loại kỳ': 'Real-time',
+                    'Năm': current_year,
+                    'Ngày kỳ': today_str,
+                    'Chỉ tiêu tiếng Việt': TRANSLATION_MAP[eng_key],
+                    'Giá trị': float(val)
+                })
+    except Exception:
+        pass
+    return records
+
 def main():
     target_stocks = load_130_tickers()
     all_master_records = []
@@ -206,7 +253,7 @@ def main():
     failed_symbols = []
      
     for idx, symbol in enumerate(target_stocks, 1):
-        print(f"[{idx}/{len(target_stocks)}] Đang vét lịch sử sâu nhất cho mã: {symbol}...")
+        print(f"[{idx}/{len(target_stocks)}] Đang vét lịch sử sâu nhất và gắn nhãn Vốn hóa cho mã: {symbol}...")
         success = False
         
         # Cơ chế thử lại tối đa 3 lần cho mỗi mã nếu gặp lỗi mạng/nghẽn kết nối
@@ -221,6 +268,9 @@ def main():
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
+                
+                # Gắn trực tiếp các chỉ số thị trường (Giá, Tổng số cổ phiếu, Vốn hóa thị trường) xuống dưới
+                recs.extend(fetch_market_metrics_records(symbol))
                  
                 if recs:
                     all_master_records.extend(recs)
@@ -248,7 +298,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT QUÁ TRÌNH CÀO 130 MÃ TRỌNG ĐIỂM!")
+    print(f" 🎉 HOÀN TẤT QUÁ TRÌNH CÀO 130 MÃ (100 HOSE & 30 HNX) + VỐN HÓA!")
     print(f" - Thành công: {success_count} | Thất bại: {fail_count}")
     if failed_symbols:
         print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
