@@ -777,6 +777,12 @@ ACB,Ngân hàng TMCP Á Châu,Ngân hàng,"Chỉ số thị trường, Định g
 ACB,Ngân hàng TMCP Á Châu,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.16473
 ACB,Ngân hàng TMCP Á Châu,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.01568
 ACB,Ngân hàng TMCP Á Châu,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.50977004
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,25.85
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,35550000.0
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,918967500.0
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),4.49
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),0.965525
+BAB,Công ty Cổ phần BAB,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),26.773
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.05016
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",492645284977.0
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Lợi nhuận sau thuế (Lợi nhuận ròng),104485399040.0
@@ -2005,6 +2011,21 @@ BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng",
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.026099999
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.01472
 BAF,Công ty Cổ phần BAF,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.13576001
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,74.81
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,34891351.0
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,2610222080.0
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),2.94
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS dự phóng (Forward EPS),5.13333
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),1.19
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Cổ tức tiền mặt trên mỗi cổ phiếu,0.89
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),25.445578
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E dự phóng (Forward P/E),14.573386
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),1.3048558
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),57.332
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.0506
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.02859
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.01637
+BCC,Công ty Cổ phần BCC,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.16511999
 BCM,Công ty Cổ phần BCM,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Thuế suất dùng để tính toán,0.2
 BCM,Công ty Cổ phần BCM,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",957691546022.0
 BCM,Công ty Cổ phần BCM,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Lợi nhuận sau thuế (Lợi nhuận ròng),563317279679.0
@@ -7636,6 +7657,19 @@ BVH,Công ty Cổ phần BVH,"Công nghiệp, Sản xuất & Hàng tiêu dùng",
 BVH,Công ty Cổ phần BVH,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.018509999
 BVH,Công ty Cổ phần BVH,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.05763
 BVH,Công ty Cổ phần BVH,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.33551997
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,10.945
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,68305143.0
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,747599808.0
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),0.78
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS dự phóng (Forward EPS),0.912
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),14.032051
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E dự phóng (Forward P/E),12.001096
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),3.9887025
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),2.744
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.25684
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.054899998
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.09361
+BVS,Công ty Cổ phần BVS,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.68651
 BWE,Công ty Cổ phần BWE,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Thuế suất dùng để tính toán,0.090295
 BWE,Công ty Cổ phần BWE,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",742177741997.0
 BWE,Công ty Cổ phần BWE,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Lợi nhuận sau thuế (Lợi nhuận ròng),407585995922.0
@@ -17998,6 +18032,21 @@ DHG,Công ty Cổ phần DHG,"Công nghiệp, Sản xuất & Hàng tiêu dùng",
 DHG,Công ty Cổ phần DHG,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.12163
 DHG,Công ty Cổ phần DHG,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.16002001
 DHG,Công ty Cổ phần DHG,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.49194
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,23.92
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,161235573.0
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,3856754688.0
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),2.94
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS dự phóng (Forward EPS),3.2405
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),20.45
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Cổ tức tiền mặt trên mỗi cổ phiếu,4.88
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),8.136054
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E dự phóng (Forward P/E),7.381577
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),2.9008002
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),8.246
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.39174998
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.18747
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.59314
+DHT,Công ty Cổ phần DHT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.76669997
 DIG,Công ty Cổ phần DIG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,7519663.765884
 DIG,Công ty Cổ phần DIG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.080777
 DIG,Công ty Cổ phần DIG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",191423207757.0
@@ -19500,6 +19549,19 @@ DMX,Công ty Cổ phần DMX,Bán lẻ & Dịch vụ tiêu dùng,"Chỉ số th�
 DMX,Công ty Cổ phần DMX,Bán lẻ & Dịch vụ tiêu dùng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),26498.2
 DMX,Công ty Cổ phần DMX,Bán lẻ & Dịch vụ tiêu dùng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.07177
 DMX,Công ty Cổ phần DMX,Bán lẻ & Dịch vụ tiêu dùng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.19933
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,10.06
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,378802615.0
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,3810754560.0
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),1.86
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),7.71
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Cổ tức tiền mặt trên mỗi cổ phiếu,0.78
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),5.408602
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),0.9714176
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),10.356
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.18993999
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.0172
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),4.24537
+DNP,Công ty Cổ phần DNP,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),1.0
 DPM,Công ty Cổ phần DPM,"Vật liệu xây dựng, Thép & Hóa chất",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,4281240090.252208
 DPM,Công ty Cổ phần DPM,"Vật liệu xây dựng, Thép & Hóa chất",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.179634
 DPM,Công ty Cổ phần DPM,"Vật liệu xây dựng, Thép & Hóa chất",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",1239575250229.0
@@ -21750,6 +21812,10 @@ DSE,Công ty Cổ phần DSE,Chứng khoán,"Chỉ số thị trường, Định
 DSE,Công ty Cổ phần DSE,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.00974
 DSE,Công ty Cổ phần DSE,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.091280006
 DSE,Công ty Cổ phần DSE,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.64551
+DTD,Công ty Cổ phần DTD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,96.69
+DTD,Công ty Cổ phần DTD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),1.87
+DTD,Công ty Cổ phần DTD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),21.020939
+DTK,Công ty Cổ phần DTK,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,20.75
 DXG,Công ty Cổ phần DXG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,-2216309244.592739
 DXG,Công ty Cổ phần DXG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.337479
 DXG,Công ty Cổ phần DXG,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",135691237401.0
@@ -42842,6 +42908,18 @@ HSG,Công ty Cổ phần HSG,"Vật liệu xây dựng, Thép & Hóa chất","Ch
 HSG,Công ty Cổ phần HSG,"Vật liệu xây dựng, Thép & Hóa chất","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.02987
 HSG,Công ty Cổ phần HSG,"Vật liệu xây dựng, Thép & Hóa chất","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.018380001
 HSG,Công ty Cổ phần HSG,"Vật liệu xây dựng, Thép & Hóa chất","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.12718001
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,63.75
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,123259468.0
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,7857791488.0
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),-5.42
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS dự phóng (Forward EPS),-5.14716
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E dự phóng (Forward P/E),-12.38547
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),5.444065
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),11.71
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),-0.43370998
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),-0.09742
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),-1.8858501
+HUT,Công ty Cổ phần HUT,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.62328
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,1812401273.6
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.4
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",777431450069.0
@@ -44198,6 +44276,9 @@ HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng",
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.037809998
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.027780002
 HVN,Công ty Cổ phần HVN,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.10025
+IDV,Công ty Cổ phần IDV,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,42.29
+IDV,Công ty Cổ phần IDV,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),5.75
+IDV,Công ty Cổ phần IDV,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),12.028398
 KBC,Công ty Cổ phần KBC,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Thuế suất dùng để tính toán,0.232231
 KBC,Công ty Cổ phần KBC,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",1269597428124.0
 KBC,Công ty Cổ phần KBC,Bất động sản & Xây dựng,Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Lợi nhuận sau thuế (Lợi nhuận ròng),911255360018.0
@@ -51162,6 +51243,8 @@ MBB,Ngân hàng TMCP Quân đội,Ngân hàng,"Chỉ số thị trường, Đị
 MBB,Ngân hàng TMCP Quân đội,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),0.22409001
 MBB,Ngân hàng TMCP Quân đội,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.02104
 MBB,Ngân hàng TMCP Quân đội,Ngân hàng,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.49773
+MBS,Công ty Cổ phần Chứng khoán MB,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,8.32
+MBS,Công ty Cổ phần Chứng khoán MB,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),5.73
 MCH,Công ty Cổ phần Hàng tiêu dùng Masan,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Thuế suất dùng để tính toán,0.146065
 MCH,Công ty Cổ phần Hàng tiêu dùng Masan,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",2599073118099.0
 MCH,Công ty Cổ phần Hàng tiêu dùng Masan,"Công nghiệp, Sản xuất & Hàng tiêu dùng",Báo cáo kết quả kinh doanh,Quý,2026,2026-09-30,Lợi nhuận sau thuế (Lợi nhuận ròng),1928527954005.0
@@ -69156,6 +69239,21 @@ POW,Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP,"Dầu khí, Đi�
 POW,Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.056550004
 POW,Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.120129995
 POW,Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.16988
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,16.19
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,17933272.0
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,315935616.0
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS cơ bản 4 quý gần nhất (Trailing EPS),-3.1
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,EPS dự phóng (Forward EPS),-2.152
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E dự phóng (Forward P/E),-7.523235
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/B (Price to Book),3.0053835
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá trị sổ sách mỗi cổ phiếu (BVPS),5.387
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên vốn chủ sở hữu (ROE),-0.47006
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),-0.18948999
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),-0.304
+PRE,Công ty Cổ phần PRE,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.57765996
+PSI,Công ty Cổ phần PSI,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,117.88
+PSI,Công ty Cổ phần PSI,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),0.02
+PSI,Công ty Cổ phần PSI,Chứng khoán,"Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),33.82046
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,-596343323.032351
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.319429
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",696045297367.0
@@ -70439,6 +70537,8 @@ PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng","Chỉ số 
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.03443
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.08335
 PVD,Công ty Cổ phần PVD,"Dầu khí, Điện & Năng lượng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.18462999
+PVI,Công ty Cổ phần PVI,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,24.845
+PVI,Công ty Cổ phần PVI,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),2.21
 PVT,Công ty Cổ phần PVT,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Ảnh hưởng thuế từ các khoản mục bất thường,46300774.123948
 PVT,Công ty Cổ phần PVT,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.186926
 PVT,Công ty Cổ phần PVT,"Dầu khí, Điện & Năng lượng",Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,"Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa",1581969398256.0
@@ -86190,6 +86290,11 @@ TCX,Công ty Cổ phần TCX,"Công nghiệp, Sản xuất & Hàng tiêu dùng",
 TCX,Công ty Cổ phần TCX,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Lợi nhuận trên tổng tài sản (ROA),0.073520005
 TCX,Công ty Cổ phần TCX,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận ròng (%),0.59064
 TCX,Công ty Cổ phần TCX,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Biên lợi nhuận gộp (%),0.94328004
+THD,Công ty Cổ phần THD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Giá cổ phiếu hiện tại,67.54
+THD,Công ty Cổ phần THD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tổng số lượng cổ phiếu lưu hành,5100000.0
+THD,Công ty Cổ phần THD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Vốn hóa thị trường,344454000.00000006
+THD,Công ty Cổ phần THD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Tỷ suất cổ tức (% Dividend Yield),3.58
+THD,Công ty Cổ phần THD,"Công nghiệp, Sản xuất & Hàng tiêu dùng","Chỉ số thị trường, Định giá & Cổ tức",Real-time,2026,2026-11-04,Hệ số P/E cơ bản (Trailing P/E),13.931127
 TPB,Công ty Cổ phần TPB,Ngân hàng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thuế suất dùng để tính toán,0.204632
 TPB,Công ty Cổ phần TPB,Ngân hàng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Lợi nhuận sau thuế (Lợi nhuận ròng),1827543000000.0
 TPB,Công ty Cổ phần TPB,Ngân hàng,Báo cáo kết quả kinh doanh,Quý,2026,2026-06-30,Thu nhập lãi thuần,3634174000000.0
