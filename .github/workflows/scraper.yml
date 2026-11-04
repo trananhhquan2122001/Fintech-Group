@@ -25,15 +25,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
 
-      - name: Run Core Pro Scraper Script (130 mã trọng điểm)
+      - name: Run FINEX Enterprise Engine (150 mã trọng điểm)
         run: |
           python main.py
 
-      - name: Run Full Market Scraper Script (Mở rộng toàn thị trường)
-        run: |
-          python full_market_scraper.py
-
-      - name: Commit and push changes to GitHub (Optional Backup)
+      - name: Commit and push changes to GitHub (Backup)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -42,15 +38,15 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           
-          # Gom add đồng thời cả 2 file dữ liệu tổng hợp
-          git add data/vietnam_stock_database_tong_hop.csv data/vietnam_full_market_database.csv || true
+          # Chỉ add đúng tệp dữ liệu duy nhất của 150 mã
+          git add data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Core & Full Market datasets [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Master 150 Tickers Dataset [skip ci]"
           
           git push origin main
 
-      - name: Push All Datasets Directly to Hugging Face Space
+      - name: Push Dataset Directly to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -58,7 +54,7 @@ jobs:
           from huggingface_hub import HfApi
           api = HfApi()
           
-          # 1. Đẩy file Core 130 mã trọng điểm
+          # Đẩy duy nhất tệp vietnam_stock_database_tong_hop.csv lên Space
           api.upload_file(
               path_or_fileobj='data/vietnam_stock_database_tong_hop.csv',
               path_in_repo='data/vietnam_stock_database_tong_hop.csv',
@@ -66,14 +62,5 @@ jobs:
               repo_type='space',
               token='${{ secrets.HF_TOKEN }}'
           )
-          
-          # 2. Đẩy file Full Market mở rộng toàn thị trường
-          api.upload_file(
-              path_or_fileobj='data/vietnam_full_market_database.csv',
-              path_in_repo='data/vietnam_full_market_database.csv',
-              repo_id='trananhquan2001/trananhquan-terminal',
-              repo_type='space',
-              token='${{ secrets.HF_TOKEN }}'
-          )
-          print('Đã đẩy thành công toàn bộ tập dữ liệu (Core + Full Market) lên Hugging Face Space!')
+          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv (150 mã) lên Hugging Face Space!')
           "
