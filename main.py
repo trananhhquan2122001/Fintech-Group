@@ -338,10 +338,10 @@ def main():
             ascending=[True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV tổng hợp hoàn chỉnh: data/vietnam_stock_master_full_database.csv...")
+    print("\n💾 Đang kết xuất tệp CSV tổng hợp chuẩn hóa: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
-    csv_path = 'data/vietnam_stock_master_full_database.csv'
+    csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
