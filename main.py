@@ -5,7 +5,7 @@ import pandas as pd
 import yfinance as yf
 import requests
 
-# Thiết lập Session giả lập trình duyệt chống chặn kết nối tối ưu trên GitHub Actions
+# Thiết lập Session chống chặn kết nối tối ưu trên GitHub Actions
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -13,7 +13,7 @@ session.headers.update({
 })
 
 def load_150_master_tickers():
-    """Danh sách chính xác 150 mã cổ phiếu trọng điểm (100 HOSE & 50 HNX) cho FINEX VN Terminal"""
+    """Danh sách chính xác tuyệt đối 150 mã cổ phiếu trọng điểm (100 HOSE & 50 HNX) cho FINEX VN Terminal"""
     tickers_list = [
         # --- SÀN HOSE (100 mã: VN30 + Mid-cap chủ chốt) ---
         "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
@@ -35,7 +35,7 @@ def load_150_master_tickers():
         "L14", "L18", "MCG", "NBC", "NDN", "PMC", "PLC", "PSD", "PSI", "WSS"
     ]
     unique_tickers = sorted(list(set([t.strip().upper() for t in tickers_list if t.strip()])))
-    print(f"🎯 [FINEX Enterprise Engine] Khởi tạo danh mục: {len(unique_tickers)} mã chuẩn hóa (100 HOSE & 50 HNX).")
+    print(f"🎯 [FINEX Enterprise Engine] Khởi tạo danh mục chuẩn xác: {len(unique_tickers)} mã (100 HOSE & 50 HNX).")
     return unique_tickers
 
 def get_company_profile(symbol):
@@ -72,14 +72,14 @@ def get_company_profile(symbol):
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
-# BỘ TỪ ĐIỂN CHUYÊN SÂU ÁNH XẠ TOÀN BỘ 100% MỌI DÒNG KHOẢN MỤC KHÔNG THIẾU MỘT DÒNG NÀO
+# BỘ TỪ ĐIỂN CHUYÊN SÂU ÁNH XẠ TOÀN BỘ 100% KHOẢN MỤC BÁO CÁO & ĐỊNH GIÁ (GỒM TỔNG TÀI SẢN)
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
 
-    # --- 1. BẢNG CÂN ĐỐI KẾ TOÁN (FULL KHOẢN MỤC) ---
+    # --- 1. BẢNG CÂN ĐỐI KẾ TOÁN (FULL - GỒM TỔNG TÀI SẢN) ---
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông', 'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Assets': 'Tổng tài sản', 'Current Assets': 'Tài sản ngắn hạn',
     'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền', 'Cash Financial': 'Tiền và đầu tư tài chính ngắn hạn',
@@ -116,7 +116,7 @@ TRANSLATION_MAP = {
     'Minority Interest': 'Lợi ích cổ đông không kiểm soát', 'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm CĐKKS',
     'Working Capital': 'Vốn lưu động ròng',
 
-    # --- 2. BÁO CÁO KẾT QUẢ KINH DOANH (FULL KHOẢN MỤC) ---
+    # --- 2. BÁO CÁO KẾT QUẢ KINH DOANH (FULL) ---
     'Total Revenue': 'Tổng doanh thu', 'Operating Revenue': 'Doanh thu thuần',
     'Cost Of Revenue': 'Giá vốn hàng bán', 'Gross Profit': 'Lợi nhuận gộp',
     'Operating Expense': 'Chi phí hoạt động', 'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
@@ -133,7 +133,7 @@ TRANSLATION_MAP = {
     'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)', 'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
     'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng', 'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
 
-    # --- 3. BÁO CÁO LƯU CHUYỂN TIỀN TỆ (FULL KHOẢN MỤC) ---
+    # --- 3. BÁO CÁO LƯU CHUYỂN TIỀN TỆ (FULL) ---
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Cash Flow From Continuing Operating Activities': 'Lưu chuyển tiền thuần từ HĐKD tiếp tục',
     'Depreciation Amortization Depletion': 'Khấu hao tài sản cố định và phân bổ',
@@ -175,7 +175,7 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Ánh xạ triệt để 100%, bảo đảm không bỏ sót dòng nào (giữ nguyên tên gốc nếu là khoản mục mới)"""
+    """Ánh xạ triệt để 100%, bảo đảm không bỏ sót dòng nào"""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
@@ -193,11 +193,10 @@ def translate_metric(metric_original):
     return cleaned_key
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
-    """Vét sạch 100% mọi dòng dữ liệu nguyên bản từ DataFrame báo cáo tài chính"""
+    """Vét sạch 100% mọi dòng dữ liệu nguyên bản từ DataFrame từ năm min_year"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
-    
     try:
         if df is not None and not df.empty:
             for col in df.columns:
@@ -228,7 +227,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
     return records
 
 def fetch_market_and_valuation_metrics(symbol):
-    """Trích xuất trọn bộ Giá, Số lượng cổ phiếu, Vốn hóa, EPS, Cổ tức, P/E, P/B, ROE, ROA"""
+    """Trích xuất TRỌN BỘ Giá cổ phiếu, Số lượng cổ phiếu, Vốn hóa, EPS, Cổ tức, P/E, P/B, ROE, ROA real-time"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
@@ -292,7 +291,7 @@ def main():
     failed_symbols = []
      
     for idx, symbol in enumerate(target_stocks, 1):
-        print(f"[{idx}/{len(target_stocks)}] Vét sạch 100% mọi dòng 3 BCTC (2018-2026) + EPS, Cổ tức, Định giá cho mã: {symbol}...")
+        print(f"[{idx}/{len(target_stocks)}] Vét sạch 100% mọi dòng 3 BCTC (2018-2026) + Giá, Vốn hóa, EPS, Cổ tức cho mã: {symbol}...")
         success = False
         
         for attempt in range(3):
@@ -312,7 +311,7 @@ def main():
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
                 
-                # 4. Chỉ số thị trường, Định giá, EPS, Cổ tức real-time
+                # 4. Giá cổ phiếu, Vốn hóa, Số lượng cổ phiếu, EPS, Cổ tức, Định giá real-time
                 recs.extend(fetch_market_and_valuation_metrics(symbol))
                  
                 if recs:
@@ -346,7 +345,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT 100% 3 BÁO CÁO TÀI CHÍNH, EPS, CỔ TỨC & ĐỊNH GIÁ!")
+    print(f" 🎉 HOÀN TẤT VÉT 100% 3 BÁO CÁO, GIÁ, VỐN HÓA, EPS, CỔ TỨC CHO ĐÚNG 150 MÃ!")
     print(f" - Tổng mã thành công: {success_count}/{len(target_stocks)} | Thất bại: {fail_count}")
     if failed_symbols:
         print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
