@@ -27,7 +27,7 @@ def load_150_master_tickers():
         "VCG", "VTP", "DGW", "VSH", "CTR", "DSE", "BWE", "KLB", "CII", "EVF",
         "HAH", "PC1", "HSG", "VAB", "ORS", "DIG", "PHR", "VCF", "FTS", "HPA",
         
-        # --- SÀN HNX (50 mã: Vốn hóa tỷ USD, HNX30 & Top thanh khoản) ---
+        # --- SÀN HNX (50 mã: Vốn hóa tỷ USD, HNX30 & Top thanh khoản chuẩn 150 mã) ---
         "KSF", "KSV", "NVB", "THD", "PVS", "IDC", "PVI", "HUT", "SHS", "MBS",
         "BAB", "NTP", "CEO", "DTK", "DHT", "VCS", "SCG", "VIF", "VNR", "VC3",
         "PTI", "IPA", "CDN", "TNG", "DNP", "PGS", "PRE", "HGM", "BVS", "LAS",
@@ -68,7 +68,9 @@ def get_company_profile(symbol):
         "VRE": "Công ty Cổ phần Vincom Retail", "PNJ": "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận",
         "SSI": "Công ty Cổ phần Chứng khoán SSI", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
         "POW": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP", "SAB": "Tổng công ty CP Bia - Rượu - Nước giải khát Sài Gòn",
-        "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan", "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn"
+        "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan", "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn",
+        "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "IDC": "Tổng công ty IDICO - CTCP",
+        "VCS": "Công ty Cổ phần Vicosstone", "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
@@ -236,59 +238,34 @@ TRANSLATION_MAP = {
 def translate_metric(metric_original):
     """Hàm dịch thuật thông minh lọc sạch từ khóa, loại bỏ hoàn toàn tiếng Anh bị lọt"""
     cleaned_key = str(metric_original).strip()
-    
-    # 1. Kiểm tra chính xác trong từ điển
     if cleaned_key in TRANSLATION_MAP: 
         return TRANSLATION_MAP[cleaned_key]
     
-    # 2. Kiểm tra không phân biệt hoa thường
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): 
             return vie_v
             
-    # 3. Quét từ khóa thông minh (Keyword Mapping) để bắt trọn các dòng bị Yahoo Finance biến tấu tên gọi
     k_lower = cleaned_key.lower()
-    
-    if 'net income' in k_lower or 'net profit' in k_lower:
-        return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
-    if 'operating income' in k_lower or 'operating profit' in k_lower:
-        return 'Lợi nhuận thuần từ hoạt động kinh doanh'
-    if 'gross profit' in k_lower:
-        return 'Lợi nhuận gộp'
-    if 'pretax income' in k_lower or 'income before tax' in k_lower:
-        return 'Lợi nhuận kế toán trước thuế'
-    if 'revenue' in k_lower or 'sales' in k_lower:
-        return 'Tổng doanh thu / Doanh thu thuần'
-    if 'cost of' in k_lower or 'cogs' in k_lower:
-        return 'Giá vốn hàng bán'
-    if 'operating expense' in k_lower or 'sga' in k_lower or 'admin' in k_lower:
-        return 'Chi phí bán hàng và quản lý doanh nghiệp'
-    if 'interest expense' in k_lower:
-        return 'Chi phí lãi vay'
-    if 'interest income' in k_lower:
-        return 'Thu nhập lãi'
-    if 'tax provision' in k_lower or 'tax expense' in k_lower:
-        return 'Chi phí thuế thu nhập doanh nghiệp'
-    if 'depreciation' in k_lower or 'amortization' in k_lower:
-        return 'Khấu hao tài sản cố định và phân bổ'
-    if 'cash flow' in k_lower:
-        return 'Lưu chuyển tiền thuần'
-    if 'capital expenditure' in k_lower or 'capex' in k_lower:
-        return 'Chi phí đầu tư tài sản cố định (CapEx)'
-    if 'dividend' in k_lower:
-        return 'Cổ tức đã chi trả'
-    if 'asset' in k_lower:
-        return 'Tổng tài sản'
-    if 'liability' in k_lower or 'debt' in k_lower:
-        return 'Nợ phải trả'
-    if 'equity' in k_lower:
-        return 'Vốn chủ sở hữu'
-    if 'share' in k_lower:
-        return 'Chỉ tiêu cổ phiếu'
-    if 'eps' in k_lower:
-        return 'Lãi trên cổ phiếu (EPS)'
+    if 'net income' in k_lower or 'net profit' in k_lower: return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
+    if 'operating income' in k_lower or 'operating profit' in k_lower: return 'Lợi nhuận thuần từ hoạt động kinh doanh'
+    if 'gross profit' in k_lower: return 'Lợi nhuận gộp'
+    if 'pretax income' in k_lower or 'income before tax' in k_lower: return 'Lợi nhuận kế toán trước thuế'
+    if 'revenue' in k_lower or 'sales' in k_lower: return 'Tổng doanh thu / Doanh thu thuần'
+    if 'cost of' in k_lower or 'cogs' in k_lower: return 'Giá vốn hàng bán'
+    if 'operating expense' in k_lower or 'sga' in k_lower or 'admin' in k_lower: return 'Chi phí bán hàng và quản lý doanh nghiệp'
+    if 'interest expense' in k_lower: return 'Chi phí lãi vay'
+    if 'interest income' in k_lower: return 'Thu nhập lãi'
+    if 'tax provision' in k_lower or 'tax expense' in k_lower: return 'Chi phí thuế thu nhập doanh nghiệp'
+    if 'depreciation' in k_lower or 'amortization' in k_lower: return 'Khấu hao tài sản cố định và phân bổ'
+    if 'cash flow' in k_lower: return 'Lưu chuyển tiền thuần'
+    if 'capital expenditure' in k_lower or 'capex' in k_lower: return 'Chi phí đầu tư tài sản cố định (CapEx)'
+    if 'dividend' in k_lower: return 'Cổ tức đã chi trả'
+    if 'asset' in k_lower: return 'Tổng tài sản'
+    if 'liability' in k_lower or 'debt' in k_lower: return 'Nợ phải trả'
+    if 'equity' in k_lower: return 'Vốn chủ sở hữu'
+    if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
+    if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
 
-    # Nếu vẫn không khớp, chuyển ngữ chung an toàn thay vì để lộ tiếng Anh
     return 'Chỉ tiêu tài chính tổng hợp'
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
@@ -310,7 +287,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                             except: 
                                 continue
                             
-                            # BỎ QUA CÁC DÒNG CÓ GIÁ TRỊ BẰNG 0 HOẶC TRỐNG ĐỂ LÀM SẠCH FILE
                             if float_val == 0.0:
                                 continue
                             
@@ -403,19 +379,12 @@ def main():
                 ticker = yf.Ticker(f"{symbol}.VN", session=session)
                  
                 recs = []
-                # 1. Bảng cân đối kế toán (Năm & Quý từ 2018)
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm', min_year=2018))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
-                
-                # 2. Báo cáo kết quả kinh doanh (Năm & Quý từ 2018)
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
-                
-                # 3. Báo cáo lưu chuyển tiền tệ (Năm & Quý từ 2018)
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
-                
-                # 4. Chỉ số thị trường, Định giá, EPS, Cổ tức real-time
                 recs.extend(fetch_market_and_valuation_metrics(symbol))
                  
                 if recs:
@@ -449,7 +418,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT 100% DỮ LIỆU THUẦN VIỆT (ĐÃ LỌC SẠCH GIÁ TRỊ 0) CHO 150 MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT 100% DỮ LIỆU THUẦN VIỆT (ĐÃ ĐỦ 150 MÃ & LỌC SẠCH GIÁ TRỊ 0)!")
     print(f" - Tổng mã thành công: {success_count}/{len(target_stocks)} | Thất bại: {fail_count}")
     if failed_symbols:
         print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
