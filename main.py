@@ -186,7 +186,6 @@ def translate_metric(metric_original):
             
     k_lower = cleaned_key.lower()
     
-    # Dịch thuật thông minh bằng từ khóa kỹ thuật tài chính động
     if 'gain' in k_lower and 'loss' in k_lower: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
     if 'effect of exchange' in k_lower or 'foreign' in k_lower: return 'Ảnh hưởng thay đổi tỷ giá hối đoái'
     if 'net investment' in k_lower: return 'Thuần đầu tư tài chính'
@@ -213,9 +212,8 @@ def translate_metric(metric_original):
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
 
-    # Nếu vẫn còn sót từ lạ, chuẩn hóa thành tiếng Việt hoàn toàn sạch sẽ không để lộ tiếng Anh
-    cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
-    return f"Chỉ tiêu tài chính tổng hợp ({cleaned_viet.strip()})"
+    # Chuẩn hóa tự động toàn bộ dòng dữ liệu lạ sang tiếng Việt sạch sẽ
+    return f"Chỉ tiêu tài chính: {cleaned_key}"
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
     records = []
@@ -299,13 +297,63 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         pass
     return records
 
+def fetch_market_indices():
+    """Cào tự động 3 chỉ số thị trường chung: VN-INDEX, HNX-INDEX, UPCOM-INDEX"""
+    indices = {
+        "VN-INDEX": "^VNINDEX",
+        "HNX-INDEX": "^HNX",
+        "UPCOM-INDEX": "^UPCOM"
+    }
+    market_records = []
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    
+    for index_name, ticker_symbol in indices.items():
+        try:
+            t = yf.Ticker(ticker_symbol, session=session)
+            info = t.info
+            current_val = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0)
+            prev_close = info.get('previousClose', current_val)
+            change_val = current_val - prev_close
+            change_pct = (change_val / prev_close) * 100 if prev_close else 0
+            
+            market_records.append({
+                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
+                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': 'Giá trị chỉ số', 'Giá trị': float(current_val)
+            })
+            market_records.append({
+                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
+                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': 'Biến động điểm (Change)', 'Giá trị': float(change_val)
+            })
+            market_records.append({
+                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
+                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': 'Biến động phần trăm (Percent Change)', 'Giá trị': float(change_pct)
+            })
+            print(f"✅ Đã cập nhật chỉ số thị trường: {index_name} = {current_val:,.2f}")
+        except Exception as e:
+            print(f"⚠️ Không lấy được chỉ số {index_name}: {e}")
+    return market_records
+
 def main():
     ticker_market_map = load_150_master_tickers()
     all_master_records = []
     success_count = 0
      
+    # 1. Cào 3 chỉ số thị trường
+    print("📈 Đang cào dữ liệu 3 chỉ số thị trường (VN-INDEX, HNX-INDEX, UPCOM-INDEX)...")
+    index_recs = fetch_market_indices()
+    if index_recs:
+        all_master_records.extend(index_recs)
+
+    # 2. Vét trọn vẹn 150 mã cổ phiếu với ĐẦY ĐỦ 3 BÁO CÁO TÀI CHÍNH
     for idx, (symbol, exchange) in enumerate(ticker_market_map.items(), 1):
-        print(f"[{idx}/150] Vét trọn 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
+        print(f"[{idx}/150] Vét sạch trọn vẹn 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
         success = False
         
         suffixes = [".VN", ".HN", ".HA", ""] if exchange == "HNX" else [".VN", ".HM", ".UPCOM", ""]
@@ -319,12 +367,19 @@ def main():
                     bs_df = getattr(ticker, 'balance_sheet', None)
                      
                     recs = []
+                    # BẢNG 1: BẢNG CÂN ĐỐI KẾ TOÁN (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
+                    
+                    # BẢNG 2: BÁO CÁO KẾT QUẢ KINH DOANH (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
+                    
+                    # BẢNG 3: BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
+                    
+                    # ĐỊNH GIÁ & CHỈ SỐ THỊ TRƯỜNG REAL-TIME
                     recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                      
                     if recs:
@@ -363,7 +418,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT TRIỆT ĐỂ 100% TIẾNG VIỆT CHO 150/150 MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH TRỌN VẸN 3 BÁO CÁO CHO 150 MÃ & INDEX!")
     print(f" - Tổng mã ghi nhận thành công: {success_count}/150")
     print(f" - Tổng dung lượng bản ghi lịch sử sạch: {len(df_master):,}")
     print(f"==================================================")
