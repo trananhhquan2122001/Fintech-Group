@@ -72,14 +72,14 @@ def get_company_profile(symbol):
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
-# BỘ TỪ ĐIỂN CHUYÊN SÂU ÁNH XẠ TOÀN BỘ KHOẢN MỤC TIẾNG VIỆT 100% (KHÔNG ĐỂ SÓT TIẾNG ANH)
+# BỘ TỪ ĐIỂN CHUYÊN SÂU ÁNH XẠ CHUẨN XÁC 100% TIẾNG VIỆT
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
     'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
 
-    # --- 1. CÂN ĐỐI KẾ TOÁN ---
+    # Cân đối kế toán
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
     'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Assets': 'Tổng tài sản',
@@ -147,7 +147,7 @@ TRANSLATION_MAP = {
     'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát',
     'Working Capital': 'Vốn lưu động ròng',
 
-    # --- 2. KẾT QUẢ KINH DOANH (ĐÃ BỔ SUNG ĐẦY ĐỦ CÁC DÒNG HÌNH ẢNH) ---
+    # Kết quả kinh doanh
     'Total Revenue': 'Tổng doanh thu',
     'Operating Revenue': 'Doanh thu thuần',
     'Cost Of Revenue': 'Giá vốn hàng bán',
@@ -182,7 +182,7 @@ TRANSLATION_MAP = {
     'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng',
     'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
 
-    # --- 3. LƯU CHUYỂN TIỀN TỆ ---
+    # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Cash Flow From Continuing Operating Activities': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh tiếp tục',
     'Depreciation Amortization Depletion': 'Khấu hao tài sản cố định và phân bổ',
@@ -215,7 +215,7 @@ TRANSLATION_MAP = {
     'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
     'Changes In Cash': 'Ảnh hưởng thay đổi tỷ giá và tiền thuần thay đổi',
 
-    # --- 4. CHỈ SỐ THỊ TRƯỜNG & ĐỊNH GIÁ (REAL-TIME) ---
+    # Chỉ số thị trường & Định giá (Real-time)
     'Current Price': 'Giá cổ phiếu hiện tại',
     'Shares Outstanding': 'Tổng số lượng cổ phiếu lưu hành',
     'Market Capitalization': 'Vốn hóa thị trường',
@@ -234,33 +234,65 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Hàm dịch thuật triệt để: Đảm bảo 100% trả về tiếng Việt, không để lộ tiếng Anh"""
+    """Hàm dịch thuật thông minh lọc sạch từ khóa, loại bỏ hoàn toàn tiếng Anh bị lọt"""
     cleaned_key = str(metric_original).strip()
+    
+    # 1. Kiểm tra chính xác trong từ điển
     if cleaned_key in TRANSLATION_MAP: 
         return TRANSLATION_MAP[cleaned_key]
     
-    # Tìm kiếm không phân biệt hoa thường
+    # 2. Kiểm tra không phân biệt hoa thường
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): 
             return vie_v
-     
-    # Bộ dự phòng thông minh (Fallback) nếu gặp khoản mục cực kỳ lạ chưa có trong từ điển
-    lower_key = cleaned_key.lower()
-    if 'share' in lower_key or 'shares' in lower_key: return f'Chỉ tiêu cổ phiếu ({cleaned_key})'
-    if 'revenue' in lower_key or 'sales' in lower_key: return f'Doanh thu ({cleaned_key})'
-    if 'income' in lower_key or 'profit' in lower_key or 'earnings' in lower_key: return f'Lợi nhuận ({cleaned_key})'
-    if 'asset' in lower_key: return f'Tài sản ({cleaned_key})'
-    if 'debt' in lower_key or 'liability' in lower_key: return f'Nợ phải trả ({cleaned_key})'
-    if 'cash' in lower_key: return f'Tiền và lưu chuyển tiền ({cleaned_key})'
-    if 'dividend' in lower_key: return f'Cổ tức ({cleaned_key})'
-    if 'eps' in lower_key: return f'Lãi trên cổ phiếu EPS ({cleaned_key})'
-    if 'tax' in lower_key: return f'Thuế và các khoản liên quan ({cleaned_key})'
-    if 'expense' in lower_key or 'cost' in lower_key: return f'Chi phí ({cleaned_key})'
+            
+    # 3. Quét từ khóa thông minh (Keyword Mapping) để bắt trọn các dòng bị Yahoo Finance biến tấu tên gọi
+    k_lower = cleaned_key.lower()
     
-    return f'Chỉ tiêu tài chính khác ({cleaned_key})'
+    if 'net income' in k_lower or 'net profit' in k_lower:
+        return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
+    if 'operating income' in k_lower or 'operating profit' in k_lower:
+        return 'Lợi nhuận thuần từ hoạt động kinh doanh'
+    if 'gross profit' in k_lower:
+        return 'Lợi nhuận gộp'
+    if 'pretax income' in k_lower or 'income before tax' in k_lower:
+        return 'Lợi nhuận kế toán trước thuế'
+    if 'revenue' in k_lower or 'sales' in k_lower:
+        return 'Tổng doanh thu / Doanh thu thuần'
+    if 'cost of' in k_lower or 'cogs' in k_lower:
+        return 'Giá vốn hàng bán'
+    if 'operating expense' in k_lower or 'sga' in k_lower or 'admin' in k_lower:
+        return 'Chi phí bán hàng và quản lý doanh nghiệp'
+    if 'interest expense' in k_lower:
+        return 'Chi phí lãi vay'
+    if 'interest income' in k_lower:
+        return 'Thu nhập lãi'
+    if 'tax provision' in k_lower or 'tax expense' in k_lower:
+        return 'Chi phí thuế thu nhập doanh nghiệp'
+    if 'depreciation' in k_lower or 'amortization' in k_lower:
+        return 'Khấu hao tài sản cố định và phân bổ'
+    if 'cash flow' in k_lower:
+        return 'Lưu chuyển tiền thuần'
+    if 'capital expenditure' in k_lower or 'capex' in k_lower:
+        return 'Chi phí đầu tư tài sản cố định (CapEx)'
+    if 'dividend' in k_lower:
+        return 'Cổ tức đã chi trả'
+    if 'asset' in k_lower:
+        return 'Tổng tài sản'
+    if 'liability' in k_lower or 'debt' in k_lower:
+        return 'Nợ phải trả'
+    if 'equity' in k_lower:
+        return 'Vốn chủ sở hữu'
+    if 'share' in k_lower:
+        return 'Chỉ tiêu cổ phiếu'
+    if 'eps' in k_lower:
+        return 'Lãi trên cổ phiếu (EPS)'
+
+    # Nếu vẫn không khớp, chuyển ngữ chung an toàn thay vì để lộ tiếng Anh
+    return 'Chỉ tiêu tài chính tổng hợp'
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
-    """Vét sạch 100% dữ liệu tài chính và HOÀN TOÀN LOẠI BỎ cột tiếng Anh gốc"""
+    """Vét sạch 100% dữ liệu tài chính, tự động loại bỏ các dòng có giá trị bằng 0 hoặc trống"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -273,11 +305,16 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                 if year_val.isdigit() and int(year_val) >= min_year:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
-                            try: float_val = float(val)
-                            except: continue
+                            try: 
+                                float_val = float(val)
+                            except: 
+                                continue
+                            
+                            # BỎ QUA CÁC DÒNG CÓ GIÁ TRỊ BẰNG 0 HOẶC TRỐNG ĐỂ LÀM SẠCH FILE
+                            if float_val == 0.0:
+                                continue
                             
                             metric_vn = translate_metric(str(row_idx).strip())
-                            # Đã xóa hoàn toàn trường 'Chỉ tiêu gốc (English)' khỏi dictionary record!
                             records.append({
                                 'Mã chứng khoán': symbol,
                                 'Tên doanh nghiệp': company_name,
@@ -332,9 +369,8 @@ def fetch_market_and_valuation_metrics(symbol):
             if val is not None:
                 try:
                     float_val = float(val)
-                    if float_val != 0:
+                    if float_val != 0.0:
                         metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
-                        # Đã loại bỏ cột tiếng Anh
                         records.append({
                             'Mã chứng khoán': symbol,
                             'Tên doanh nghiệp': company_name,
@@ -359,7 +395,7 @@ def main():
     failed_symbols = []
      
     for idx, symbol in enumerate(target_stocks, 1):
-        print(f"[{idx}/{len(target_stocks)}] Vét sạch 100% BCTC (2018-2026) + Chỉ số định giá thuần Việt cho mã: {symbol}...")
+        print(f"[{idx}/{len(target_stocks)}] Vét sạch 100% BCTC (2018-2026) thuần Việt cho mã: {symbol}...")
         success = False
         
         for attempt in range(3):
@@ -406,14 +442,14 @@ def main():
             ascending=[True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV thuần tiếng Việt: data/vietnam_stock_database_tong_hop.csv...")
+    print("\n💾 Đang kết xuất tệp CSV thuần tiếng Việt chuẩn hóa: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT 100% DỮ LIỆU THUẦN TIẾNG VIỆT CHO 150 MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT 100% DỮ LIỆU THUẦN VIỆT (ĐÃ LỌC SẠCH GIÁ TRỊ 0) CHO 150 MÃ!")
     print(f" - Tổng mã thành công: {success_count}/{len(target_stocks)} | Thất bại: {fail_count}")
     if failed_symbols:
         print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
