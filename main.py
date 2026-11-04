@@ -13,7 +13,7 @@ session.headers.update({
 })
 
 def load_150_master_tickers():
-    """Danh sách chính xác tuyệt đối 150 mã cổ phiếu trọng điểm (100 HOSE & 50 HNX) kèm phân loại sàn"""
+    """Khởi tạo danh sách chuẩn 150 mã (100 HOSE & 50 HNX) kèm nhận diện sàn"""
     hose_list = [
         "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
         "HPG", "VPL", "STB", "LPB", "BSR", "HDB", "ACB", "VNM", "FPT", "GVR",
@@ -34,7 +34,6 @@ def load_150_master_tickers():
         "L14", "L18", "MCG", "NBC", "NDN", "PMC", "PLC", "PSD", "PSI", "WSS"
     ]
     
-    # Tạo dictionary lưu mã kèm sàn để xử lý đuôi mạng chính xác
     market_map = {}
     for t in hose_list:
         if t.strip(): market_map[t.strip().upper()] = "HOSE"
@@ -81,7 +80,7 @@ def get_company_profile(symbol):
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
-# BỘ TỪ ĐIỂN CHUYÊN SÂU ÁNH XẠ CHUẨN XÁC 100% TIẾNG VIỆT
+# BỘ TỪ ĐIỂN CHUYÊN SÂU THUẦN TIẾNG VIỆT 100%
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán',
     'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -89,168 +88,102 @@ TRANSLATION_MAP = {
     'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
 
     # Cân đối kế toán
-    'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông',
-    'Share Issued': 'Cổ phiếu đã phát hành',
-    'Total Assets': 'Tổng tài sản',
-    'Current Assets': 'Tài sản ngắn hạn',
-    'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền',
-    'Cash Financial': 'Tiền và đầu tư tài chính ngắn hạn',
-    'Cash Equivalents': 'Các khoản tương đương tiền',
-    'Cash': 'Tiền mặt',
-    'Other Short Term Investments': 'Đầu tư tài chính ngắn hạn khác',
-    'Receivables': 'Các khoản phải thu',
-    'Accounts Receivable': 'Phải thu ngắn hạn khách hàng',
-    'Allowance For Doubtful Accounts Receivable': 'Dự phòng phải thu ngắn hạn khó đòi',
-    'Due From Related Parties Current': 'Phải thu các bên liên quan ngắn hạn',
-    'Other Receivables': 'Các khoản phải thu ngắn hạn khác',
-    'Inventory': 'Hàng tồn kho',
-    'Raw Materials': 'Nguyên liệu, vật liệu tồn kho',
-    'Work In Process': 'Chi phí sản xuất kinh doanh dở dang',
-    'Finished Goods': 'Thành phẩm tồn kho',
-    'Prepaid Assets': 'Chi phí trả trước ngắn hạn',
-    'Restricted Cash': 'Tiền bị hạn chế',
-    'Total Non Current Assets': 'Tổng tài sản dài hạn',
-    'Net PPE': 'Tài sản cố định thuần',
-    'Gross PPE': 'Nguyên giá tài sản cố định',
-    'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
-    'Machinery Furniture Equipment': 'Máy móc, thiết bị và phương tiện vận tải',
-    'Land And Improvements': 'Đất đai và cải tạo đất',
-    'Properties': 'Bất động sản',
-    'Leases': 'Tài sản quyền sử dụng đất và thuê tài chính',
-    'Construction In Progress': 'Xây dựng cơ bản dở dang',
-    'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình',
-    'Goodwill': 'Lợi thế thương mại',
-    'Other Intangible Assets': 'Tài sản cố định vô hình khác',
-    'Investments And Advances': 'Đầu tư tài chính dài hạn',
-    'Investment in Financial Assets': 'Đầu tư tài chính dài hạn',
-    'Held To Maturity Securities': 'Chứng khoán giữ đến ngày đáo hạn',
-    'Available For Sale Securities': 'Chứng khoán sẵn sàng để bán',
-    'Investment Properties': 'Bất động sản đầu tư',
-    'Other Non Current Assets': 'Tài sản dài hạn khác',
+    'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông', 'Share Issued': 'Cổ phiếu đã phát hành',
+    'Total Assets': 'Tổng tài sản', 'Current Assets': 'Tài sản ngắn hạn',
+    'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền', 'Cash Financial': 'Tiền và đầu tư tài chính ngắn hạn',
+    'Cash Equivalents': 'Các khoản tương đương tiền', 'Cash': 'Tiền mặt',
+    'Other Short Term Investments': 'Đầu tư tài chính ngắn hạn khác', 'Receivables': 'Các khoản phải thu',
+    'Accounts Receivable': 'Phải thu ngắn hạn khách hàng', 'Allowance For Doubtful Accounts Receivable': 'Dự phòng phải thu ngắn hạn khó đòi',
+    'Due From Related Parties Current': 'Phải thu các bên liên quan ngắn hạn', 'Other Receivables': 'Các khoản phải thu ngắn hạn khác',
+    'Inventory': 'Hàng tồn kho', 'Raw Materials': 'Nguyên liệu, vật liệu tồn kho',
+    'Work In Process': 'Chi phí sản xuất kinh doanh dở dang', 'Finished Goods': 'Thành phẩm tồn kho',
+    'Prepaid Assets': 'Chi phí trả trước ngắn hạn', 'Restricted Cash': 'Tiền bị hạn chế',
+    'Total Non Current Assets': 'Tổng tài sản dài hạn', 'Net PPE': 'Tài sản cố định thuần',
+    'Gross PPE': 'Nguyên giá tài sản cố định', 'Accumulated Depreciation': 'Hao mòn lũy kế tài sản cố định',
+    'Machinery Furniture Equipment': 'Máy móc, thiết bị và phương tiện vận tải', 'Land And Improvements': 'Đất đai và cải tạo đất',
+    'Properties': 'Bất động sản', 'Leases': 'Tài sản quyền sử dụng đất và thuê tài chính',
+    'Construction In Progress': 'Xây dựng cơ bản dở dang', 'Goodwill And Other Intangible Assets': 'Lợi thế thương mại và tài sản vô hình',
+    'Goodwill': 'Lợi thế thương mại', 'Other Intangible Assets': 'Tài sản cố định vô hình khác',
+    'Investments And Advances': 'Đầu tư tài chính dài hạn', 'Investment in Financial Assets': 'Đầu tư tài chính dài hạn',
+    'Held To Maturity Securities': 'Chứng khoán giữ đến ngày đáo hạn', 'Available For Sale Securities': 'Chứng khoán sẵn sàng để bán',
+    'Investment Properties': 'Bất động sản đầu tư', 'Other Non Current Assets': 'Tài sản dài hạn khác',
     'Deferred Tax Assets': 'Tài sản thuế thu nhập hoãn lại',
     
-    'Current Liabilities': 'Nợ ngắn hạn',
-    'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
-    'Payables': 'Các khoản phải trả',
-    'Accounts Payable': 'Phải trả người bán ngắn hạn',
-    'Taxes Payable': 'Thuế và các khoản phải nộp nhà nước',
-    'Accrued Liabilities': 'Chi phí phải trả ngắn hạn',
+    'Current Liabilities': 'Nợ ngắn hạn', 'Current Debt': 'Vay và nợ thuê tài chính ngắn hạn',
+    'Payables': 'Các khoản phải trả', 'Accounts Payable': 'Phải trả người bán ngắn hạn',
+    'Taxes Payable': 'Thuế và các khoản phải nộp nhà nước', 'Accrued Liabilities': 'Chi phí phải trả ngắn hạn',
     'Pension and Other Post-Retirement Benefit Plans Current': 'Quỹ phúc lợi nhân viên ngắn hạn',
-    'Other Current Liabilities': 'Phải trả, phải nộp ngắn hạn khác',
-    'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
-    'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn',
-    'Long Term Debt': 'Vay và nợ thuê tài chính dài hạn',
-    'Total Debt': 'Tổng nợ vay',
-    'Net Debt': 'Nợ vay ròng',
-    'Deferred Revenue': 'Doanh thu chưa thực hiện dài hạn',
-    'Deferred Tax Liabilities': 'Thuế thu nhập hoãn lại phải trả',
-    'Other Non Current Liabilities': 'Nợ dài hạn khác',
+    'Other Current Liabilities': 'Phải trả, phải nộp ngắn hạn khác', 'Total Liabilities Net Minority Interest': 'Tổng nợ phải trả',
+    'Total Non Current Liabilities Net Minority Interest': 'Nợ dài hạn', 'Long Term Debt': 'Vay và nợ thuê tài chính dài hạn',
+    'Total Debt': 'Tổng nợ vay', 'Net Debt': 'Nợ vay ròng', 'Deferred Revenue': 'Doanh thu chưa thực hiện dài hạn',
+    'Deferred Tax Liabilities': 'Thuế thu nhập hoãn lại phải trả', 'Other Non Current Liabilities': 'Nợ dài hạn khác',
     
-    'Stockholders Equity': 'Vốn chủ sở hữu',
-    'Capital Stock': 'Vốn góp chủ sở hữu',
-    'Common Stock': 'Cổ phiếu phổ thông',
-    'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối',
-    'Additional Paid In Capital': 'Thặng dư vốn cổ phần',
+    'Stockholders Equity': 'Vốn chủ sở hữu', 'Capital Stock': 'Vốn góp chủ sở hữu', 'Common Stock': 'Cổ phiếu phổ thông',
+    'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối', 'Additional Paid In Capital': 'Thặng dư vốn cổ phần',
     'Gains Losses Not Affecting Retained Earnings': 'Chênh lệch đánh giá lại tài sản và chênh lệch tỷ giá',
-    'Minority Interest': 'Lợi ích cổ đông không kiểm soát',
-    'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát',
+    'Minority Interest': 'Lợi ích cổ đông không kiểm soát', 'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát',
     'Working Capital': 'Vốn lưu động ròng',
 
     # Kết quả kinh doanh
-    'Total Revenue': 'Tổng doanh thu',
-    'Operating Revenue': 'Doanh thu thuần',
-    'Cost Of Revenue': 'Giá vốn hàng bán',
-    'Gross Profit': 'Lợi nhuận gộp',
-    'Operating Expense': 'Chi phí hoạt động',
-    'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
-    'Selling And Marketing Expense': 'Chi phí bán hàng',
-    'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
-    'Research And Development': 'Chi phí nghiên cứu và phát triển',
-    'Other Operating Expenses': 'Chi phí hoạt động khác',
-    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
-    'Net Interest Income': 'Thu nhập lãi thuần',
-    'Interest Expense': 'Chi phí lãi vay',
-    'Interest Income': 'Thu nhập lãi',
-    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
-    'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
+    'Total Revenue': 'Tổng doanh thu', 'Operating Revenue': 'Doanh thu thuần',
+    'Cost Of Revenue': 'Giá vốn hàng bán', 'Gross Profit': 'Lợi nhuận gộp',
+    'Operating Expense': 'Chi phí hoạt động', 'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Selling And Marketing Expense': 'Chi phí bán hàng', 'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
+    'Research And Development': 'Chi phí nghiên cứu và phát triển', 'Other Operating Expenses': 'Chi phí hoạt động khác',
+    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh', 'Net Interest Income': 'Thu nhập lãi thuần',
+    'Interest Expense': 'Chi phí lãi vay', 'Interest Income': 'Thu nhập lãi',
+    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)', 'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
     'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
-    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa',
-    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
-    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
-    'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
+    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa', 'Pretax Income': 'Lợi nhuận kế toán trước thuế',
+    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp', 'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
     'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
     'Net Income Including Noncontrolling Interests': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
     'Net Income From Continuing Operation': 'Lợi nhuận sau thuế từ hoạt động tiếp tục',
     'Net Income From Continuing And Discontinued Operation': 'Lợi nhuận thuần từ hoạt động tiếp tục và không tiếp tục',
-    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường',
-    'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
-    'Gain On Sale Of Security': 'Lãi / Lỗ từ bán chứng khoán',
-    'Other Under Preferred Stock Dividend': 'Cổ tức cổ phiếu ưu đãi và điều chỉnh khác',
-    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
-    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
-    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng',
-    'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
+    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường', 'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
+    'Gain On Sale Of Security': 'Lãi / Lỗ từ bán chứng khoán', 'Other Under Preferred Stock Dividend': 'Cổ tức cổ phiếu ưu đãi và điều chỉnh khác',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)', 'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
+    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng', 'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
 
     # Lưu chuyển tiền tệ
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Cash Flow From Continuing Operating Activities': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh tiếp tục',
     'Depreciation Amortization Depletion': 'Khấu hao tài sản cố định và phân bổ',
-    'Depreciation And Amortization': 'Khấu hao và phân bổ',
-    'Asset Impairment Charge': 'Tổn thất tài sản và dự phòng',
-    'Deferred Income Tax': 'Thuế thu nhập hoãn lại',
-    'Change In Working Capital': 'Biến động vốn lưu động',
-    'Change In Receivables': 'Biến động các khoản phải thu',
-    'Change In Inventory': 'Biến động hàng tồn kho',
-    'Change In Payables': 'Biến động các khoản phải trả',
-    'Change In Account Payable': 'Biến động phải trả người bán',
+    'Depreciation And Amortization': 'Khấu hao và phân bổ', 'Asset Impairment Charge': 'Tổn thất tài sản và dự phòng',
+    'Deferred Income Tax': 'Thuế thu nhập hoãn lại', 'Change In Working Capital': 'Biến động vốn lưu động',
+    'Change In Receivables': 'Biến động các khoản phải thu', 'Change In Inventory': 'Biến động hàng tồn kho',
+    'Change In Payables': 'Biến động các khoản phải trả', 'Change In Account Payable': 'Biến động phải trả người bán',
     'Change In Other Working Capital': 'Biến động vốn lưu động khác',
     
     'Investing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động đầu tư',
     'Cash Flow From Continuing Investing Activities': 'Lưu chuyển tiền thuần từ hoạt động đầu tư tiếp tục',
-    'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)',
-    'Net PPE Purchase And Sale': 'Tiền mua hoặc thanh lý tài sản cố định',
-    'Net Intangibles Purchase And Sale': 'Tiền mua hoặc bán tài sản vô hình',
-    'Net Investment Purchase And Sale': 'Tiền đầu tư góp vốn thuần',
-    'Net Business Purchase And Sale': 'Tiền mua bán công ty con hoặc sáp nhập',
-    'Free Cash Flow': 'Dòng tiền tự do (FCF)',
+    'Capital Expenditure': 'Chi phí đầu tư tài sản cố định (CapEx)', 'Net PPE Purchase And Sale': 'Tiền mua hoặc thanh lý tài sản cố định',
+    'Net Intangibles Purchase And Sale': 'Tiền mua hoặc bán tài sản vô hình', 'Net Investment Purchase And Sale': 'Tiền đầu tư góp vốn thuần',
+    'Net Business Purchase And Sale': 'Tiền mua bán công ty con hoặc sáp nhập', 'Free Cash Flow': 'Dòng tiền tự do (FCF)',
 
     'Financing Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động tài chính',
     'Cash Flow From Continuing Financing Activities': 'Lưu chuyển tiền thuần từ hoạt động tài chính tiếp tục',
-    'Issuance Of Debt': 'Tiền thu từ phát hành nợ vay',
-    'Repayment Of Debt': 'Tiền chi trả nợ gốc vay',
+    'Issuance Of Debt': 'Tiền thu từ phát hành nợ vay', 'Repayment Of Debt': 'Tiền chi trả nợ gốc vay',
     'Net Common Stock Issuance': 'Tiền thu từ phát hành cổ phiếu hoặc bán cổ phiếu quỹ',
-    'Cash Dividends Paid': 'Cổ tức đã chi trả cho chủ sở hữu',
-    'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
-    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ',
-    'Changes In Cash': 'Ảnh hưởng thay đổi tỷ giá và tiền thuần thay đổi',
+    'Cash Dividends Paid': 'Cổ tức đã chi trả cho chủ sở hữu', 'Beginning Cash Position': 'Tiền và tương đương tiền đầu kỳ',
+    'End Cash Position': 'Tiền và tương đương tiền cuối kỳ', 'Changes In Cash': 'Ảnh hưởng thay đổi tỷ giá và tiền thuần thay đổi',
 
     # Chỉ số thị trường & Định giá (Real-time)
-    'Current Price': 'Giá cổ phiếu hiện tại',
-    'Shares Outstanding': 'Tổng số lượng cổ phiếu lưu hành',
-    'Market Capitalization': 'Vốn hóa thị trường',
-    'Trailing EPS': 'EPS cơ bản 4 quý gần nhất (Trailing EPS)',
-    'Forward EPS': 'EPS dự phóng (Forward EPS)',
-    'Dividend Yield': 'Tỷ suất cổ tức (% Dividend Yield)',
-    'Dividend Rate': 'Cổ tức tiền mặt trên mỗi cổ phiếu',
-    'Trailing P/E': 'Hệ số P/E cơ bản (Trailing P/E)',
-    'Forward P/E': 'Hệ số P/E dự phóng (Forward P/E)',
-    'Price To Book': 'Hệ số P/B (Price to Book)',
-    'Book Value': 'Giá trị sổ sách mỗi cổ phiếu (BVPS)',
-    'Return On Equity': 'Lợi nhuận trên vốn chủ sở hữu (ROE)',
-    'Return On Assets': 'Lợi nhuận trên tổng tài sản (ROA)',
-    'Profit Margins': 'Biên lợi nhuận ròng (%)',
+    'Current Price': 'Giá cổ phiếu hiện tại', 'Shares Outstanding': 'Tổng số lượng cổ phiếu lưu hành',
+    'Market Capitalization': 'Vốn hóa thị trường', 'Trailing EPS': 'EPS cơ bản 4 quý gần nhất (Trailing EPS)',
+    'Forward EPS': 'EPS dự phóng (Forward EPS)', 'Dividend Yield': 'Tỷ suất cổ tức (% Dividend Yield)',
+    'Dividend Rate': 'Cổ tức tiền mặt trên mỗi cổ phiếu', 'Trailing P/E': 'Hệ số P/E cơ bản (Trailing P/E)',
+    'Forward P/E': 'Hệ số P/E dự phóng (Forward P/E)', 'Price To Book': 'Hệ số P/B (Price to Book)',
+    'Book Value': 'Giá trị sổ sách mỗi cổ phiếu (BVPS)', 'Return On Equity': 'Lợi nhuận trên vốn chủ sở hữu (ROE)',
+    'Return On Assets': 'Lợi nhuận trên tổng tài sản (ROA)', 'Profit Margins': 'Biên lợi nhuận ròng (%)',
     'Gross Margins': 'Biên lợi nhuận gộp (%)'
 }
 
 def translate_metric(metric_original):
-    """Hàm dịch thuật thông minh lọc sạch từ khóa, loại bỏ hoàn toàn tiếng Anh bị lọt"""
     cleaned_key = str(metric_original).strip()
-    if cleaned_key in TRANSLATION_MAP: 
-        return TRANSLATION_MAP[cleaned_key]
-    
+    if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
-        if cleaned_key.lower() == eng_k.lower(): 
-            return vie_v
+        if cleaned_key.lower() == eng_k.lower(): return vie_v
             
     k_lower = cleaned_key.lower()
     if 'net income' in k_lower or 'net profit' in k_lower: return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
@@ -272,11 +205,9 @@ def translate_metric(metric_original):
     if 'equity' in k_lower: return 'Vốn chủ sở hữu'
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
-
     return 'Chỉ tiêu tài chính tổng hợp'
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
-    """Vét sạch 100% dữ liệu tài chính, tự động loại bỏ các dòng có giá trị bằng 0 hoặc trống"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -289,54 +220,46 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                 if year_val.isdigit() and int(year_val) >= min_year:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
-                            try: 
-                                float_val = float(val)
-                            except: 
-                                continue
-                            
-                            if float_val == 0.0:
-                                continue
+                            try: float_val = float(val)
+                            except: continue
+                            if float_val == 0.0: continue
                             
                             metric_vn = translate_metric(str(row_idx).strip())
                             records.append({
-                                'Mã chứng khoán': symbol,
-                                'Tên doanh nghiệp': company_name,
-                                'Tên ngành': sector_name,
-                                'Loại báo cáo': statement_type_vn,
-                                'Loại kỳ': ky_bao_cao,
-                                'Năm': year_val,
-                                'Ngày kỳ': date_str,
-                                'Chỉ tiêu tiếng Việt': metric_vn,
-                                'Giá trị': float_val
+                                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                                'Tên ngành': sector_name, 'Loại báo cáo': statement_type_vn,
+                                'Loại kỳ': ky_bao_cao, 'Năm': year_val, 'Ngày kỳ': date_str,
+                                'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
                             })
     except Exception:
         pass
     return records
 
-def fetch_market_and_valuation_metrics(symbol, exchange):
-    """Trích xuất trọn bộ Giá, Vốn hóa, EPS, Cổ tức, P/E, P/B, ROE, ROA real-time (Thuần tiếng Việt)"""
+def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
+    """Trích xuất Real-time có cơ chế Fallback tự tính toán Vốn hóa và SLCP từ Báo cáo tài chính nếu bị thiếu"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
     
-    # Xác định đuôi ticker theo sàn
-    ticker_suffixes = [".VN", ".HN", ""] if exchange == "HNX" else [".VN", ""]
-    
-    info = {}
-    for suffix in ticker_suffixes:
-        try:
-            t_obj = yf.Ticker(f"{symbol}{suffix}", session=session)
-            info = t_obj.info
-            if info and ('currentPrice' in info or 'regularMarketPrice' in info or 'marketCap' in info):
-                break
-        except:
-            continue
-
     try:
+        info = ticker_obj.info if ticker_obj else {}
         current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose', 0)
         shares_out = info.get('sharesOutstanding', 0)
         market_cap = info.get('marketCap', 0)
+
+        # Smart Fallback lấy từ Bảng cân đối kế toán nếu info thiếu
+        if (not shares_out or not market_cap) and balance_sheet_df is not None and not balance_sheet_df.empty:
+            for row_idx in balance_sheet_df.index:
+                row_str = str(row_idx).lower()
+                if 'ordinary shares number' in row_str or 'share issued' in row_str or 'common stock' in row_str:
+                    for col in balance_sheet_df.columns:
+                        val = balance_sheet_df.loc[row_idx, col]
+                        if pd.notna(val) and float(val) > 0:
+                            shares_out = float(val)
+                            break
+                    if shares_out: break
+
         if not market_cap and current_price and shares_out:
             market_cap = current_price * shares_out
 
@@ -365,18 +288,12 @@ def fetch_market_and_valuation_metrics(symbol, exchange):
                     if float_val != 0.0:
                         metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
                         records.append({
-                            'Mã chứng khoán': symbol,
-                            'Tên doanh nghiệp': company_name,
-                            'Tên ngành': sector_name,
-                            'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': 'Real-time',
-                            'Năm': current_year,
-                            'Ngày kỳ': today_str,
-                            'Chỉ tiêu tiếng Việt': metric_vn,
-                            'Giá trị': float_val
+                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                            'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                            'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
                         })
-                except:
-                    continue
+                except: continue
     except Exception:
         pass
     return records
@@ -388,11 +305,11 @@ def main():
     failed_symbols = []
      
     for idx, (symbol, exchange) in enumerate(ticker_market_map.items(), 1):
-        print(f"[{idx}/150] Vét sạch 100% BCTC (2018-2026) thuần Việt cho mã: {symbol} ({exchange})...")
+        print(f"[{idx}/150] Vét sạch 3 BCTC & Định giá thuần Việt cho mã: {symbol} ({exchange})...")
         success = False
         
-        # Danh sách đuôi mở rộng linh hoạt theo sàn
-        suffixes = [".VN", ".HN", ""] if exchange == "HNX" else [".VN", ""]
+        # Đuôi vét cạn linh hoạt theo sàn
+        suffixes = [".VN", ".HN", ".HA", ""] if exchange == "HNX" else [".VN", ".HM", ""]
         
         for suffix in suffixes:
             if success: break
@@ -400,15 +317,23 @@ def main():
             for attempt in range(2):
                 try:
                     ticker = yf.Ticker(full_ticker, session=session)
+                    bs_df = getattr(ticker, 'balance_sheet', None)
                      
                     recs = []
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'balance_sheet', None), 'Balance_Sheet', 'Năm', min_year=2018))
+                    # 1. Bảng cân đối kế toán (Năm & Quý)
+                    recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
+                    
+                    # 2. Báo cáo kết quả kinh doanh (Năm & Quý)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
+                    
+                    # 3. Báo cáo lưu chuyển tiền tệ (Năm & Quý)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
-                    recs.extend(fetch_market_and_valuation_metrics(symbol, exchange))
+                    
+                    # Chỉ số thị trường & định giá Real-time (Có bù đắp dữ liệu tự động)
+                    recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                      
                     if recs:
                         all_master_records.extend(recs)
@@ -423,7 +348,7 @@ def main():
         if not success:
             fail_count += 1
             failed_symbols.append(symbol)
-            print(f"❌ Bỏ qua mã do lỗi kết nối/trống dữ liệu: {symbol}")
+            print(f"❌ Không lấy được dữ liệu mã: {symbol}")
             
         time.sleep(0.1)
 
@@ -441,7 +366,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT ĐỦ 150 MÃ THUẦN VIỆT (HOSE + HNX) & LỌC SẠCH GIÁ TRỊ 0!")
+    print(f" 🎉 HOÀN TẤT VÉT ĐỦ 150 MÃ TRỌN VẸN 3 BÁO CÁO & ĐỊNH GIÁ!")
     print(f" - Tổng mã thành công: {success_count}/150 | Thất bại: {fail_count}")
     if failed_symbols:
         print(f" - Các mã chưa lấy được dữ liệu: {failed_symbols}")
