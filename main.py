@@ -192,7 +192,8 @@ TRANSLATION_MAP = {
     'Forward P/E': 'Hệ số P/E dự phóng (Forward P/E)', 'Price To Book': 'Hệ số P/B (Price to Book)',
     'Book Value': 'Giá trị sổ sách mỗi cổ phiếu (BVPS)', 'Return On Equity': 'Lợi nhuận trên vốn chủ sở hữu (ROE)',
     'Return On Assets': 'Lợi nhuận trên tổng tài sản (ROA)', 'Profit Margins': 'Biên lợi nhuận ròng (%)',
-    'Gross Margins': 'Biên lợi nhuận gộp (%)'
+    'Gross Margins': 'Biên lợi nhuận gộp (%)',
+    'Historical Dividend Cash': 'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)'
 }
 
 def translate_metric(metric_original):
@@ -258,6 +259,28 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                                 'Loại kỳ': ky_bao_cao, 'Năm': year_val, 'Ngày kỳ': date_str,
                                 'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
                             })
+    except Exception:
+        pass
+    return records
+
+def fetch_historical_dividends(symbol, ticker_obj, min_year=2018):
+    """Trích xuất chi tiết lịch sử chia cổ tức từng đợt từ Yahoo Finance"""
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    try:
+        divs = ticker_obj.dividends
+        if divs is not None and not divs.empty:
+            for date_idx, div_val in divs.items():
+                date_str = str(date_idx).split('T')[0].split(' ')[0]
+                year_val = date_str.split('-')[0]
+                if year_val.isdigit() and int(year_val) >= min_year:
+                    if pd.notna(div_val) and float(div_val) > 0:
+                        records.append({
+                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                            'Loại kỳ': 'Sự kiện cổ tức', 'Năm': year_val, 'Ngày kỳ': date_str,
+                            'Chỉ tiêu tiếng Việt': 'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)', 'Giá trị': float(div_val)
+                        })
     except Exception:
         pass
     return records
@@ -396,6 +419,9 @@ def process_single_ticker(symbol, category):
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
                 recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
+                
+                # Vét sạch lịch sử cổ tức
+                recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2018))
                  
                 if recs:
                     success = True
@@ -426,7 +452,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch nguyên bản 3 BCTC & Định giá cho {total_tickers} mã chất lượng cao...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC, Định giá & Cổ tức lịch sử cho {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -456,7 +482,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC & ĐỊNH GIÁ CHO {total_tickers} MÃ CHUẨN XÁC!")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC, ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
     print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
     print(f"==================================================")
