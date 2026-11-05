@@ -14,6 +14,11 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
+# =====================================================================
+# CẤU HÌNH MỚI CHO LỊCH SỬ GIÁ (không ảnh hưởng code gốc)
+# =====================================================================
+PRICE_HISTORY_START = '2018-01-01'
+
 def load_152_master_tickers():
     """Danh sách chính thức 152 mã cổ phiếu chất lượng cao đã chọn lọc"""
     raw_tickers = [
@@ -297,6 +302,62 @@ def fetch_tcbs_realtime_price(symbol):
         pass
     return None
 
+# =====================================================================
+# HÀM MỚI: LẤY TOÀN BỘ LỊCH SỬ GIÁ OHLCV TỪ 2018
+# =====================================================================
+def fetch_full_historical_prices(symbol, ticker_obj, start_date=PRICE_HISTORY_START):
+    """
+    Lấy TOÀN BỘ lịch sử giá OHLCV (Open / High / Low / Close / Adj Close / Volume)
+    từ start_date (mặc định 2018-01-01) cho đến hiện tại.
+    Trả về list các dict sẵn sàng ghi CSV.
+    """
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    try:
+        hist = ticker_obj.history(start=start_date, auto_adjust=False, actions=False)
+        if hist is None or hist.empty:
+            return records
+
+        for date_idx, row in hist.iterrows():
+            try:
+                date_str = str(date_idx).split('T')[0].split(' ')[0]
+                year_val = date_str.split('-')[0]
+                if not year_val.isdigit() or int(year_val) < 2018:
+                    continue
+
+                def _f(col):
+                    if col in row.index and pd.notna(row[col]):
+                        try: return float(row[col])
+                        except: return None
+                    return None
+
+                close_p = _f('Close')
+                if close_p is None or close_p == 0:
+                    continue
+
+                adj_close = _f('Adj Close')
+                if adj_close is None:
+                    adj_close = close_p
+
+                records.append({
+                    'Mã chứng khoán': symbol,
+                    'Tên doanh nghiệp': company_name,
+                    'Tên ngành': sector_name,
+                    'Năm': year_val,
+                    'Ngày': date_str,
+                    'Giá mở cửa': _f('Open'),
+                    'Giá cao nhất': _f('High'),
+                    'Giá thấp nhất': _f('Low'),
+                    'Giá đóng cửa': close_p,
+                    'Giá điều chỉnh': adj_close,
+                    'Khối lượng giao dịch': _f('Volume'),
+                })
+            except Exception:
+                continue
+    except Exception:
+        pass
+    return records
+
 def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     records = []
     company_name, sector_name = get_company_profile(symbol)
@@ -395,9 +456,16 @@ def fetch_market_indices():
     return market_records
 
 def process_single_ticker(symbol, category):
+    """
+    Trả về: (financial_records, price_history_records)
+    Phần financial (recs) giữ nguyên 100% hành vi gốc.
+    Phần price (price_recs) là phần bổ sung mới.
+    """
     recs = []
+    price_recs = []
     suffixes = [".VN", ".HN", ".HA", ".UPCOM", ".HM", ""]
     success = False
+    working_ticker = None  # NEW
 
     for suffix in suffixes:
         if success: break
@@ -426,17 +494,26 @@ def process_single_ticker(symbol, category):
                  
                 if len(recs) > 3:
                     success = True
+                    working_ticker = ticker  # NEW: giữ lại để lấy giá
                     break
                 else:
                     time.sleep(0.2)
             except Exception:
                 time.sleep(0.5)
-                
-    return recs
+
+    # NEW: Chỉ lấy lịch sử giá khi đã xác định đúng ticker
+    if working_ticker is not None:
+        try:
+            price_recs.extend(fetch_full_historical_prices(symbol, working_ticker, start_date=PRICE_HISTORY_START))
+        except Exception:
+            pass
+
+    return recs, price_recs
 
 def main():
     ticker_market_map = load_152_master_tickers()
     all_master_records = []
+    all_price_records = []   # NEW
     success_count = 0
      
     print("📈 Đang cào dữ liệu 3 chỉ số thị trường vĩ mô...")
@@ -445,7 +522,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng quét sâu triệt để BCTC từ 2018, Định giá chuẩn & Cổ tức cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng quét sâu triệt để BCTC từ 2018, Định giá chuẩn, Cổ tức & TOÀN BỘ LỊCH SỬ GIÁ cho {total_tickers} mã...")
 
     # Dùng max_workers=4 để vừa đảm bảo tốc độ, vừa không bị nghẽn mạng
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -454,14 +531,18 @@ def main():
         for future in as_completed(futures):
             symbol = futures[future]
             try:
-                res = future.result()
+                res, price_res = future.result()
                 if res:
                     all_master_records.extend(res)
+                if price_res:
+                    all_price_records.extend(price_res)
+                if res:
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Vét thành công mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Vét thành công mã: {symbol} ({len(res)} BCTC + {len(price_res)} phiên giá)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
+    # ---------- GHI CSV BCTC / ĐỊNH GIÁ / CỔ TỨC (Y NGUYÊN BẢN GỐC) ----------
     df_master = pd.DataFrame(all_master_records)
     if not df_master.empty:
         df_master = df_master.drop_duplicates().sort_values(
@@ -474,11 +555,27 @@ def main():
      
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
+
+    # ---------- GHI CSV LỊCH SỬ GIÁ (MỚI) ----------
+    df_prices = pd.DataFrame(all_price_records)
+    if not df_prices.empty:
+        df_prices = df_prices.drop_duplicates().sort_values(
+            by=['Mã chứng khoán', 'Ngày'],
+            ascending=[True, True]
+        )
+    price_csv_path = 'data/vietnam_stock_price_history.csv'
+    if not df_prices.empty:
+        df_prices.to_csv(price_csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH SÂU 3 BCTC, ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
-    print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH SÂU 3 BCTC, ĐỊNH GIÁ, CỔ TỨC & TOÀN BỘ LỊCH SỬ GIÁ {total_tickers} MÃ!")
+    print(f" - Tổng mã ghi nhận thành công (BCTC): {success_count}/{total_tickers}")
+    print(f" - Tổng dung lượng bản ghi BCTC lịch sử chi tiết: {len(df_master):,}")
+    if not df_prices.empty:
+        print(f" - Tổng số phiên giá lịch sử (từ 2018): {len(df_prices):,}")
+        print(f" - File lịch sử giá: {price_csv_path}")
+    else:
+        print(f" - ⚠️ Không có dữ liệu lịch sử giá nào được ghi (kiểm tra lại kết nối yfinance).")
     print(f"==================================================")
 
 if __name__ == "__main__":
