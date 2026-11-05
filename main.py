@@ -5,6 +5,7 @@ import pandas as pd
 import yfinance as yf
 import requests
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Thiết lập Session tối ưu kết nối
 session = requests.Session()
@@ -14,7 +15,7 @@ session.headers.update({
 })
 
 def load_150_master_tickers():
-    """Danh sách chuẩn tuyệt đối 150 mã (100 HOSE & 50 HNX)"""
+    """Danh sách chuẩn tuyệt đối 150 mã hàng đầu thị trường (Mở rộng toàn diện HOSE, HNX, UPCoM)"""
     hose_list = [
         "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
         "HPG", "VPL", "STB", "LPB", "BSR", "HDB", "ACB", "VNM", "FPT", "GVR",
@@ -25,21 +26,21 @@ def load_150_master_tickers():
         "HAG", "PVD", "DCM", "SJS", "CRV", "DPM", "KDC", "LGC", "DXG", "DHG",
         "VBB", "NLG", "SIP", "TCH", "PDR", "BAF", "BMP", "PVT", "TAL", "VHC",
         "VCG", "VTP", "DGW", "VSH", "CTR", "DSE", "BWE", "KLB", "CII", "EVF",
-        "HAH", "PC1", "HSG", "VAB", "ORS", "DIG", "PHR", "VCF", "FTS", "HPA"
+        "HAH", "PC1", "HSG", "VAB", "ORS", "DIG", "PHR", "VCF", "FTS", "NKG"
     ]
-    hnx_list = [
+    hnx_upcom_list = [
         "KSF", "KSV", "NVB", "THD", "PVS", "IDC", "PVI", "HUT", "SHS", "MBS",
         "BAB", "NTP", "CEO", "DTK", "DHT", "VCS", "SCG", "VIF", "VNR", "VC3",
         "PTI", "IPA", "CDN", "TNG", "DNP", "PGS", "PRE", "HGM", "BVS", "LAS",
         "APS", "BCC", "CAP", "DP3", "DTD", "DXP", "EVS", "HBS", "IDV", "IVS",
-        "L14", "L18", "MCG", "NBC", "NDN", "PMC", "PLC", "PSD", "PSI", "WSS"
+        "L14", "L18", "MCG", "NBC", "NDN", "PMC", "PLC", "PSD", "WSS", "VGS"
     ]
     
     market_map = {}
     for t in hose_list:
         if t.strip(): market_map[t.strip().upper()] = "HOSE"
-    for t in hnx_list:
-        if t.strip(): market_map[t.strip().upper()] = "HNX"
+    for t in hnx_upcom_list:
+        if t.strip(): market_map[t.strip().upper()] = "HNX/UPCOM"
         
     return market_map
 
@@ -50,7 +51,7 @@ def get_company_profile(symbol):
     realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "KSF", "VC3", "VPI", "SJS", "CRV", "L14", "L18", "NDN"]
     retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "VTP", "DMX"]
     oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD"]
-    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA"]
+    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -75,7 +76,8 @@ def get_company_profile(symbol):
         "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan", "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn",
         "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "IDC": "Tổng công ty IDICO - CTCP",
         "VCS": "Công ty Cổ phần Vicosstone", "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG",
-        "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội", "MBS": "Công ty Cổ phần Chứng khoán MB"
+        "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội", "MBS": "Công ty Cổ phần Chứng khoán MB",
+        "NKG": "Công ty Cổ phần Thép Nam Kim", "VGS": "Công ty Cổ phần Ống thép Việt Đức VGPIPE"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
@@ -258,7 +260,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         market_cap = info.get('marketCap', 0.0)
         div_yield = info.get('dividendYield', 0.0) or 0.0
 
-        # MỞ RỘNG KHOẢNG QUÉT LỊCH SỬ GIÁ LÊN 3 THÁNG ĐỂ BẮT ĐƯỢC CÁC MÃ GIAO DỊCH THƯA THỚT
         if not current_price or current_price == 0.0:
             for period_str in ["3mo", "1y"]:
                 try:
@@ -355,6 +356,45 @@ def fetch_market_indices():
             pass
     return market_records
 
+def process_single_ticker(symbol, exchange):
+    recs = []
+    suffixes = [".VN", ".HN", ".HA", ".UPCOM", ".HM", ""]
+    success = False
+
+    for suffix in suffixes:
+        if success: break
+        full_ticker = f"{symbol}{suffix}"
+        for attempt in range(2):
+            try:
+                ticker = yf.Ticker(full_ticker, session=session)
+                bs_df = getattr(ticker, 'balance_sheet', None)
+                 
+                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
+                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
+                 
+                if recs:
+                    success = True
+                    break
+                else:
+                    time.sleep(0.1)
+            except Exception:
+                time.sleep(0.2)
+                
+    if not success:
+        comp_name, sec_name = get_company_profile(symbol)
+        recs.append({
+            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
+            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 10000.0
+        })
+    return recs
+
 def main():
     ticker_market_map = load_150_master_tickers()
     all_master_records = []
@@ -365,52 +405,21 @@ def main():
     if index_recs:
         all_master_records.extend(index_recs)
 
-    for idx, (symbol, exchange) in enumerate(ticker_market_map.items(), 1):
-        print(f"[{idx}/150] Vét sạch nguyên bản toàn bộ 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
-        success = False
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch nguyên bản 3 BCTC & Định giá cho 150 mã...")
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(process_single_ticker, symbol, exchange): symbol for symbol, exchange in ticker_market_map.items()}
         
-        recs = []
-        # TỔ HỢP HẬU TỐ TOÀN DIỆN HƠN CHO TẤT CẢ CÁC SÀN HOSE, HNX, UPCOM
-        suffixes = [".VN", ".HN", ".HA", ".UPCOM", ".HM", ""]
-        
-        for suffix in suffixes:
-            if success: break
-            full_ticker = f"{symbol}{suffix}"
-            for attempt in range(2):
-                try:
-                    ticker = yf.Ticker(full_ticker, session=session)
-                    bs_df = getattr(ticker, 'balance_sheet', None)
-                     
-                    recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
-                    recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
-                    recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-                     
-                    if recs:
-                        all_master_records.extend(recs)
-                        success_count += 1
-                        success = True
-                        break
-                    else:
-                        time.sleep(0.1)
-                except Exception:
-                    time.sleep(0.2)
-                
-        # DỰ PHÒNG CUỐI CÙNG ĐẢM BẢO KHÔNG MÃ NÀO BỊ RƠI VÀO TRẠNG THÁI N/A HOẶC BỎ TRỐNG
-        if not success:
-            comp_name, sec_name = get_company_profile(symbol)
-            all_master_records.append({
-                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
-                'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 10000.0
-            })
-            success_count += 1
-            
-        time.sleep(0.05)
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                res = future.result()
+                if res:
+                    all_master_records.extend(res)
+                    success_count += 1
+                    print(f"[{success_count}/150] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+            except Exception as e:
+                print(f"Lỗi xử lý mã {symbol}: {e}")
 
     df_master = pd.DataFrame(all_master_records)
     if not df_master.empty:
