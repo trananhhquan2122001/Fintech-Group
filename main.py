@@ -249,18 +249,12 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
     return records
 
 def fetch_financial_from_vnstock(symbol):
-    """Hàm phụ trợ trích xuất 3 BCTC từ vnstock (Nguồn nội địa)"""
     records = []
     if not VNSTOCK_AVAILABLE:
         return records
-    company_name, sector_name = get_company_profile(symbol)
-    current_year_str = str(datetime.now().year)
-    
     try:
-        # Lấy Bảng cân đối kế toán từ vnstock
         bs_df = stock_financial_data(symbol=symbol, report_type='BalanceSheet', frequency='yearly')
         if bs_df is not None and not bs_df.empty:
-            # vnstock trả về cấu trúc bảng ngang, chuyển đổi phù hợp nếu có
             pass
     except Exception:
         pass
@@ -321,7 +315,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     return records
 
 def fetch_market_indices():
-    """Cào 3 chỉ số thị trường chung: VN-INDEX, HNX-INDEX, UPCOM-INDEX"""
     indices = {
         "VN-INDEX": "^VNINDEX",
         "HNX-INDEX": "^HNX",
@@ -368,19 +361,16 @@ def main():
     all_master_records = []
     success_count = 0
      
-    # 1. Cào 3 chỉ số thị trường
     print("📈 Đang cào dữ liệu 3 chỉ số thị trường (VN-INDEX, HNX-INDEX, UPCOM-INDEX)...")
     index_recs = fetch_market_indices()
     if index_recs:
         all_master_records.extend(index_recs)
 
-    # 2. Vét 150 mã cổ phiếu qua đa tầng nguồn dữ liệu
     for idx, (symbol, exchange) in enumerate(ticker_market_map.items(), 1):
         print(f"[{idx}/150] Vét sạch 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
         success = False
         
         recs = []
-        # Thử lấy từ nguồn nội địa vnstock trước nếu có thể kết hợp
         if VNSTOCK_AVAILABLE:
             try:
                 vn_recs = fetch_financial_from_vnstock(symbol)
@@ -389,7 +379,6 @@ def main():
             except:
                 pass
 
-        # Dùng yfinance với 4 tầng đuôi sàn làm cơ chế vét vét chủ lực
         suffixes = [".VN", ".HN", ".HA", ""] if exchange == "HNX" else [".VN", ".HM", ".UPCOM", ""]
         
         for suffix in suffixes:
@@ -440,6 +429,7 @@ def main():
     print("\n💾 Đang kết xuất tệp CSV chuẩn hóa: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
+    # CHỈ CÓ MỘT ĐƯỜNG DẪN DUY NHẤT ĐƯỢC KẾT XUẤT
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
