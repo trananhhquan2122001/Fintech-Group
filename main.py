@@ -6,6 +6,13 @@ import yfinance as yf
 import requests
 import re
 
+# Thử import vnstock nội địa chính thống để vét dữ liệu chuẩn xác 100% không bị NaN
+try:
+    from vnstock import stock_financial_data, quote
+    VNSTOCK_AVAILABLE = True
+except ImportError:
+    VNSTOCK_AVAILABLE = False
+
 # Thiết lập Session tối ưu kết nối
 session = requests.Session()
 session.headers.update({
@@ -252,14 +259,25 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     market_cap = 0.0
     div_yield = 0.0
 
+    # 1. ƯU TIÊN SỬ DỤNG VNSTOCK ĐỂ LẤY GIÁ CHUẨN XÁC NỘI ĐỊA CHO TẤT CẢ CÁC MÃ (KỂ CẢ HNX, UPCOM)
+    if VNSTOCK_AVAILABLE:
+        try:
+            q_df = quote.history(symbol=symbol, start='2026-01-01', end=today_str)
+            if q_df is not None and not q_df.empty:
+                current_price = float(q_df['close'].iloc[-1])
+        except:
+            pass
+
     try:
         info = ticker_obj.info if ticker_obj else {}
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
+        if not current_price or current_price == 0.0:
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
+
         shares_out = info.get('sharesOutstanding', 0.0)
         market_cap = info.get('marketCap', 0.0)
         div_yield = info.get('dividendYield', 0.0) or 0.0
 
-        # NÂNG CẤP TRIỆT ĐỂ: Nếu thiếu giá từ info, quét qua lịch sử giá giao dịch 1 tháng gần nhất
+        # FALLBACK GIÁ QUA LỊCH SỬ YFINANCE NẾU VẪN THIẾU
         if not current_price or current_price == 0.0:
             try:
                 hist = ticker_obj.history(period="1mo")
@@ -268,7 +286,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
             except:
                 pass
 
-        # NÂNG CẤP TRIỆT ĐỂ: Nếu thiếu số lượng cổ phiếu, quét tường minh từ Bảng cân đối kế toán
+        # QUÉT SỐ LƯỢNG CỔ PHIẾU TỪ BẢNG CÂN ĐỐI KẾ TOÁN NẾU INFO BỊ TRỐNG
         if (not shares_out or shares_out == 0.0) and balance_sheet_df is not None and not balance_sheet_df.empty:
             for row_idx in balance_sheet_df.index:
                 row_str = str(row_idx).lower()
@@ -280,7 +298,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                             break
                     if shares_out: break
 
-        # Tự động tính vốn hóa nếu có đủ giá và số lượng cổ phiếu lưu hành
+        # TỰ ĐỘNG TÍNH VỐN HÓA
         if (not market_cap or market_cap == 0.0) and current_price > 0 and shares_out > 0:
             market_cap = current_price * shares_out
 
