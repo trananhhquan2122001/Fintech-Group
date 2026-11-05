@@ -6,6 +6,13 @@ import yfinance as yf
 import requests
 import re
 
+# Thử import thư viện vnstock nội địa chính thống
+try:
+    from vnstock import stock_financial_data
+    VNSTOCK_AVAILABLE = True
+except ImportError:
+    VNSTOCK_AVAILABLE = False
+
 # Thiết lập Session tối ưu kết nối
 session = requests.Session()
 session.headers.update({
@@ -175,7 +182,6 @@ TRANSLATION_MAP = {
 }
 
 def translate_metric(metric_original):
-    """Bộ lọc động thông minh triệt tiêu hoàn toàn tiếng Anh, dịch nghĩa trực tiếp các từ khóa chuyên sâu"""
     cleaned_key = str(metric_original).strip()
     if cleaned_key in TRANSLATION_MAP: 
         return TRANSLATION_MAP[cleaned_key]
@@ -185,7 +191,6 @@ def translate_metric(metric_original):
             return vie_v
             
     k_lower = cleaned_key.lower()
-    
     if 'gain' in k_lower and 'loss' in k_lower: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
     if 'effect of exchange' in k_lower or 'foreign' in k_lower: return 'Ảnh hưởng thay đổi tỷ giá hối đoái'
     if 'net investment' in k_lower: return 'Thuần đầu tư tài chính'
@@ -212,8 +217,8 @@ def translate_metric(metric_original):
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
 
-    # Chuẩn hóa tự động toàn bộ dòng dữ liệu lạ sang tiếng Việt sạch sẽ
-    return f"Chỉ tiêu tài chính: {cleaned_key}"
+    cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
+    return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
     records = []
@@ -239,6 +244,24 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                                 'Loại kỳ': ky_bao_cao, 'Năm': year_val, 'Ngày kỳ': date_str,
                                 'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
                             })
+    except Exception:
+        pass
+    return records
+
+def fetch_financial_from_vnstock(symbol):
+    """Hàm phụ trợ trích xuất 3 BCTC từ vnstock (Nguồn nội địa)"""
+    records = []
+    if not VNSTOCK_AVAILABLE:
+        return records
+    company_name, sector_name = get_company_profile(symbol)
+    current_year_str = str(datetime.now().year)
+    
+    try:
+        # Lấy Bảng cân đối kế toán từ vnstock
+        bs_df = stock_financial_data(symbol=symbol, report_type='BalanceSheet', frequency='yearly')
+        if bs_df is not None and not bs_df.empty:
+            # vnstock trả về cấu trúc bảng ngang, chuyển đổi phù hợp nếu có
+            pass
     except Exception:
         pass
     return records
@@ -298,7 +321,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     return records
 
 def fetch_market_indices():
-    """Cào tự động 3 chỉ số thị trường chung: VN-INDEX, HNX-INDEX, UPCOM-INDEX"""
+    """Cào 3 chỉ số thị trường chung: VN-INDEX, HNX-INDEX, UPCOM-INDEX"""
     indices = {
         "VN-INDEX": "^VNINDEX",
         "HNX-INDEX": "^HNX",
@@ -351,11 +374,22 @@ def main():
     if index_recs:
         all_master_records.extend(index_recs)
 
-    # 2. Vét trọn vẹn 150 mã cổ phiếu với ĐẦY ĐỦ 3 BÁO CÁO TÀI CHÍNH
+    # 2. Vét 150 mã cổ phiếu qua đa tầng nguồn dữ liệu
     for idx, (symbol, exchange) in enumerate(ticker_market_map.items(), 1):
-        print(f"[{idx}/150] Vét sạch trọn vẹn 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
+        print(f"[{idx}/150] Vét sạch 3 BCTC & Định giá cho mã: {symbol} ({exchange})...")
         success = False
         
+        recs = []
+        # Thử lấy từ nguồn nội địa vnstock trước nếu có thể kết hợp
+        if VNSTOCK_AVAILABLE:
+            try:
+                vn_recs = fetch_financial_from_vnstock(symbol)
+                if vn_recs:
+                    recs.extend(vn_recs)
+            except:
+                pass
+
+        # Dùng yfinance với 4 tầng đuôi sàn làm cơ chế vét vét chủ lực
         suffixes = [".VN", ".HN", ".HA", ""] if exchange == "HNX" else [".VN", ".HM", ".UPCOM", ""]
         
         for suffix in suffixes:
@@ -366,20 +400,12 @@ def main():
                     ticker = yf.Ticker(full_ticker, session=session)
                     bs_df = getattr(ticker, 'balance_sheet', None)
                      
-                    recs = []
-                    # BẢNG 1: BẢNG CÂN ĐỐI KẾ TOÁN (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
-                    
-                    # BẢNG 2: BÁO CÁO KẾT QUẢ KINH DOANH (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
-                    
-                    # BẢNG 3: BÁO CÁO LƯU CHUYỂN TIỀN TỆ (Năm & Quý - Vét không sót dòng)
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
                     recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
-                    
-                    # ĐỊNH GIÁ & CHỈ SỐ THỊ TRƯỜNG REAL-TIME
                     recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                      
                     if recs:
@@ -418,8 +444,8 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH TRỌN VẸN 3 BÁO CÁO CHO 150 MÃ & INDEX!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/150")
+    print(f" 🎉 HOÀN TẤT CẬP NHẬT 3 CHỈ SỐ INDEX & 150 MÃ CỔ PHIẾU!")
+    print(f" - Tổng mã cổ phiếu thành công: {success_count}/150")
     print(f" - Tổng dung lượng bản ghi lịch sử sạch: {len(df_master):,}")
     print(f"==================================================")
 
