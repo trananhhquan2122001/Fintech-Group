@@ -14,16 +14,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python 3.13
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.11' # Nâng cấp lên Python 3.11 trở lên để tương thích vnstock
           update-environment: false
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Cài đặt toàn bộ thư viện nền tảng trên môi trường Python 3.13
           pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub vnstock
 
       - name: Run FINEX Enterprise Engine (150 mã trọng điểm + 3 Chỉ số Index)
@@ -39,7 +38,6 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           
-          # Chỉ add đúng tệp dữ liệu duy nhất của 150 mã và index
           git add data/vietnam_stock_database_tong_hop.csv || true
           
           git status
@@ -55,7 +53,6 @@ jobs:
           from huggingface_hub import HfApi
           api = HfApi()
           
-          # Đẩy duy nhất tệp vietnam_stock_database_tong_hop.csv lên Space
           api.upload_file(
               path_or_fileobj='data/vietnam_stock_database_tong_hop.csv',
               path_in_repo='data/vietnam_stock_database_tong_hop.csv',
@@ -63,5 +60,5 @@ jobs:
               repo_type='space',
               token='${{ secrets.HF_TOKEN }}'
           )
-          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv (150 mã + Index) lên Hugging Face Space!')
+          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv lên Hugging Face Space!')
           "
