@@ -1,13 +1,13 @@
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 import yfinance as yf
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Thiết lập Session tối ưu kết nối
+# Thiết lập Session tối ưu kết nối HTTP
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -264,7 +264,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
     return records
 
 def fetch_historical_dividends(symbol, ticker_obj, min_year=2018):
-    """Trích xuất chi tiết lịch sử chia cổ tức từng đợt từ Yahoo Finance"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     try:
@@ -285,20 +284,35 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2018):
         pass
     return records
 
+def fetch_tcbs_realtime_price(symbol):
+    try:
+        url = f"https://apifullstock.tcbs.com.vn/stock-insight/v1/stock/bars-long-term?ticker={symbol}&resolution=D&from=1700000000&to=2000000000"
+        resp = session.get(url, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if 'data' in data and data['data']:
+                close_price = data['data'][-1].get('close')
+                if close_price: return float(close_price) * 1000
+    except:
+        pass
+    return None
+
 def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
     
-    current_price = 0.0
+    current_price = fetch_tcbs_realtime_price(symbol)
     shares_out = 0.0
     market_cap = 0.0
     div_yield = 0.0
 
     try:
         info = ticker_obj.info if ticker_obj else {}
-        current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
+        if not current_price or current_price == 0.0:
+            current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
+        
         shares_out = info.get('sharesOutstanding', 0.0)
         market_cap = info.get('marketCap', 0.0)
         div_yield = info.get('dividendYield', 0.0) or 0.0
@@ -368,35 +382,16 @@ def fetch_market_indices():
     for index_name, ticker_symbol in indices.items():
         try:
             t = yf.Ticker(ticker_symbol, session=session)
-            info = t.info
-            current_val = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0)
-            if not current_val:
-                hist = t.history(period="1mo")
-                if not hist.empty: current_val = float(hist['Close'].iloc[-1])
-            prev_close = info.get('previousClose', current_val)
-            change_val = current_val - prev_close
-            change_pct = (change_val / prev_close) * 100 if prev_close else 0
-            
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Giá trị chỉ số', 'Giá trị': float(current_val)
-            })
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Biến động điểm (Change)', 'Giá trị': float(change_val)
-            })
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Biến động phần trăm (Percent Change)', 'Giá trị': float(change_pct)
-            })
-        except Exception:
-            pass
+            hist = t.history(period="5d")
+            if not hist.empty:
+                current_val = float(hist['Close'].iloc[-1])
+                market_records.append({
+                    'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
+                    'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                    'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
+                    'Chỉ tiêu tiếng Việt': 'Giá trị chỉ số', 'Giá trị': current_val
+                })
+        except: pass
     return market_records
 
 def process_single_ticker(symbol, category):
@@ -410,35 +405,33 @@ def process_single_ticker(symbol, category):
         for attempt in range(2):
             try:
                 ticker = yf.Ticker(full_ticker, session=session)
-                bs_df = getattr(ticker, 'balance_sheet', None)
-                 
-                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
-                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                 
-                # Vét sạch lịch sử cổ tức
+                # Ép lấy triệt để toàn bộ lịch sử sâu từ năm 2018 (Cả năm & quý)
+                bs_annual = ticker.get_balance_sheet(freq="annual")
+                bs_quarter = ticker.get_balance_sheet(freq="quarterly")
+                is_annual = ticker.get_income_stmt(freq="annual")
+                is_quarter = ticker.get_income_stmt(freq="quarterly")
+                cf_annual = ticker.get_cash_flow(freq="annual")
+                cf_quarter = ticker.get_cash_flow(freq="quarterly")
+                 
+                recs.extend(parse_financial_df(symbol, bs_annual, 'Balance_Sheet', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, bs_quarter, 'Balance_Sheet', 'Quý', min_year=2018))
+                recs.extend(parse_financial_df(symbol, is_annual, 'Income_Statement', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, is_quarter, 'Income_Statement', 'Quý', min_year=2018))
+                recs.extend(parse_financial_df(symbol, cf_annual, 'Cash_Flow', 'Năm', min_year=2018))
+                recs.extend(parse_financial_df(symbol, cf_quarter, 'Cash_Flow', 'Quý', min_year=2018))
+                
+                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_annual))
                 recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2018))
                  
-                if recs:
+                if len(recs) > 3:
                     success = True
                     break
                 else:
-                    time.sleep(0.1)
+                    time.sleep(0.2)
             except Exception:
-                time.sleep(0.2)
+                time.sleep(0.5)
                 
-    if not success:
-        comp_name, sec_name = get_company_profile(symbol)
-        recs.append({
-            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
-            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 10000.0
-        })
     return recs
 
 def main():
@@ -452,9 +445,10 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC, Định giá & Cổ tức lịch sử cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng quét sâu triệt để BCTC từ 2018, Định giá chuẩn & Cổ tức cho {total_tickers} mã...")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    # Dùng max_workers=4 để vừa đảm bảo tốc độ, vừa không bị nghẽn mạng
+    with ThreadPoolExecutor(max_workers=4) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         
         for future in as_completed(futures):
@@ -464,7 +458,7 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Vét thành công mã: {symbol} ({len(res)} bản ghi)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
@@ -482,7 +476,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC, ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH SÂU 3 BCTC, ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
     print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
     print(f"==================================================")
