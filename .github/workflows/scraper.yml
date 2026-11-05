@@ -23,9 +23,10 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
+          # Đã bổ sung vnstock vào đây để hỗ trợ lấy dữ liệu nội địa chính thống
+          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub vnstock
 
-      - name: Run FINEX Enterprise Engine (150 mã trọng điểm)
+      - name: Run FINEX Enterprise Engine (150 mã trọng điểm + 3 Chỉ số Index)
         run: |
           python main.py
 
@@ -38,11 +39,11 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           
-          # Chỉ add đúng tệp dữ liệu duy nhất của 150 mã
+          # Chỉ add đúng tệp dữ liệu duy nhất của 150 mã và index
           git add data/vietnam_stock_database_tong_hop.csv || true
           
           git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Master 150 Tickers Dataset [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Master 150 Tickers & Index Dataset [skip ci]"
           
           git push origin main
 
@@ -62,5 +63,5 @@ jobs:
               repo_type='space',
               token='${{ secrets.HF_TOKEN }}'
           )
-          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv (150 mã) lên Hugging Face Space!')
+          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv (150 mã + Index) lên Hugging Face Space!')
           "
