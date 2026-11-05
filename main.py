@@ -250,14 +250,16 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     current_price = 0.0
     shares_out = 0.0
     market_cap = 0.0
+    div_yield = 0.0
 
     try:
         info = ticker_obj.info if ticker_obj else {}
         current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
         shares_out = info.get('sharesOutstanding', 0.0)
         market_cap = info.get('marketCap', 0.0)
+        div_yield = info.get('dividendYield', 0.0) or 0.0
 
-        # NÂNG CẤP TRIỆT ĐỂ: Nếu thiếu giá từ info, bắt buộc quét qua lịch sử giá giao dịch gần nhất
+        # NÂNG CẤP TRIỆT ĐỂ: Nếu thiếu giá từ info, quét qua lịch sử giá giao dịch 1 tháng gần nhất
         if not current_price or current_price == 0.0:
             try:
                 hist = ticker_obj.history(period="1mo")
@@ -285,7 +287,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         metrics = [
             ('Current Price', current_price), ('Shares Outstanding', shares_out),
             ('Market Capitalization', market_cap), ('Trailing EPS', info.get('trailingEps')),
-            ('Forward EPS', info.get('forwardEps')), ('Dividend Yield', info.get('dividendYield')),
+            ('Forward EPS', info.get('forwardEps')), ('Dividend Yield', div_yield),
             ('Dividend Rate', info.get('dividendRate')), ('Trailing P/E', info.get('trailingPE')),
             ('Forward P/E', info.get('forwardPE')), ('Price To Book', info.get('priceToBook')),
             ('Book Value', info.get('bookValue')), ('Return On Equity', info.get('returnOnEquity')),
