@@ -14,44 +14,65 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
-def load_150_master_tickers():
-    """Danh sách chuẩn tuyệt đối 150 mã hàng đầu thị trường (Mở rộng toàn diện HOSE, HNX, UPCoM)"""
-    hose_list = [
-        "VIC", "VHM", "VCB", "BID", "CTG", "TCB", "VPB", "GAS", "MCH", "MBB",
-        "HPG", "VPL", "STB", "LPB", "BSR", "HDB", "ACB", "VNM", "FPT", "GVR",
-        "TCX", "MWG", "MSN", "VJC", "DMX", "VCK", "HVN", "SSB", "SSI", "VRE",
-        "SAB", "SHB", "VIB", "BVH", "VPX", "PLX", "BCM", "GEE", "TPB", "POW",
-        "VIX", "GMD", "GEX", "EIB", "OCB", "NVL", "REE", "HCM", "PGV", "KBC",
-        "FRT", "VND", "NAB", "VCI", "VPI", "SBT", "PNJ", "VGC", "KDH", "DGC",
-        "HAG", "PVD", "DCM", "SJS", "CRV", "DPM", "KDC", "LGC", "DXG", "DHG",
-        "VBB", "NLG", "SIP", "TCH", "PDR", "BAF", "BMP", "PVT", "TAL", "VHC",
-        "VCG", "VTP", "DGW", "VSH", "CTR", "DSE", "BWE", "KLB", "CII", "EVF",
-        "HAH", "PC1", "HSG", "VAB", "ORS", "DIG", "PHR", "VCF", "FTS", "NKG"
-    ]
-    hnx_upcom_list = [
-        "KSF", "KSV", "NVB", "THD", "PVS", "IDC", "PVI", "HUT", "SHS", "MBS",
-        "BAB", "NTP", "CEO", "DTK", "DHT", "VCS", "SCG", "VIF", "VNR", "VC3",
-        "PTI", "IPA", "CDN", "TNG", "DNP", "PGS", "PRE", "HGM", "BVS", "LAS",
-        "APS", "BCC", "CAP", "DP3", "DTD", "DXP", "EVS", "HBS", "IDV", "IVS",
-        "L14", "L18", "MCG", "NBC", "NDN", "PMC", "PLC", "PSD", "WSS", "VGS"
+def load_152_master_tickers():
+    """Danh sách chính thức 152 mã cổ phiếu chất lượng cao đã chọn lọc"""
+    raw_tickers = [
+        # A (5)
+        "ABB", "ACB", "ACV", "AIG", "ANV",
+        # B (9)
+        "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
+        # C (8)
+        "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS",
+        # D (12)
+        "DBC", "DCM", "DGW", "DIG", "DNH", "DP3", "DPM", "DSE", "DTD", "DVN", "DXG", "DXP",
+        # E (2)
+        "EIB", "EVF",
+        # F (4)
+        "FOX", "FPT", "FRT", "FTS",
+        # G (5)
+        "GAS", "GEE", "GEX", "GMD", "GVR",
+        # H (10)
+        "HAG", "HCM", "HDB", "HDG", "HND", "HHV", "HPG", "HSG", "HT1", "HUT",
+        # I (2)
+        "IDC", "IDP",
+        # K (3)
+        "KBC", "KDC", "KDH",
+        # L (5)
+        "L14", "L18", "LAS", "LHC", "LPB",
+        # M (8)
+        "MBB", "MBS", "MCH", "MSB", "MSN", "MSR", "MVN", "MWG",
+        # N (8)
+        "NAB", "NBC", "NDN", "NKG", "NLG", "NT2", "NTP", "NVL",
+        # O (2)
+        "OCB", "OIL",
+        # P (15)
+        "PAN", "PC1", "PDR", "PHR", "PLC", "PLX", "PNJ", "POW", "PSD", "PVB", "PVC", "PVD", "PVS", "PVT", "PVI",
+        # Q (2)
+        "QNS", "QTP",
+        # R (1)
+        "REE",
+        # S (12)
+        "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", "STB",
+        # T (12)
+        "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD",
+        # V (27)
+        "VCB", "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP"
     ]
     
     market_map = {}
-    for t in hose_list:
-        if t.strip(): market_map[t.strip().upper()] = "HOSE"
-    for t in hnx_upcom_list:
-        if t.strip(): market_map[t.strip().upper()] = "HNX/UPCOM"
-        
+    for t in raw_tickers:
+        if t.strip(): 
+            market_map[t.strip().upper()] = "VIETNAM_MARKET"
     return market_map
 
 def get_company_profile(symbol):
-    tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ"]
-    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "BAB", "NVB", "VBB", "KLB", "VAB"]
+    tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX"]
+    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA", "EVS", "HBS", "PSI", "WSS"]
-    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "KSF", "VC3", "VPI", "SJS", "CRV", "L14", "L18", "NDN"]
+    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN"]
     retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "VTP", "DMX"]
-    oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD"]
-    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS"]
+    oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD", "PVC"]
+    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -76,8 +97,7 @@ def get_company_profile(symbol):
         "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan", "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn",
         "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "IDC": "Tổng công ty IDICO - CTCP",
         "VCS": "Công ty Cổ phần Vicosstone", "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG",
-        "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội", "MBS": "Công ty Cổ phần Chứng khoán MB",
-        "NKG": "Công ty Cổ phần Thép Nam Kim", "VGS": "Công ty Cổ phần Ống thép Việt Đức VGPIPE"
+        "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội", "MBS": "Công ty Cổ phần Chứng khoán MB"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
@@ -356,7 +376,7 @@ def fetch_market_indices():
             pass
     return market_records
 
-def process_single_ticker(symbol, exchange):
+def process_single_ticker(symbol, category):
     recs = []
     suffixes = [".VN", ".HN", ".HA", ".UPCOM", ".HM", ""]
     success = False
@@ -396,19 +416,20 @@ def process_single_ticker(symbol, exchange):
     return recs
 
 def main():
-    ticker_market_map = load_150_master_tickers()
+    ticker_market_map = load_152_master_tickers()
     all_master_records = []
     success_count = 0
      
-    print("📈 Đang cào dữ liệu 3 chỉ số thị trường (VN-INDEX, HNX-INDEX, UPCOM-INDEX)...")
+    print("📈 Đang cào dữ liệu 3 chỉ số thị trường vĩ mô...")
     index_recs = fetch_market_indices()
     if index_recs:
         all_master_records.extend(index_recs)
 
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch nguyên bản 3 BCTC & Định giá cho 150 mã...")
+    total_tickers = len(ticker_market_map)
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch nguyên bản 3 BCTC & Định giá cho {total_tickers} mã chất lượng cao...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = {executor.submit(process_single_ticker, symbol, exchange): symbol for symbol, exchange in ticker_market_map.items()}
+        futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         
         for future in as_completed(futures):
             symbol = futures[future]
@@ -417,7 +438,7 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/150] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
@@ -435,8 +456,8 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH NGUYÊN BẢN 3 BCTC & ĐỊNH GIÁ CHO 150 MÃ!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/150")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC & ĐỊNH GIÁ CHO {total_tickers} MÃ CHUẨN XÁC!")
+    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
     print(f"==================================================")
 
