@@ -22,8 +22,8 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Cài đặt các thư viện cốt lõi ổn định
-          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
+          # NÂNG CẤP: Bổ sung thư viện vnstock để cào dữ liệu nội địa chính thống không bị NaN
+          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub vnstock
 
       - name: Run FINEX Enterprise Engine
         run: |
