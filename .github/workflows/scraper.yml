@@ -7,25 +7,25 @@ on:
 
 jobs:
   run-scraper:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Nâng cấp lên Python 3.11 trở lên để tương thích vnstock
-          update-environment: false
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub vnstock
+          # Cài đặt các thư viện cốt lõi ổn định
+          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
 
-      - name: Run FINEX Enterprise Engine (150 mã trọng điểm + 3 Chỉ số Index)
+      - name: Run FINEX Enterprise Engine
         run: |
           python main.py
 
@@ -33,16 +33,11 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git fetch origin main
           git checkout main || git checkout -b main
-          
           git add data/vietnam_stock_database_tong_hop.csv || true
-          
-          git status
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Master 150 Tickers & Index Dataset [skip ci]"
-          
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset [skip ci]"
           git push origin main
 
       - name: Push Dataset Directly to Hugging Face Space
@@ -52,7 +47,6 @@ jobs:
           python -c "
           from huggingface_hub import HfApi
           api = HfApi()
-          
           api.upload_file(
               path_or_fileobj='data/vietnam_stock_database_tong_hop.csv',
               path_in_repo='data/vietnam_stock_database_tong_hop.csv',
@@ -60,5 +54,5 @@ jobs:
               repo_type='space',
               token='${{ secrets.HF_TOKEN }}'
           )
-          print('Đã đẩy thành công tệp vietnam_stock_database_tong_hop.csv lên Hugging Face Space!')
+          print('Đã đẩy thành công lên Hugging Face Space!')
           "
