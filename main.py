@@ -7,7 +7,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==========================================
-# 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN (CẬP NHẬT V5)
+# 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN
 # ==========================================
 os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
 
@@ -18,13 +18,12 @@ except ImportError:
     os.system("pip install yfinance --quiet")
     import yfinance as yf
 
-# SỬA LỖI: Import đúng các lớp của vnstock thế hệ 5
 try:
-    from vnstock import Fundamental, Market
+    from vnstock import Fundamental, Market, Reference
 except ImportError:
     print("⚙️ Đang cài đặt thư viện vnstock (v5)...")
     os.system("pip install -U --extra-index-url https://vnstocks.com/api/packages vnstock --quiet")
-    from vnstock import Fundamental, Market
+    from vnstock import Fundamental, Market, Reference
 
 session = requests.Session()
 session.headers.update({
@@ -56,11 +55,7 @@ def load_242_master_tickers():
         "ACE", "VSF", "HAM", "SBM", "AGP", "LIC", "SCL", "CC1", "BWS", "NAS", "CLI", "VTK", "HMS", "PCC", 
         "QHW", "MFS", "VEC", "HEC"
     ]
-    market_map = {}
-    for t in raw_tickers:
-        if t.strip(): 
-            market_map[t.strip().upper()] = "VIETNAM_MARKET"
-    return market_map
+    return {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
 
 def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
@@ -186,7 +181,7 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. BỘ TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN)
+# 3. TỪ ĐIỂN DỊCH THUẬT VÀ HÀM DỊCH (GIỮ NGUYÊN)
 # ==========================================
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -307,7 +302,7 @@ def translate_metric(metric_original):
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 # ==========================================
-# 4. CÁC HÀM CÀO DỮ LIỆU TỪ YFINANCE (GIỮ NGUYÊN)
+# 4. HÀM CÀO DỮ LIỆU TỪ YFINANCE (DỰ PHÒNG)
 # ==========================================
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
     records = []
@@ -334,35 +329,12 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
     except Exception: pass
     return records
 
-def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
-    records = []
-    company_name, sector_name = get_company_profile(symbol)
-    try:
-        divs = ticker_obj.dividends
-        if divs is not None and not divs.empty:
-            for date_idx, div_val in divs.items():
-                date_str = str(date_idx).split('T')[0].split(' ')[0]
-                year_val = date_str.split('-')[0]
-                if year_val.isdigit() and int(year_val) >= min_year:
-                    if pd.notna(div_val) and float(div_val) > 0:
-                        records.append({
-                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': 'Sự kiện cổ tức', 'Năm': year_val, 'Ngày kỳ': date_str,
-                            'Chỉ tiêu tiếng Việt': 'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)', 'Giá trị': float(div_val)
-                        })
-    except Exception: pass
-    return records
-
-def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
+def fetch_market_metrics_yfinance(symbol, ticker_obj, balance_sheet_df):
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
-    current_price = 0.0
-    shares_out = 0.0
-    market_cap = 0.0
-    div_yield = 0.0
+    current_price = 0.0; shares_out = 0.0; market_cap = 0.0; div_yield = 0.0
     try:
         info = ticker_obj.info if ticker_obj else {}
         current_price = info.get('currentPrice') or info.get('regularMarketPrice') or info.get('previousClose') or 0.0
@@ -414,14 +386,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
             })
     except Exception:
-        for eng_key in ['Current Price', 'Shares Outstanding', 'Market Capitalization', 'Dividend Yield']:
-            metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
-            records.append({
-                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': 0.0
-            })
+        pass
     return records
 
 def fetch_market_indices():
@@ -451,36 +416,24 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK V5 (SỬA LỖI TRIỆT ĐỂ)
+# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK V5 (NGUỒN CHÍNH)
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
-    """Chuyển đổi DataFrame của vnstock v5 sang định dạng chuẩn của chúng ta"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     if df is None or df.empty: return records
-
-    # vnstock v5 trả về cột 'item' (tên chỉ tiêu) và các cột năm (2023, 2022...)
-    # hoặc cột 'year' nếu dùng orient='time_series'
     for _, row in df.iterrows():
         metric_raw = row.get('item', row.get('item_en', ''))
         metric_vn = translate_metric(metric_raw)
-        
         for col in df.columns:
-            # Bỏ qua các cột metadata
-            if col in ['item', 'item_en', 'unit', 'ticker', 'year', 'quarter', 'date']:
-                continue
-            
-            # Lấy năm từ tên cột (ví dụ: '2023' hoặc '2023-Q4')
+            if col in ['item', 'item_en', 'unit', 'ticker', 'year', 'quarter', 'date', 'period', 'id', 'name', 'order', 'level', 'off_balance', 'category']: continue
             year_val = str(col).split('-')[0].strip()
-            if not year_val.isdigit() or int(year_val) < 2020:
-                continue
-
+            if not year_val.isdigit() or int(year_val) < 2020: continue
             val = row[col]
             if pd.notna(val):
                 try: float_val = float(val)
                 except: continue
                 if pd.isna(float_val) or float_val in [float('inf'), float('-inf')]: continue
-                
                 records.append({
                     'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                     'Tên ngành': sector_name, 'Loại báo cáo': statement_type_vn,
@@ -489,87 +442,108 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
                 })
     return records
 
+def fetch_vnstock_metrics(symbol):
+    """Lấy Giá, Vốn hóa, Số lượng cổ phiếu, Tỷ lệ cổ tức từ vnstock v5"""
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    
+    # 1. Lấy Giá từ Market().equity().quote()
+    price = 0.0
+    try:
+        quote_df = Market().equity(symbol).quote()
+        if quote_df is not None and not quote_df.empty:
+            # Cột giá có thể là 'close_price', 'match_price', 'price'
+            for price_col in ['close_price', 'match_price', 'price', 'close']:
+                if price_col in quote_df.columns:
+                    price = float(quote_df.iloc[0][price_col])
+                    break
+    except Exception: pass
+
+    # 2. Lấy Vốn hóa và Số lượng cổ phiếu từ Reference().company().overview()
+    shares_out = 0.0
+    market_cap = 0.0
+    div_yield = 0.0
+    try:
+        overview_df = Reference().company(symbol).overview()
+        if overview_df is not None and not overview_df.empty:
+            row = overview_df.iloc[0]
+            # Các cột có thể có: outstanding_shares, issue_share, market_cap, dividend_yield
+            shares_out = float(row.get('outstanding_shares', row.get('issue_share', 0.0)))
+            market_cap = float(row.get('market_cap', 0.0))
+            div_yield = float(row.get('dividend_yield', 0.0))
+    except Exception: pass
+
+    # 3. Nếu thiếu vốn hóa, tự tính
+    if (not market_cap or market_cap == 0.0) and price > 0 and shares_out > 0:
+        market_cap = price * shares_out
+
+    # 4. Tạo bản ghi
+    metrics = [
+        ('Current Price', price), ('Shares Outstanding', shares_out),
+        ('Market Capitalization', market_cap), ('Dividend Yield', div_yield)
+    ]
+    for eng_key, val in metrics:
+        metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
+        records.append({
+            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+            'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+            'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float(val) if pd.notna(val) else 0.0
+        })
+    return records
+
 def fetch_vnstock_financials(symbol):
     records = []
     try:
-        # SỬ DỤNG CÚ PHÁP MỚI CỦA VNSTOCK V5
         fin = Fundamental().equity(symbol)
-        
-        # 1. Bảng cân đối kế toán
-        try:
-            df_bs = fin.balance_sheet(period='year')
-            records.extend(parse_vnstock_df(symbol, df_bs, 'Bảng cân đối kế toán', 'Năm'))
+        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
         except Exception: pass
-
-        # 2. Kết quả kinh doanh
-        try:
-            df_is = fin.income_statement(period='year')
-            records.extend(parse_vnstock_df(symbol, df_is, 'Báo cáo kết quả kinh doanh', 'Năm'))
+        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
         except Exception: pass
-
-        # 3. Lưu chuyển tiền tệ
-        try:
-            df_cf = fin.cash_flow(period='year')
-            records.extend(parse_vnstock_df(symbol, df_cf, 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
+        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
         except Exception: pass
-
-        # 4. Giá cổ phiếu (dùng Market layer)
-        try:
-            mkt = Market()
-            quote_df = mkt.equity(symbol).quote()
-            if quote_df is not None and not quote_df.empty:
-                price = float(quote_df.iloc[0].get('close_price', 0))
-                if price > 0:
-                    company_name, sector_name = get_company_profile(symbol)
-                    records.append({
-                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                        'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                        'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': price
-                    })
-        except Exception: pass
-        
-    except Exception as e:
-        print(f" ⚠️ Lỗi vnstock v5 với mã {symbol}: {e}")
+    except Exception: pass
     return records
 
 # ==========================================
-# 6. HÀM ĐIỀU PHỐI (GHÉP YFINANCE VÀ VNSTOCK)
+# 6. HÀM ĐIỀU PHỐI (ƯU TIÊN VNSTOCK TRƯỚC)
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
-    suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
     success = False
 
-    for suffix in suffixes:
-        if success: break
-        full_ticker = f"{symbol}{suffix}"
-        for attempt in range(2):
-            try:
-                ticker = yf.Ticker(full_ticker, session=session)
-                bs_df = getattr(ticker, 'balance_sheet', None)
-                 
-                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
-                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-                recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
-                if recs:
-                    success = True
-                    break
-                else: time.sleep(0.1)
-            except Exception: time.sleep(0.2)
-
-    if not success:
-        print(f" 🔄 yfinance thất bại, chuyển sang vnstock cho mã: {symbol}...")
-        vnstock_recs = fetch_vnstock_financials(symbol)
-        if vnstock_recs:
-            recs.extend(vnstock_recs)
+    # --- BƯỚC 1: ƯU TIÊN VNSTOCK (Lấy Giá, Vốn hóa, BCTC) ---
+    vnstock_metrics = fetch_vnstock_metrics(symbol)
+    if vnstock_metrics:
+        recs.extend(vnstock_metrics)
+        # Chỉ khi vnstock lấy được giá > 0 mới coi là thành công
+        if any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' and r['Giá trị'] > 0 for r in vnstock_metrics):
             success = True
 
+    vnstock_fin = fetch_vnstock_financials(symbol)
+    if vnstock_fin:
+        recs.extend(vnstock_fin)
+        success = True
+
+    # --- BƯỚC 2: NẾU VNSTOCK THẤT BẠI, DÙNG YFINANCE LÀM DỰ PHÒNG ---
+    if not success:
+        print(f" 🔄 vnstock thất bại, chuyển sang yfinance cho mã: {symbol}...")
+        suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
+        for suffix in suffixes:
+            if success: break
+            try:
+                ticker = yf.Ticker(f"{symbol}{suffix}", session=session)
+                bs_df = getattr(ticker, 'balance_sheet', None)
+                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
+                recs.extend(fetch_market_metrics_yfinance(symbol, ticker, bs_df))
+                if recs: success = True; break
+            except Exception: time.sleep(0.1)
+
+    # --- BƯỚC 3: NẾU CẢ 2 ĐỀU THẤT BẠI ---
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
         current_year = str(datetime.now().year)
@@ -584,7 +558,7 @@ def process_single_ticker(symbol, category):
     return recs
 
 # ==========================================
-# 7. HÀM MAIN
+# 7. HÀM MAIN VÀ LÀM SẠCH DỮ LIỆU BẰNG PANDAS
 # ==========================================
 def main():
     ticker_market_map = load_242_master_tickers()
@@ -596,7 +570,7 @@ def main():
     if index_recs: all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (Tích hợp yfinance & vnstock v5)...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng cho {total_tickers} mã (Ưu tiên vnstock, dự phòng yfinance)...")
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -613,12 +587,26 @@ def main():
 
     df_master = pd.DataFrame(all_master_records)
     
+    # --- QUY TRÌNH LÀM SẠCH DỮ LIỆU BẰNG PANDAS ---
     if not df_master.empty:
-        df_master = df_master.drop_duplicates()
-        df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-        df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
+        # 1. Ép kiểu số cho cột Giá trị, loại bỏ NaN và vô cực
+        df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce')
+        df_master = df_master[df_master['Giá trị'].notna()]
+        df_master = df_master[~df_master['Giá trị'].isin([float('inf'), float('-inf')])]
+
+        # 2. Loại bỏ trùng lặp
+        df_master = df_master.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'])
+
+        # 3. Chuẩn hóa cột chữ (xóa "Yahoo Finance" nếu có)
+        for col in ['Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Chỉ tiêu tiếng Việt']:
+            if col in df_master.columns:
+                df_master[col] = df_master[col].astype(str).str.replace("Yahoo Finance", "", case=False).str.strip()
+
+        # 4. Ép buộc chỉ giữ 9 cột chuẩn
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         df_master = df_master[standard_cols]
+
+        # 5. Sắp xếp khoa học
         df_master = df_master.sort_values(by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], ascending=[True, True, True, False, False])
 
     print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%...")
