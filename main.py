@@ -507,9 +507,6 @@ def main():
     print("=" * 68)
 
 
-if __name__ == "__main__":
-    main()
-
 
 def load_200_master_tickers():
     """Danh sách chính thức toàn diện 200 mã cổ phiếu chất lượng cao (172 mã cũ + 28 mã mới bổ sung)"""
@@ -805,3 +802,7 @@ def translate_metric(metric_original):
 TRANSLATION_MAP.update({
     "Payout Ratio": "Tỷ lệ chi trả cổ tức trên lợi nhuận (%)",
 })
+
+
+if __name__ == "__main__":
+    main()
