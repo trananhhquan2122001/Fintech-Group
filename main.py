@@ -1,13 +1,20 @@
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
-import yfinance as yf
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Thiết lập Session tối ưu kết nối
+# Tự động kiểm tra và cài đặt thư viện yfinance nếu chưa có
+try:
+    import yfinance as yf
+except ImportError:
+    print("⚙️ Đang cài đặt thư viện yfinance...")
+    os.system("pip install yfinance --quiet")
+    import yfinance as yf
+
+# Thiết lập Session tối ưu kết nối mạng
 session = requests.Session()
 session.headers.update({
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -66,11 +73,12 @@ def load_152_master_tickers():
     return market_map
 
 def get_company_profile(symbol):
+    """Phân nhóm ngành chuẩn xác và tra cứu tên đầy đủ của doanh nghiệp"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX"]
     bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA", "EVS", "HBS", "PSI", "WSS"]
     realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN"]
-    retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "VTP", "DMX"]
+    retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "DMX"]
     oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD", "PVC"]
     steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC"]
 
@@ -84,20 +92,66 @@ def get_company_profile(symbol):
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
-        "HPG": "Công ty Cổ phần Tập đoàn Hòa Phát", "VCB": "Ngân hàng TMCP Ngoại thương Việt Nam",
-        "VHM": "Công ty Cổ phần Vinhomes", "VIC": "Tập đoàn Vingroup - CTCP",
-        "FPT": "Công ty Cổ phần FPT", "MWG": "Công ty Cổ phần Đầu tư Thế Giới Di Động",
-        "MSN": "Công ty Cổ phần Tập đoàn Masan", "TCB": "Ngân hàng TMCP Kỹ Thương Việt Nam",
-        "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam", "CTG": "Ngân hàng TMCP Công Thương Việt Nam",
-        "MBB": "Ngân hàng TMCP Quân đội", "ACB": "Ngân hàng TMCP Á Châu",
-        "VPB": "Ngân hàng TMCP Việt Nam Thịnh Vượng", "GAS": "Tổng Công ty Khí Việt Nam - CTCP",
-        "VRE": "Công ty Cổ phần Vincom Retail", "PNJ": "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận",
-        "SSI": "Công ty Cổ phần Chứng khoán SSI", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
-        "POW": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP", "SAB": "Tổng công ty CP Bia - Rượu - Nước giải khát Sài Gòn",
-        "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan", "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn",
-        "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "IDC": "Tổng công ty IDICO - CTCP",
-        "VCS": "Công ty Cổ phần Vicosstone", "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG",
-        "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội", "MBS": "Công ty Cổ phần Chứng khoán MB"
+        "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "Tổng công ty Cảng hàng không Việt Nam",
+        "AIG": "Công ty Cổ phần Tập đoàn Hóa chất Hùng Phát", "ANV": "Công ty Cổ phần Nam Việt", "BAF": "Công ty Cổ phần Nông nghiệp BAF Việt Nam",
+        "BCM": "Tổng công ty Đầu tư và Phát triển Công nghiệp - CTCP", "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
+        "BMP": "Công ty Cổ phần Nhựa Bình Minh", "BSI": "Công ty Cổ phần Chứng khoán Ngân hàng Đầu tư và Phát triển Việt Nam",
+        "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn", "BVH": "Tập đoàn Bảo Việt", "BVS": "Công ty Cổ phần Chứng khoán Bảo Việt",
+        "BWE": "Công ty Cổ phần Nước - Môi trường Bình Dương", "CAP": "Công ty Cổ phần Lâm nông sản thực phẩm Yên Bái",
+        "CEO": "Công ty Cổ phần Tập đoàn C.E.O", "CII": "Công ty Cổ phần Đầu tư Hạ tầng Kỹ thuật Thành phố Hồ Chí Minh",
+        "CMG": "Công ty Cổ phần Tập đoàn Công nghệ CMC", "CTD": "Công ty Cổ phần Xây dựng Coteccons",
+        "CTG": "Ngân hàng TMCP Công Thương Việt Nam", "CTR": "Tổng Công ty Cổ phần Công trình Viettel",
+        "CTS": "Công ty Cổ phần Chứng khoán Ngân hàng Công Thương Việt Nam", "DBC": "Công ty Cổ phần Tập đoàn Dabaco Việt Nam",
+        "DCM": "Công ty Cổ phần Phân bón Dầu khí Cà Mau", "DGW": "Công ty Cổ phần Thế giới Số", "DIG": "Tổng công ty Cổ phần Đầu tư Phát triển Xây dựng",
+        "DNH": "Công ty Cổ phần Thủy điện Đa Nhim - Hàm Thuận - Đa Mi", "DP3": "Công ty Cổ phần Dược phẩm Trung ương 3",
+        "DPM": "Tổng công ty Phân bón và Hóa chất Dầu khí - CTCP", "DSE": "Công ty Cổ phần Chứng khoán DNSE",
+        "DTD": "Công ty Cổ phần Đầu tư Phát triển Thành Đạt", "DVN": "Tổng Công ty Dược Việt Nam - CTCP",
+        "DXG": "Công ty Cổ phần Tập đoàn Đất Xanh", "DXP": "Công ty Cổ phần Cảng Đình Vũ", "EIB": "Ngân hàng TMCP Xuất Nhập khẩu Việt Nam",
+        "EVF": "Công ty Cổ phần Tài chính Điện lực", "FOX": "Công ty Cổ phần Viễn thông FPT", "FPT": "Công ty Cổ phần FPT",
+        "FRT": "Công ty Cổ phần Bán lẻ Kỹ thuật Số FPT", "FTS": "Công ty Cổ phần Chứng khoán FPT", "GAS": "Tổng Công ty Khí Việt Nam - CTCP",
+        "GEE": "Công ty Cổ phần Thiết bị Điện Gelex", "GEX": "Công ty Cổ phần Tập đoàn Gelex", "GMD": "Công ty Cổ phần Gemadept",
+        "GVR": "Tập đoàn Công nghiệp Cao su Việt Nam - CTCP", "HAG": "Công ty Cổ phần Hoàng Anh Gia Lai", "HCM": "Công ty Cổ phần Chứng khoán Thành phố Hồ Chí Minh",
+        "HDB": "Ngân hàng TMCP Phát triển Thành phố Hồ Chí Minh", "HDG": "Công ty Cổ phần Tập đoàn Hà Đô", "HND": "Công ty Cổ phần Nhiệt điện Hải Phòng",
+        "HHV": "Công ty Cổ phần Đầu tư Hạ tầng giao thông Đèo Cả", "HPG": "Công ty Cổ phần Tập đoàn Hòa Phát",
+        "HSG": "Công ty Cổ phần Tập đoàn Hoa Sen", "HT1": "Công ty Cổ phần Xi măng Vicem Hà Tiên", "HUT": "Công ty Cổ phần Tasco",
+        "IDC": "Tổng công ty IDICO - CTCP", "IDP": "Công ty Cổ phần Sữa Quốc tế IDP", "KBC": "Tổng Công ty Phát triển Đô thị Kinh Bắc - CTCP",
+        "KDC": "Công ty Cổ phần Tập đoàn Kido", "KDH": "Công ty Cổ phần Đầu tư và Kinh doanh Nhà Khang Điền", "L14": "Công ty Cổ phần Licogi 14",
+        "L18": "Công ty Cổ phần Đầu tư và Xây dựng số 18", "LAS": "Công ty Cổ phần Supe Phốt phát và Hóa chất Lâm Thao",
+        "LHC": "Công ty Cổ phần Đầu tư và Xây dựng Lắp máy IDICO", "LPB": "Ngân hàng TMCP Lộc Phát Việt Nam",
+        "MBB": "Ngân hàng TMCP Quân đội", "MBS": "Công ty Cổ phần Chứng khoán MB", "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan",
+        "MSB": "Ngân hàng TMCP Hàng Hải Việt Nam", "MSN": "Công ty Cổ phần Tập đoàn Masan", "MSR": "Công ty Cổ phần Masan High-Tech Materials",
+        "MVN": "Tổng Công ty Hàng hải Việt Nam - CTCP", "MWG": "Công ty Cổ phần Đầu tư Thế Giới Di Động", "NAB": "Ngân hàng TMCP Nam Á",
+        "NBC": "Công ty Cổ phần Than Núi Béo - Vinacomin", "NDN": "Công ty Cổ phần Đầu tư Phát triển Nhà Đà Nẵng",
+        "NKG": "Công ty Cổ phần Thép Nam Kim", "NLG": "Công ty Cổ phần Đầu tư Nam Long", "NT2": "Công ty Cổ phần Điện lực Dầu khí Nhơn Trạch 2",
+        "NTP": "Công ty Cổ phần Nhựa Thiếu niên Tiền Phong", "NVL": "Công ty Cổ phần Tập đoàn Đầu tư Địa đạo No Va (Novaland)",
+        "OCB": "Ngân hàng TMCP Phương Đông", "OIL": "Tổng Công ty Dầu Việt Nam - CTCP", "PAN": "Công ty Cổ phần Tập đoàn PAN",
+        "PC1": "Công ty Cổ phần Tập đoàn PC1", "PDR": "Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
+        "PHR": "Công ty Cổ phần Cao su Phước Hòa", "PLC": "Tổng Công ty Hóa dầu Petrolimex - CTCP", "PLX": "Tập đoàn Xăng dầu Việt Nam",
+        "PNJ": "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận", "POW": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP",
+        "PSD": "Công ty Cổ phần Dịch vụ Tổng hợp Dầu khí", "PVB": "Công ty Cổ phần bọc ống Dầu khí Việt Nam",
+        "PVC": "Tổng Công ty Hóa chất và Dung dịch Khoan Dầu khí - CTCP", "PVD": "Tổng Công ty Cổ phần Khoan và Dịch vụ Khoan Dầu khí",
+        "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "PVT": "Tổng Công ty Cổ phần Vận tải Dầu khí",
+        "PVI": "Công ty Cổ phần PVI", "QNS": "Công ty Cổ phần Đường Quảng Ngãi", "QTP": "Công ty Cổ phần Nhiệt điện Quảng Ninh",
+        "REE": "Công ty Cổ phần Cơ Điện Lạnh", "SAB": "Tổng công ty CP Bia - Rượu - Nước giải khát Sài Gòn",
+        "SAS": "Công ty Cổ phần Dịch vụ Hàng không Sân bay Tân Sơn Nhất", "SBT": "Công ty Cổ phần Thành Thành Công - Biên Hòa",
+        "SHB": "Ngân hàng TMCP Sài Gòn - Hà Nội", "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội",
+        "SIP": "Công ty Cổ phần Đầu tư Sài Gòn VRG", "SJS": "Công ty Cổ phần Đầu tư Phát triển Đô thị và Khu công nghiệp Sông Đà",
+        "SLS": "Công ty Cổ phần Mía đường Sơn La", "SNZ": "Tổng Công ty Sonadezi - CTCP", "SSB": "Ngân hàng TMCP Đông Nam Á",
+        "SSI": "Công ty Cổ phần Chứng khoán SSI", "STB": "Ngân hàng TMCP Sài Gòn Thương Tín", "TAL": "Công ty Cổ phần Đầu tư Bất động sản Taseco",
+        "TBD": "Công ty Cổ phần Chế tạo Thiết bị Điện Đông Anh", "TCB": "Ngân hàng TMCP Kỹ Thương Việt Nam",
+        "TCH": "Công ty Cổ phần Đầu tư Dịch vụ Tài chính Hoàng Huy", "TCX": "Công ty Cổ phần Công nghiệp Tàu thủy",
+        "TDM": "Công ty Cổ phần Nước Thủ Dầu Một", "TID": "Tổng Công ty Đầu tư Phát triển Hạ tầng Urban", "TIG": "Công ty Cổ phần Tập đoàn Đầu tư Thăng Long",
+        "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG", "TOS": "Công ty Cổ phần Dịch vụ biển Tân Cảng", "TPB": "Ngân hàng TMCP Tiên Phong",
+        "TVD": "Công ty Cổ phần Than Vàng Danh - Vinacomin", "VCB": "Ngân hàng TMCP Ngoại thương Việt Nam", "VC3": "Công ty Cổ phần Tập đoàn Nam Cường",
+        "VCG": "Tổng công ty Cổ phần Xuất nhập khẩu và Xây dựng Việt Nam", "VCI": "Công ty Cổ phần Chứng khoán Vietcap",
+        "VCK": "Công ty Cổ phần Chứng khoán Vina", "VCS": "Công ty Cổ phần Vicosstone", "VEA": "Tổng công ty Máy động lực và máy nông nghiệp Việt Nam - CTCP",
+        "VFS": "Công ty Cổ phần Chứng khoất Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
+        "VGP": "Công ty Cổ phần Cảng Cần Giuộc", "VGR": "Công ty Cổ phần Vận tải và Xếp dỡ Hải An", "VHC": "Công ty Cổ phần Vĩnh Hoàn",
+        "VHM": "Công ty Cổ phần Vinhomes", "VIB": "Ngân hàng TMCP Quốc tế Việt Nam", "VIC": "Tập đoàn Vingroup - CTCP",
+        "VIX": "Công ty Cổ phần Chứng khoán VIX", "VJC": "Công ty Cổ phần Hàng không VietJet", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
+        "VNM": "Công ty Cổ phần Sữa Việt Nam", "VPB": "Ngân hàng TMCP Việt Nam Thịnh Vượng", "VPI": "Công ty Cổ phần Đầu tư Văn Phú - Invest",
+        "VPL": "Công ty Cổ phần Vinpearl", "VPX": "Công ty Cổ phần Xây dựng Vận tải Phát Xá", "VRE": "Công ty Cổ phần Vincom Retail",
+        "VSC": "Công ty Cổ phần Container Việt Nam", "VTP": "Tổng Công ty Cổ phần Bưu chính Viettel"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
@@ -236,7 +290,7 @@ def translate_metric(metric_original):
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
-    """Vét trọn vẹn 100% không sót một dòng nào từ năm min_year trở đi"""
+    """Vét sạch và làm sạch ngay dữ liệu tài chính từ nguồn gốc"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -254,7 +308,10 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
                             except: 
                                 continue
                             
-                            # Lấy trọn vẹn mọi dòng kể cả giá trị bằng 0 theo yêu cầu vét sạch
+                            # Làm sạch dữ liệu rác, NaN hoặc inf
+                            if pd.isna(float_val) or float_val == float('inf') or float_val == float('-inf'):
+                                continue
+                            
                             metric_vn = translate_metric(str(row_idx).strip())
                             records.append({
                                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -267,7 +324,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
     return records
 
 def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
-    """Trích xuất chi tiết lịch sử chia cổ tức từng đợt từ Yahoo Finance"""
+    """Lấy và làm sạch lịch sử trả cổ tức"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     try:
@@ -289,7 +346,7 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
     return records
 
 def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
-    """Lấy giá cổ phiếu, số lượng cổ phiếu 100%, vốn hóa và tỷ lệ trả cổ tức. Doanh nghiệp không có ghi 0."""
+    """Lấy định giá, giá cổ phiếu, vốn hóa. Ghi nhận 0.0 chuẩn xác nếu không có"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
@@ -308,7 +365,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         div_yield = info.get('dividendYield', 0.0) or 0.0
 
         if not current_price or current_price == 0.0:
-            for period_str in ["3mo", "1y"]:
+            for period_str in ["3mo", "1y", "2y"]:
                 try:
                     hist = ticker_obj.history(period=period_str)
                     if hist is not None and not hist.empty:
@@ -343,11 +400,12 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         ]
 
         for eng_key, val in metrics:
-            # Ghi nhận giá trị, nếu không có dữ liệu giao dịch/chỉ số thì mặc định là 0.0 đúng yêu cầu
             float_val = 0.0
             if val is not None:
                 try:
                     float_val = float(val)
+                    if pd.isna(float_val) or float_val == float('inf') or float_val == float('-inf'):
+                        float_val = 0.0
                 except:
                     float_val = 0.0
             
@@ -359,7 +417,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
             })
     except Exception:
-        # Dự phòng trường hợp lỗi kết nối, gán giá trị 0.0 cho các chỉ số thị trường/giá
         for eng_key in ['Current Price', 'Shares Outstanding', 'Market Capitalization', 'Dividend Yield']:
             metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
             records.append({
@@ -416,7 +473,8 @@ def fetch_market_indices():
 
 def process_single_ticker(symbol, category):
     recs = []
-    suffixes = [".VN", ".HN", ".HA", ".UPCOM", ".HM", ""]
+    # Quét toàn diện các hậu tố sàn HOSE, HNX, UPCoM
+    suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
     success = False
 
     for suffix in suffixes:
@@ -427,7 +485,7 @@ def process_single_ticker(symbol, category):
                 ticker = yf.Ticker(full_ticker, session=session)
                 bs_df = getattr(ticker, 'balance_sheet', None)
                  
-                # Vét sạch 3 bảng báo cáo tài chính từ 2020 đến 2026 không sót dòng nào
+                # Vét sạch 3 bảng BCTC từ 2020 đến 2026
                 recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
@@ -435,10 +493,8 @@ def process_single_ticker(symbol, category):
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 
-                # Lấy giá, số lượng cổ phiếu, vốn hóa, tỷ lệ cổ tức
+                # Lấy định giá & cổ tức
                 recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-                
-                # Vét sạch lịch sử cổ tức
                 recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
                  
                 if recs:
@@ -451,25 +507,16 @@ def process_single_ticker(symbol, category):
                 
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
-        # Ghi nhận giá trị 0.0 theo đúng yêu cầu khi doanh nghiệp không có dữ liệu giá/thị trường
-        recs.append({
-            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
-            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 0.0
-        })
-        recs.append({
-            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
-            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-            'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': 0.0
-        })
-        recs.append({
-            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
-            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-            'Chỉ tiêu tiếng Việt': 'Vốn hóa thị trường', 'Giá trị': 0.0
-        })
+        current_year = str(datetime.now().year)
+        today_str = datetime.today().strftime('%Y-%m-%d')
+        # Đảm bảo ghi nhận đủ bản ghi mặc định 0.0 cho mã không có dữ liệu
+        for metric_name in ['Giá cổ phiếu hiện tại', 'Tổng số lượng cổ phiếu lưu hành', 'Vốn hóa thị trường']:
+            recs.append({
+                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
+                'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': metric_name, 'Giá trị': 0.0
+            })
     return recs
 
 def main():
@@ -483,7 +530,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá, Cổ phiếu & Cổ tức cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá & Cổ tức chuẩn hóa cho {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -500,22 +547,34 @@ def main():
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
     df_master = pd.DataFrame(all_master_records)
+    
+    # 🧹 LÀM SẠCH DỮ LIỆU GỐC 100% TRƯỚC KHI KẾT XUẤT
     if not df_master.empty:
-        df_master = df_master.drop_duplicates().sort_values(
-            by=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], 
-            ascending=[True, True, False, False]
+        # 1. Loại bỏ các dòng hoàn toàn trùng lặp
+        df_master = df_master.drop_duplicates()
+        
+        # 2. Xóa các dòng có giá trị NaN, Null hoặc trống ở các cột cốt lõi
+        df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
+        
+        # 3. Ép kiểu cột Giá trị về float sạch sẽ
+        df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
+        
+        # 4. Sắp xếp trật tự logic institutional-grade
+        df_master = df_master.sort_values(
+            by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], 
+            ascending=[True, True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa: data/vietnam_stock_database_tong_hop.csv...")
+    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC (2020-2026), ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH & LÀM SẠCH DỮ LIỆU GỐC CHO {total_tickers} MÃ!")
     print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
-    print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
+    print(f" - Tổng dung lượng bản ghi lịch sử sạch 100%: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
