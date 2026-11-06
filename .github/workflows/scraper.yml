@@ -19,13 +19,18 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies
+      - name: Install Dependencies (Nâng cấp thư viện)
         run: |
           python -m pip install --upgrade pip
-          # Đã loại bỏ hoàn toàn vnstock, giữ lại các thư viện cốt lõi ổn định
+          # Cài đặt các thư viện cốt lõi
           pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
+          # NÂNG CẤP: Cài đặt vnstock phiên bản mới nhất (v3) để lấy dữ liệu UPCOM
+          pip install --no-cache-dir "vnstock>=3.0.0"
 
       - name: Run FINEX Enterprise Engine
+        env:
+          # NÂNG CẤP: Truyền API Key của vnstock vào môi trường chạy
+          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: |
           python main.py
 
