@@ -7,28 +7,25 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==========================================
-# 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN (CẬP NHẬT V5)
+# 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN
 # ==========================================
 os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
 
 try:
     import yfinance as yf
 except ImportError:
-    print("⚙️ Đang cài đặt thư viện yfinance...")
     os.system("pip install yfinance --quiet")
     import yfinance as yf
 
 try:
     from vnstock import Fundamental, Market
 except ImportError:
-    print("⚙️ Đang cài đặt thư viện vnstock (v5)...")
     os.system("pip install -U --extra-index-url https://vnstocks.com/api/packages vnstock --quiet")
     from vnstock import Fundamental, Market
 
 session = requests.Session()
 session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 })
 
 # ==========================================
@@ -55,11 +52,7 @@ def load_242_master_tickers():
         "ACE", "VSF", "HAM", "SBM", "AGP", "LIC", "SCL", "CC1", "BWS", "NAS", "CLI", "VTK", "HMS", "PCC", 
         "QHW", "MFS", "VEC", "HEC"
     ]
-    market_map = {}
-    for t in raw_tickers:
-        if t.strip(): 
-            market_map[t.strip().upper()] = "VIETNAM_MARKET"
-    return market_map
+    return {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
 
 def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
@@ -82,110 +75,57 @@ def get_company_profile(symbol):
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
-        "CKA": "Công ty CP Xuất nhập khẩu Thủy sản Cà Mau", "VLB": "Công ty CP Xây dựng và Sản xuất Vật liệu Xây dựng Biên Hòa",
-        "HPP": "Công ty CP Sơn Hải Phòng", "WSB": "Công ty CP Bia Sài Gòn - Miền Tây", "F88": "Công ty CP Đầu tư Kinh doanh F88",
-        "SEA": "Tổng Công ty Thủy sản Việt Nam - CTCP", "ODE": "Công ty CP Dịch vụ Dầu khí Biển", "PHP": "Công ty CP Cảng Hải Phòng",
-        "VXB": "Công ty CP Vật liệu Xây dựng Bến Tre", "APF": "Công ty CP Nông sản Thực phẩm Quảng Ngãi", "VNZ": "Công ty CP VNG",
-        "HLB": "Công ty CP Hữu Liên", "TED": "Công ty CP Xây dựng và Công nghệ Tiến Đạt", "VEF": "Công ty CP Trung tâm Hội chợ Triển lãm Việt Nam",
-        "PAT": "Công ty CP Phốt pho Apatit Việt Nam", "FOC": "Công ty CP Dịch vụ Trực tuyến FPT", "DTP": "Công ty CP Dược phẩm CPC1 Hà Nội",
-        "SIV": "Công ty CP SIVICO", "VGG": "Công ty CP May Vĩnh Phú", "AVC": "Công ty CP Thủy điện A Vương",
-        "LSG": "Công ty CP Mía đường Lam Sơn", "CQN": "Công ty CP Cảng Quảng Ninh", "QPH": "Công ty CP Quảng Ninh",
-        "TCW": "Công ty CP Kho vận Tân Cảng", "ACE": "Công ty CP Bê tông Hà Thanh", "VSF": "Công ty CP Giống cây trồng Trung ương",
-        "HAM": "Công ty CP Vật tư Hà Nội", "SBM": "Công ty CP Đầu tư Phát triển Bắc Minh", "AGP": "Công ty CP Dược phẩm Agimexpharm",
-        "LIC": "Công ty CP Sản xuất Kinh doanh Xuất nhập khẩu Lam Sơn", "SCL": "Công ty CP Sứ Cao Lãnh", "CC1": "Tổng Công ty Xây dựng số 1 - CTCP",
-        "BWS": "Công ty CP Bia Sài Gòn - Sông Lam", "NAS": "Công ty CP Phân bón Hà Bắc", "CLI": "Công ty CP XNK & Xây dựng Giao thông",
-        "VTK": "Công ty CP Tư vấn và Dịch vụ Viettel", "HMS": "Công ty CP Cơ khí Hà Nội", "PCC": "Công ty CP Tập đoàn Xây dựng PCC1",
-        "QHW": "Công ty CP Nước Khoáng Quảng Ninh", "MFS": "Công ty CP Dịch vụ Kỹ thuật Mobifone", "VEC": "Tổng Công ty Cổ phần Điện tử và Tin học Việt Nam",
-        "HEC": "Công ty CP Tư vấn Xây dựng Thủy lợi và Môi trường",
-        "DGC": "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang", "SZC": "Công ty Cổ phần Sonadezi Châu Đức",
-        "HVN": "Tổng Công ty Hàng không Việt Nam - CTCP (Vietnam Airlines)", "BAB": "Ngân hàng TMCP Bắc Á",
-        "AGR": "Công ty Cổ phần Chứng khoán Agribank", "ICT": "Công ty Cổ phần Viễn thông - Giống cây trồng",
-        "TLH": "Công ty Cổ phần Tập đoàn Thép Tiến Lên", "BMI": "Tổng Công ty Cổ phần Bảo hiểm Bảo Minh",
-        "PET": "Tổng Công ty cổ phần Dịch vụ Tổng hợp Dầu khí", "LSS": "Công ty Cổ phần Mía đường Lam Sơn",
-        "HDC": "Công ty Cổ phần Phát triển Nhà Bà Rịa - Vũng Tàu", "IJC": "Công ty Cổ phần Phát triển Hạ tầng Kỹ thuật",
-        "TDC": "Công ty Cổ phần Kinh doanh và Phát triển Bình Dương", "CTI": "Công ty Cổ phần Đầu tư Phát triển C&T",
-        "SJD": "Công ty Cổ phần Thủy điện Cần Đơn", "TMP": "Công ty Cổ phần Thủy điện Thác Mơ",
-        "SBA": "Công ty Cổ phần Thủy điện Sông Ba Hạ", "VSH": "Công ty Cổ phần Thủy điện Vĩnh Sơn - Sông Hinh",
-        "TTA": "Công ty Cổ phần Đầu tư Trường Thành Việt Nam", "TV2": "Công ty Cổ phần Tư vấn Xây dựng Điện 2",
-        "VCP": "Công ty Cổ phần Xây dựng điện VNECO 3", "BFC": "Công ty Cổ phần Phân bón Bình Điền",
-        "DDV": "Công ty Cổ phần DAP - VINACHEM", "VGT": "Tập đoàn Dệt May Việt Nam - CTCP",
-        "SGP": "Tổng Công ty Cảng Sài Gòn - CTCP", "DPR": "Công ty Cổ phần Cao su Đồng Phú",
-        "DHC": "Công ty Cổ phần Đông Hải Bến Tre", "TCM": "Công ty Cổ phần Dệt mão Thành Công",
-        "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "Tổng công ty Cảng hàng không Việt Nam",
-        "AIG": "Công ty Cổ phần Tập đoàn Hóa chất Hùng Phát", "ANV": "Công ty Cổ phần Nam Việt", "BAF": "Công ty Cổ phần Nông nghiệp BAF Việt Nam",
-        "BCM": "Tổng công ty Đầu tư và Phát triển Công nghiệp - CTCP", "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
-        "BMP": "Công ty Cổ phần Nhựa Bình Minh", "BSI": "Công ty Cổ phần Chứng khoán Ngân hàng Đầu tư và Phát triển Việt Nam",
-        "BSR": "Công ty Cổ phần Lọc hóa dầu Bình Sơn", "BVH": "Tập đoàn Bảo Việt", "BVS": "Công ty Cổ phần Chứng khoán Bảo Việt",
-        "BWE": "Công ty Cổ phần Nước - Môi trường Bình Dương", "CAP": "Công ty Cổ phần Lâm nông sản thực phẩm Yên Bái",
-        "CEO": "Công ty Cổ phần Tập đoàn C.E.O", "CII": "Công ty Cổ phần Đầu tư Hạ tầng Kỹ thuật Thành phố Hồ Chí Minh",
-        "CMG": "Công ty Cổ phần Tập đoàn Công nghệ CMC", "CTD": "Công ty Cổ phần Xây dựng Coteccons",
-        "CTG": "Ngân hàng TMCP Công Thương Việt Nam", "CTR": "Tổng Công ty Cổ phần Công trình Viettel",
-        "CTS": "Công ty Cổ phần Chứng khoán Ngân hàng Công Thương Việt Nam", "DBC": "Công ty Cổ phần Tập đoàn Dabaco Việt Nam",
-        "DCM": "Công ty Cổ phần Phân bón Dầu khí Cà Mau", "DGW": "Công ty Cổ phần Thế giới Số", "DIG": "Tổng công ty Cổ phần Đầu tư Phát triển Xây dựng",
-        "DNH": "Công ty Cổ phần Thủy điện Đa Nhim - Hàm Thuận - Đa Mi", "DP3": "Công ty Cổ phần Dược phẩm Trung ương 3",
-        "DPM": "Tổng công ty Phân bón và Hóa chất Dầu khí - CTCP", "DSE": "Công ty Cổ phần Chứng khoán DNSE",
-        "DTD": "Công ty Cổ phần Đầu tư Phát triển Thành Đạt", "DVN": "Tổng Công ty Dược Việt Nam - CTCP",
-        "DXG": "Công ty Cổ phần Tập đoàn Đất Xanh", "DXP": "Công ty Cổ phần Cảng Đình Vũ", "EIB": "Ngân hàng TMCP Xuất Nhập khẩu Việt Nam",
-        "EVF": "Công ty Cổ phần Tài chính Điện lực", "FOX": "Công ty Cổ phần Viễn thông FPT", "FPT": "Công ty Cổ phần FPT",
-        "FRT": "Công ty Cổ phần Bán lẻ Kỹ thuật Số FPT", "FTS": "Công ty Cổ phần Chứng khoán FPT", "GAS": "Tổng Công ty Khí Việt Nam - CTCP",
-        "GEE": "Công ty Cổ phần Thiết bị Điện Gelex", "GEX": "Công ty Cổ phần Tập đoàn Gelex", "GMD": "Công ty Cổ phần Gemadept",
-        "GVR": "Tập đoàn Công nghiệp Cao su Việt Nam - CTCP", "HAG": "Công ty Cổ phần Hoàng Anh Gia Lai", "HCM": "Công ty Cổ phần Chứng khoán Thành phố Hồ Chí Minh",
-        "HDB": "Ngân hàng TMCP Phát triển Thành phố Hồ Chí Minh", "HDG": "Công ty Cổ phần Tập đoàn Hà Đô", "HND": "Công ty Cổ phần Nhiệt điện Hải Phòng",
-        "HHV": "Công ty Cổ phần Đầu tư Hạ tầng giao thông Đèo Cả", "HPG": "Công ty Cổ phần Tập đoàn Hòa Phát",
-        "HSG": "Công ty Cổ phần Tập đoàn Hoa Sen", "HT1": "Công ty Cổ phần Xi măng Vicem Hà Tiên", "HUT": "Công ty Cổ phần Tasco",
-        "IDC": "Tổng công ty IDICO - CTCP", "IDP": "Công ty Cổ phần Sữa Quốc tế IDP", "KBC": "Tổng Công ty Phát triển Đô thị Kinh Bắc - CTCP",
-        "KDC": "Công ty Cổ phần Tập đoàn Kido", "KDH": "Công ty Cổ phần Đầu tư và Kinh doanh Nhà Khang Điền", "L14": "Công ty Cổ phần Licogi 14",
-        "L18": "Công ty Cổ phần Đầu tư và Xây dựng số 18", "LAS": "Công ty Cổ phần Supe Phốt phát và Hóa chất Lâm Thao",
-        "LHC": "Công ty Cổ phần Đầu tư và Xây dựng Lắp máy IDICO", "LPB": "Ngân hàng TMCP Lộc Phát Việt Nam",
-        "MBB": "Ngân hàng TMCP Quân đội", "MBS": "Công ty Cổ phần Chứng khoán MB", "MCH": "Công ty Cổ phần Hàng tiêu dùng Masan",
-        "MSB": "Ngân hàng TMCP Hàng Hải Việt Nam", "MSN": "Công ty Cổ phần Tập đoàn Masan", "MSR": "Công ty Cổ phần Masan High-Tech Materials",
-        "MVN": "Tổng Công ty Hàng hải Việt Nam - CTCP", "MWG": "Công ty Cổ phần Đầu tư Thế Giới Di Động", "NAB": "Ngân hàng TMCP Nam Á",
-        "NBC": "Công ty Cổ phần Than Núi Béo - Vinacomin", "NDN": "Công ty Cổ phần Đầu tư Phát triển Nhà Đà Nẵng",
-        "NKG": "Công ty Cổ phần Thép Nam Kim", "NLG": "Công ty Cổ phần Đầu tư Nam Long", "NT2": "Công ty Cổ phần Điện lực Dầu khí Nhơn Trạch 2",
-        "NTP": "Công ty Cổ phần Nhựa Thiếu niên Tiền Phong", "NVL": "Công ty Cổ phần Tập đoàn Đầu tư Địa đạo No Va (Novaland)",
-        "OCB": "Ngân hàng TMCP Phương Đông", "OIL": "Tổng Công ty Dầu Việt Nam - CTCP", "PAN": "Công ty Cổ phần Tập đoàn PAN",
-        "PC1": "Công ty Cổ phần Tập đoàn PC1", "PDR": "Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
-        "PHR": "Công ty Cổ phần Cao su Phước Hòa", "PLC": "Tổng Công ty Hóa dầu Petrolimex - CTCP", "PLX": "Tập đoàn Xăng dầu Việt Nam",
-        "PNJ": "Công ty Cổ phần Vàng bạc Đá quý Phú Nhuận", "POW": "Tổng Công ty Điện lực Dầu khí Việt Nam - CTCP",
-        "PSD": "Công ty Cổ phần Dịch vụ Tổng hợp Dầu khí", "PVB": "Công ty Cổ phần bọc ống Dầu khí Việt Nam",
-        "PVC": "Tổng Công ty Hóa chất và Dung dịch Khoan Dầu khí - CTCP", "PVD": "Tổng Công ty Cổ phần Khoan và Dịch vụ Khoan Dầu khí",
-        "PVS": "Tổng công ty Cổ phần Dịch vụ Kỹ thuật Dầu khí Việt Nam", "PVT": "Tổng Công ty Cổ phần Vận tải Dầu khí",
-        "PVI": "Công ty Cổ phần PVI", "QNS": "Công ty Cổ phần Đường Quảng Ngãi", "QTP": "Công ty Cổ phần Nhiệt điện Quảng Ninh",
-        "REE": "Công ty Cổ phần Cơ Điện Lạnh", "SAB": "Tổng công ty CP Bia - Rượu - Nước giải khát Sài Gòn",
-        "SAS": "Công ty Cổ phần Dịch vụ Hàng không Sân bay Tân Sơn Nhất", "SBT": "Công ty Cổ phần Thành Thành Công - Biên Hòa",
-        "SHB": "Ngân hàng TMCP Sài Gòn - Hà Nội", "SHS": "Công ty Cổ phần Chứng khoán Sài Gòn - Hà Nội",
-        "SIP": "Công ty Cổ phần Đầu tư Sài Gòn VRG", "SJS": "Công ty Cổ phần Đầu tư Phát triển Đô thị và Khu công nghiệp Sông Đà",
-        "SLS": "Công ty Cổ phần Mía đường Sơn La", "SNZ": "Tổng Công ty Sonadezi - CTCP", "SSB": "Ngân hàng TMCP Đông Nam Á",
-        "SSI": "Công ty Cổ phần Chứng khoán SSI", "STB": "Ngân hàng TMCP Sài Gòn Thương Tín", "TAL": "Công ty Cổ phần Đầu tư Bất động sản Taseco",
-        "TBD": "Công ty Cổ phần Chế tạo Thiết bị Điện Đông Anh", "TCB": "Ngân hàng TMCP Kỹ Thương Việt Nam",
-        "TCH": "Công ty Cổ phần Đầu tư Dịch vụ Tài chính Hoàng Huy", "TCX": "Công ty Cổ phần Công nghiệp Tàu thủy",
-        "TDM": "Công ty Cổ phần Nước Thủ Dầu Một", "TID": "Tổng Công ty Đầu tư Phát triển Hạ tầng Urban", "TIG": "Công ty Cổ phần Tập đoàn Đầu tư Thăng Long",
-        "TNG": "Công ty Cổ phần Đầu tư và Thương mại TNG", "TOS": "Công ty Cổ phần Dịch vụ biển Tân Cảng", "TPB": "Ngân hàng TMCP Tiên Phong",
-        "TVD": "Công ty Cổ phần Than Vàng Danh - Vinacomin", "VCB": "Ngân hàng TMCP Ngoại thương Việt Nam", "VC3": "Công ty Cổ phần Tập đoàn Nam Cường",
-        "VCG": "Tổng công ty Cổ phần Xuất nhập khẩu và Xây dựng Việt Nam", "VCI": "Công ty Cổ phần Chứng khoán Vietcap",
-        "VCK": "Công ty Cổ phần Chứng khoán Vina", "VCS": "Công ty Cổ phần Vicosstone", "VEA": "Tổng công ty Máy động lực và máy nông nghiệp Việt Nam - CTCP",
-        "VFS": "Công ty Cổ phần Chứng khoất Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
-        "VGP": "Công ty Cổ phần Cảng Cần Giuộc", "VGR": "Công ty Cổ phần Vận tải và Xếp dỡ Hải An", "VHC": "Công ty Cổ phần Vĩnh Hoàn",
-        "VHM": "Công ty Cổ phần Vinhomes", "VIB": "Ngân hàng TMCP Quốc tế Việt Nam", "VIC": "Tập đoàn Vingroup - CTCP",
-        "VIX": "Công ty Cổ phần Chứng khoán VIX", "VJC": "Công ty Cổ phần Hàng không VietJet", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
-        "VNM": "Công ty Cổ phần Sữa Việt Nam", "VPB": "Ngân hàng TMCP Việt Nam Thịnh Vượng", "VPI": "Công ty Cổ phần Đầu tư Văn Phú - Invest",
-        "VPL": "Công ty Cổ phần Vinpearl", "VPX": "Công ty Cổ phần Xây dựng Vận tải Phát Xá", "VRE": "Công ty Cổ phần Vincom Retail",
-        "VSC": "Công ty Cổ phần Container Việt Nam", "VTP": "Tổng Công ty Cổ phần Bưu chính Viettel",
-        "HGM": "Công ty Cổ phần Cơ khí và Khoáng sản Hà Giang", "PRE": "Tổng công ty cổ phần Tái bảo hiểm PVI",
-        "HCC": "Công ty Cổ phần Bê tông Hòa Cầm - Intimex", "L40": "Công ty Cổ phần Licogi 40",
-        "KDM": "Công ty Cổ phần ĐT&PT Dương Minh", "HVT": "Công ty Cổ phần Hóa chất Việt Trì",
-        "VTZ": "Công ty Cổ phần Thương mại và Đầu tư Vạn Tường", "GLT": "Công ty Cổ phần Kỹ thuật Điện chiếu sáng G.L.T",
-        "VGS": "Công ty Cổ phần ống thép Việt Đức VG PIPE", "PCH": "Công ty Cổ phần Thạch cao Cần Thơ",
-        "CAR": "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va", "KSV": "Tổng công ty Khoáng sản TKV - CTCP",
-        "THD": "Công ty Cổ phần Tập đoàn ThaiHoldings", "KSF": "Công ty Cổ phần Tập đoàn Sunshine Homes",
-        "SCG": "Công ty Cổ phần Xây dựng Sông Đà 1.01", "CLM": "Công ty Cổ phần Than Cọc Sáu - Vinacomin",
-        "TMB": "Công ty Cổ phần Kinh doanh Than miền Nam - Vinacomin", "SAF": "Công ty Cổ phần lương thực thực phẩm Safoco",
-        "NET": "Công ty Cổ phần Bột giặt Net", "DHT": "Công ty Cổ phần Dược phẩm Hà Tây"
+        "CKA": "Công ty CP XNK Thủy sản Cà Mau", "VLB": "Công ty CP XD và SX Vật liệu XD Biên Hòa", "HPP": "Công ty CP Sơn Hải Phòng", 
+        "WSB": "Công ty CP Bia Sài Gòn - Miền Tây", "F88": "Công ty CP Đầu tư Kinh doanh F88", "SEA": "Tổng Công ty Thủy sản Việt Nam", 
+        "ODE": "Công ty CP Dịch vụ Dầu khí Biển", "PHP": "Công ty CP Cảng Hải Phòng", "VXB": "Công ty CP Vật liệu XD Bến Tre", 
+        "APF": "Công ty CP Nông sản Thực phẩm Quảng Ngãi", "VNZ": "Công ty CP VNG", "HLB": "Công ty CP Hữu Liên", 
+        "TED": "Công ty CP XD và Công nghệ Tiến Đạt", "VEF": "Công ty CP Trung tâm Hội chợ Triển lãm VN", "PAT": "Công ty CP Phốt pho Apatit VN", 
+        "FOC": "Công ty CP Dịch vụ Trực tuyến FPT", "DTP": "Công ty CP Dược phẩm CPC1 Hà Nội", "SIV": "Công ty CP SIVICO", 
+        "VGG": "Công ty CP May Vĩnh Phú", "AVC": "Công ty CP Thủy điện A Vương", "LSG": "Công ty CP Mía đường Lam Sơn", 
+        "CQN": "Công ty CP Cảng Quảng Ninh", "QPH": "Công ty CP Quảng Ninh", "TCW": "Công ty CP Kho vận Tân Cảng", 
+        "ACE": "Công ty CP Bê tông Hà Thanh", "VSF": "Công ty CP Giống cây trồng TW", "HAM": "Công ty CP Vật tư Hà Nội", 
+        "SBM": "Công ty CP Đầu tư Phát triển Bắc Minh", "AGP": "Công ty CP Dược phẩm Agimexpharm", "LIC": "Công ty CP SX KD XNK Lam Sơn", 
+        "SCL": "Công ty CP Sứ Cao Lãnh", "CC1": "Tổng Công ty Xây dựng số 1", "BWS": "Công ty CP Bia Sài Gòn - Sông Lam", 
+        "NAS": "Công ty CP Phân bón Hà Bắc", "CLI": "Công ty CP XNK & XD Giao thông", "VTK": "Công ty CP Tư vấn và Dịch vụ Viettel", 
+        "HMS": "Công ty CP Cơ khí Hà Nội", "PCC": "Công ty CP Tập đoàn XD PCC1", "QHW": "Công ty CP Nước Khoáng Quảng Ninh", 
+        "MFS": "Công ty CP Dịch vụ Kỹ thuật Mobifone", "VEC": "Tổng Công ty Điện tử và Tin học VN", "HEC": "Công ty CP Tư vấn XD Thủy lợi và Môi trường",
+        # Mặc định
+        "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "TCT Cảng hàng không VN",
+        "BVS": "CTCP Chứng khoán Bảo Việt", "CAP": "CTCP Lâm nông sản thực phẩm Yên Bái", "CEO": "CTCP Tập đoàn C.E.O",
+        "DNH": "CTCP Thủy điện Đa Nhim", "DP3": "CTCP Dược phẩm Trung ương 3", "DTD": "CTCP Đầu tư Phát triển Thành Đạt",
+        "DVN": "Tổng Công ty Dược Việt Nam", "DXP": "CTCP Cảng Đình Vũ", "FOX": "CTCP Viễn thông FPT",
+        "HND": "CTCP Nhiệt điện Hải Phòng", "HUT": "CTCP Tasco", "IDC": "Tổng công ty IDICO",
+        "IDP": "CTCP Sữa Quốc tế IDP", "L14": "CTCP Licogi 14", "L18": "CTCP Đầu tư và Xây dựng số 18",
+        "LAS": "CTCP Supe Phốt phát và Hóa chất Lâm Thao", "LHC": "CTCP Đầu tư và Xây dựng Lắp máy IDICO",
+        "MBS": "CTCP Chứng khoán MB", "MSR": "CTCP Masan High-Tech Materials", "MVN": "Tổng Công ty Hàng hải Việt Nam",
+        "NBC": "CTCP Than Núi Béo", "NDN": "CTCP Đầu tư Phát triển Nhà Đà Nẵng", "NTP": "CTCP Nhựa Thiếu niên Tiền Phong",
+        "OIL": "Tổng Công ty Dầu Việt Nam", "PLC": "Tổng Công ty Hóa dầu Petrolimex", "PSD": "CTCP Dịch vụ Tổng hợp Dầu khí",
+        "PVB": "CTCP bọc ống Dầu khí Việt Nam", "PVC": "Tổng Công ty Hóa chất và Dung dịch Khoan Dầu khí",
+        "PVS": "Tổng công ty CP Dịch vụ Kỹ thuật Dầu khí Việt Nam", "PVI": "CTCP PVI", "QNS": "CTCP Đường Quảng Ngãi",
+        "QTP": "CTCP Nhiệt điện Quảng Ninh", "SAS": "CTCP Dịch vụ Hàng không Sân bay Tân Sơn Nhất",
+        "SHS": "CTCP Chứng khoán Sài Gòn - Hà Nội", "SLS": "CTCP Mía đường Sơn La", "SNZ": "Tổng Công ty Sonadezi",
+        "TBD": "CTCP Chế tạo Thiết bị Điện Đông Anh", "TID": "Tổng Công ty Đầu tư Phát triển Hạ tầng Urban",
+        "TIG": "CTCP Tập đoàn Đầu tư Thăng Long", "TNG": "CTCP Đầu tư và Thương mại TNG",
+        "TOS": "CTCP Dịch vụ biển Tân Cảng", "TVD": "CTCP Than Vàng Danh", "VC3": "CTCP Tập đoàn Nam Cường",
+        "VCS": "CTCP Vicosstone", "VEA": "Tổng công ty Máy động lực và máy nông nghiệp VN",
+        "VFS": "CTCP Chứng khoất Nhất Việt", "VGI": "Tổng Công ty CP Đầu tư Quốc tế Viettel",
+        "VGP": "CTCP Cảng Cần Giuộc", "VGR": "CTCP Vận tải và Xếp dỡ Hải An", "PRE": "Tổng công ty CP Tái bảo hiểm PVI",
+        "HCC": "CTCP Bê tông Hòa Cầm - Intimex", "L40": "CTCP Licogi 40", "KDM": "CTCP ĐT&PT Dương Minh",
+        "HVT": "CTCP Hóa chất Việt Trì", "VTZ": "CTCP Thương mại và Đầu tư Vạn Tường",
+        "GLT": "CTCP Kỹ thuật Điện chiếu sáng G.L.T", "VGS": "CTCP ống thép Việt Đức VG PIPE",
+        "PCH": "CTCP Thạch cao Cần Thơ", "CAR": "CTCP Tập đoàn Đầu tư Địa ốc No Va",
+        "HGM": "CTCP Cơ khí và Khoáng sản Hà Giang", "KSV": "Tổng công ty Khoáng sản TKV",
+        "THD": "CTCP Tập đoàn ThaiHoldings", "KSF": "CTCP Tập đoàn Sunshine Homes",
+        "SCG": "CTCP Xây dựng Sông Đà 1.01", "CLM": "CTCP Than Cọc Sáu", "TMB": "CTCP Kinh doanh Than miền Nam",
+        "SAF": "CTCP lương thực thực phẩm Safoco", "NET": "CTCP Bột giặt Net", "DHT": "CTCP Dược phẩm Hà Tây",
+        "BAB": "Ngân hàng TMCP Bắc Á", "TV2": "CTCP Tư vấn Xây dựng Điện 2", "VCP": "CTCP Xây dựng điện VNECO 3",
+        "DDV": "CTCP DAP - VINACHEM", "VGT": "Tập đoàn Dệt May Việt Nam", "SGP": "Tổng Công ty Cảng Sài Gòn",
+        "DPR": "CTCP Cao su Đồng Phú", "DHC": "CTCP Đông Hải Bến Tre", "TCM": "CTCP Dệt mão Thành Công"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. BỘ TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN)
+# 3. TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN)
 # ==========================================
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -306,7 +246,7 @@ def translate_metric(metric_original):
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 # ==========================================
-# 4. CÁC HÀM CÀO DỮ LIỆU TỪ YFINANCE (GIỮ NGUYÊN)
+# 4. HÀM CÀO DỮ LIỆU TỪ YFINANCE
 # ==========================================
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
     records = []
@@ -412,15 +352,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
                 'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
             })
-    except Exception:
-        for eng_key in ['Current Price', 'Shares Outstanding', 'Market Capitalization', 'Dividend Yield']:
-            metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
-            records.append({
-                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': 0.0
-            })
+    except Exception: pass
     return records
 
 def fetch_market_indices():
@@ -450,7 +382,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK V5 (SỬA LỖI TRIỆT ĐỂ)
+# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK V5
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -459,12 +391,13 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 
     for _, row in df.iterrows():
         metric_raw = row.get('item', row.get('item_en', ''))
+        if not metric_raw: continue
         metric_vn = translate_metric(metric_raw)
         
         for col in df.columns:
-            if col in ['item', 'item_en', 'unit', 'ticker', 'year', 'quarter', 'date', 'period', 'id', 'name', 'order', 'level', 'off_balance', 'category']: continue
-            
             col_str = str(col)
+            if col_str in ['item', 'item_en', 'unit', 'ticker', 'year', 'quarter', 'date', 'period', 'id', 'name', 'order', 'level', 'off_balance', 'category']: continue
+            
             year_val = col_str.split('-')[0].split(' ')[0].strip()
             if not year_val.isdigit() or int(year_val) < 2020: continue
 
@@ -485,36 +418,27 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 def fetch_vnstock_financials(symbol):
     records = []
     try:
+        # Nghỉ 1s để tránh Rate Limit của vnstock
+        time.sleep(1) 
         fin = Fundamental().equity(symbol)
         
-        # 1. Bảng cân đối kế toán
-        try:
-            df_bs_year = fin.balance_sheet(period='year')
-            records.extend(parse_vnstock_df(symbol, df_bs_year, 'Bảng cân đối kế toán', 'Năm'))
-            df_bs_q = fin.balance_sheet(period='quarter')
-            records.extend(parse_vnstock_df(symbol, df_bs_q, 'Bảng cân đối kế toán', 'Quý'))
+        # Lấy BCTC Năm và Quý
+        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
         except Exception: pass
 
-        # 2. Kết quả kinh doanh
+        # Lấy Giá
         try:
-            df_is_year = fin.income_statement(period='year')
-            records.extend(parse_vnstock_df(symbol, df_is_year, 'Báo cáo kết quả kinh doanh', 'Năm'))
-            df_is_q = fin.income_statement(period='quarter')
-            records.extend(parse_vnstock_df(symbol, df_is_q, 'Báo cáo kết quả kinh doanh', 'Quý'))
-        except Exception: pass
-
-        # 3. Lưu chuyển tiền tệ
-        try:
-            df_cf_year = fin.cash_flow(period='year')
-            records.extend(parse_vnstock_df(symbol, df_cf_year, 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
-            df_cf_q = fin.cash_flow(period='quarter')
-            records.extend(parse_vnstock_df(symbol, df_cf_q, 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
-        except Exception: pass
-
-        # 4. Giá cổ phiếu (Lấy được thì tốt, không lấy được thì bỏ qua)
-        try:
-            mkt = Market()
-            quote_df = mkt.equity(symbol).quote()
+            quote_df = Market().equity(symbol).quote()
             if quote_df is not None and not quote_df.empty:
                 price = float(quote_df.iloc[0].get('close_price', 0))
                 if price > 0:
@@ -528,45 +452,37 @@ def fetch_vnstock_financials(symbol):
         except Exception: pass
         
     except Exception as e:
-        print(f" ⚠️ Lỗi vnstock v5 với mã {symbol}: {e}")
+        print(f" ⚠️ Lỗi vnstock với mã {symbol}: {e}")
     return records
 
 # ==========================================
-# 6. HÀM ĐIỀU PHỐI (ƯU TIÊN VNSTOCK TRƯỚC, YFINANCE SAU)
+# 6. HÀM ĐIỀU PHỐI (VNSTOCK -> YFINANCE)
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
     
-    # 1. ƯU TIÊN NGUỒN NƯỚC (VNSTOCK)
-    print(f" 🇻🇳 Đang lấy dữ liệu từ vnstock cho mã: {symbol}...")
+    # 1. Ưu tiên vnstock
     vnstock_recs = fetch_vnstock_financials(symbol)
     if vnstock_recs:
         recs.extend(vnstock_recs)
     
-    # 2. NẾU VNSTOCK THẤT BẠI, DÙNG YFINANCE LÀM DỰ PHÒNG
+    # 2. Nếu vnstock thất bại, dùng yfinance
     if not recs:
-        print(f" 🌍 vnstock thất bại, chuyển sang yfinance cho mã: {symbol}...")
-        suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
+        suffixes = [".VN", ".HN", ""]
         for suffix in suffixes:
             if recs: break
             try:
                 ticker = yf.Ticker(f"{symbol}{suffix}", session=session)
                 bs_df = getattr(ticker, 'balance_sheet', None)
                 recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-                recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
-                if recs:
-                    break
-                time.sleep(0.2)
-            except Exception: 
-                time.sleep(0.2)
+                if recs: break
+                time.sleep(0.1)
+            except Exception: time.sleep(0.1)
 
-    # 3. NẾU CẢ 2 ĐỀU THẤT BẠI
+    # 3. Nếu không lấy được gì, ghi nhận 3 dòng cơ bản (Không xóa mã)
     if not recs:
         comp_name, sec_name = get_company_profile(symbol)
         current_year = str(datetime.now().year)
@@ -581,21 +497,21 @@ def process_single_ticker(symbol, category):
     return recs
 
 # ==========================================
-# 7. HÀM MAIN
+# 7. HÀM MAIN VÀ LÀM SẠCH DỮ LIỆU
 # ==========================================
 def main():
     ticker_market_map = load_242_master_tickers()
     all_master_records = []
     success_count = 0
      
-    print("📈 Đang cào dữ liệu 3 chỉ số thị trường vĩ mô...")
     index_recs = fetch_market_indices()
     if index_recs: all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (Ưu tiên vnstock v5)...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng cho {total_tickers} mã...")
 
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    # Chạy max_workers=3 để tránh Rate Limit
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
             symbol = futures[future]
@@ -604,38 +520,51 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Đã xử lý mã: {symbol} ({len(res)} bản ghi)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
     df_master = pd.DataFrame(all_master_records)
     
-    # --- QUY TRÌNH LÀM SẠCH DỮ LIỆU BẰNG PANDAS ---
+    # --- QUY TRÌNH LÀM SẠCH ---
     if not df_master.empty:
         # 1. Chuyển đổi số, loại bỏ NaN
         df_master = df_master.drop_duplicates()
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
         
-        # 2. LỌC BỎ CÁC DÒNG CÓ GIÁ TRỊ BẰNG 0 (Làm sạch theo yêu cầu)
-        df_master = df_master[df_master['Giá trị'] != 0]
+        # 2. LOẠI BỎ SỐ 0 NHƯNG GIỮ LẠI CÁC MÃ 
+        # Lấy danh sách tất cả các mã hiện có
+        unique_symbols = df_master['Mã chứng khoán'].unique()
+        
+        # Tách những dòng có giá trị != 0 (dữ liệu thật)
+        df_valid = df_master[df_master['Giá trị'] != 0]
+        
+        # Tìm những mã đã có dữ liệu thật
+        symbols_with_data = df_valid['Mã chứng khoán'].unique()
+        
+        # Những mã không có dữ liệu thật sẽ được giữ lại 1 dòng 0.0 (để đảm bảo đủ 242 mã)
+        symbols_no_data = set(unique_symbols) - set(symbols_with_data)
+        df_no_data = df_master[(df_master['Mã chứng khoán'].isin(symbols_no_data)) & (df_master['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại')]
+        
+        # Gộp lại: Data thật + Đại diện của mã không có data
+        df_master = pd.concat([df_valid, df_no_data])
 
         # 3. Giữ đúng 9 cột chuẩn
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         df_master = df_master[standard_cols]
         
-        # 4. Sắp xếp khoa học
+        # 4. Sắp xếp
         df_master = df_master.sort_values(by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], ascending=[True, True, True, False, False])
 
-    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%...")
+    print("\n💾 Đang kết xuất tệp CSV...")
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH & LÀM SẠCH DỮ LIỆU GỐC CHO {total_tickers} MÃ!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
-    print(f" - Tổng dung lượng bản ghi lịch sử sạch 100%: {len(df_master):,}")
+    print(f" 🎉 HOÀN TẤT!")
+    print(f" - Tổng số dòng dữ liệu: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
