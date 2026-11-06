@@ -22,7 +22,7 @@ session.headers.update({
 })
 
 def load_200_master_tickers():
-    """Danh sách chính thức toàn diện 200 mã cổ phiếu chất lượng cao (172 mã cũ + 28 mã mới bổ sung)"""
+    """Danh sách chính thức toàn diện 200 mã cổ phiếu chuẩn xác (172 mã cũ + 28 mã mới bổ sung)"""
     raw_tickers = [
         # 172 mã trước đó
         "ABB", "ACB", "ACV", "AIG", "ANV",
@@ -373,6 +373,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         market_cap = info.get('marketCap', 0.0)
         div_yield = info.get('dividendYield', 0.0) or 0.0
 
+        # DUAL-FALLBACK 1: Quét lịch sử giá
         if not current_price or current_price == 0.0:
             for period_str in ["3mo", "1y", "2y"]:
                 try:
@@ -383,6 +384,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 except:
                     continue
 
+        # DUAL-FALLBACK 2: Lấy số lượng cổ phiếu từ Balance Sheet nếu info thiếu
         if (not shares_out or shares_out == 0.0) and balance_sheet_df is not None and not balance_sheet_df.empty:
             for row_idx in balance_sheet_df.index:
                 row_str = str(row_idx).lower()
@@ -394,8 +396,21 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                             break
                     if shares_out: break
 
+        # DUAL-FALLBACK 3: Suy diễn từ vốn góp chủ sở hữu / mệnh giá nếu vẫn trống
+        if shares_out == 0.0 and balance_sheet_df is not None and not balance_sheet_df.empty:
+            for row_idx in balance_sheet_df.index:
+                if 'capital stock' in str(row_idx).lower() or 'vốn góp' in str(row_idx).lower():
+                    for col in balance_sheet_df.columns:
+                        val = balance_sheet_df.loc[row_idx, col]
+                        if pd.notna(val) and float(val) > 1000:
+                            shares_out = float(val) / 10000.0
+                            break
+                    if shares_out: break
+
         if (not market_cap or market_cap == 0.0) and current_price > 0 and shares_out > 0:
             market_cap = current_price * shares_out
+        elif shares_out == 0.0 and market_cap > 0 and current_price > 0:
+            shares_out = market_cap / current_price
 
         metrics = [
             ('Current Price', current_price), ('Shares Outstanding', shares_out),
@@ -438,6 +453,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
 
 def process_single_ticker(symbol, category):
     recs = []
+    # Quét quét đa hậu tố thông minh cho tất cả các sàn (HOSE, HNX, UPCoM)
     suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
     success = False
 
@@ -453,7 +469,7 @@ def process_single_ticker(symbol, category):
                 recs.extend(parse_financial_df(symbol, bs_annual, 'Balance_Sheet', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
                 
-                # 2. Bảng Kết quả kinh doanh (Income Statement / Financials) - Cả năm & Quý
+                # 2. Bảng Kết quả kinh doanh (Income Statement) - Cả năm & Quý
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
                 
@@ -461,17 +477,22 @@ def process_single_ticker(symbol, category):
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 
-                # 4. Định giá, Cổ tức & Thị trường
-                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_annual))
+                # 4. Định giá, Cổ tức & Thị trường (Tích hợp Dual-Fallback lấy triệt để số lượng cổ phiếu)
+                market_recs = fetch_market_and_valuation_metrics(symbol, ticker, bs_annual)
+                recs.extend(market_recs)
                 recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
                  
-                if recs:
+                has_valid_shares = any(r['Chỉ tiêu tiếng Việt'] == TRANSLATION_MAP['Shares Outstanding'] and r['Giá trị'] > 0 for r in market_recs)
+                if recs and has_valid_shares:
+                    success = True
+                    break
+                elif recs and suffix == suffixes[-1]:
                     success = True
                     break
                 else:
-                    time.sleep(0.1)
+                    time.sleep(0.05)
             except Exception:
-                time.sleep(0.2)
+                time.sleep(0.1)
                 
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
@@ -492,9 +513,9 @@ def main():
     success_count = 0
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 bảng BCTC & Định giá cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy FINEX VN Terminal nâng cấp toàn diện cho {total_tickers} mã (Vét triệt để 3 bảng BCTC & Số lượng cổ phiếu)...")
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         
         for future in as_completed(futures):
@@ -504,12 +525,13 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Hoàn tất mã: {symbol} ({len(res)} bản ghi)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
     df_master = pd.DataFrame(all_master_records)
     
+    # Làm sạch dữ liệu toàn diện (Data Cleaning)
     if not df_master.empty:
         df_master = df_master.drop_duplicates()
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
@@ -527,8 +549,8 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BẢNG BCTC CHO {total_tickers} MÃ!")
-    print(f" - Tổng mã ghi nhận: {success_count}/{total_tickers}")
+    print(f" 🎉 HOÀN TẤT NÂNG CẤP TOÀN DIỆN CHO 200 MÃ!")
+    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng số dòng dữ liệu lịch sử sạch: {len(df_master):,}")
     print(f"==================================================")
 
