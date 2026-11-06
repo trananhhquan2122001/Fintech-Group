@@ -80,7 +80,6 @@ def get_company_profile(symbol):
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
-        # Các mã mới bổ sung 28 mã
         "DGC": "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang", "SZC": "Công ty Cổ phần Sonadezi Châu Đức",
         "HVN": "Tổng Công ty Hàng không Việt Nam - CTCP (Vietnam Airlines)", "BAB": "Ngân hàng TMCP Bắc Á",
         "AGR": "Công ty Cổ phần Chứng khoán Agribank", "ICT": "Công ty Cổ phần Viễn thông - Giống cây trồng",
@@ -96,7 +95,6 @@ def get_company_profile(symbol):
         "SGP": "Tổng Công ty Cảng Sài Gòn - CTCP", "DPR": "Công ty Cổ phần Cao su Đồng Phú",
         "DHC": "Công ty Cổ phần Đông Hải Bến Tre", "TCM": "Công ty Cổ phần Dệt mão Thành Công",
         
-        # Các mã khác cơ bản
         "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "Tổng công ty Cảng hàng không Việt Nam",
         "AIG": "Công ty Cổ phần Tập đoàn Hóa chất Hùng Phát", "ANV": "Công ty Cổ phần Nam Việt", "BAF": "Công ty Cổ phần Nông nghiệp BAF Việt Nam",
         "BCM": "Tổng công ty Đầu tư và Phát triển Công nghiệp - CTCP", "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
@@ -128,7 +126,7 @@ def get_company_profile(symbol):
         "MVN": "Tổng Công ty Hàng hải Việt Nam - CTCP", "MWG": "Công ty Cổ phần Đầu tư Thế Giới Di Động", "NAB": "Ngân hàng TMCP Nam Á",
         "NBC": "Công ty Cổ phần Than Núi Béo - Vinacomin", "NDN": "Công ty Cổ phần Đầu tư Phát triển Nhà Đà Nẵng",
         "NKG": "Công ty Cổ phần Thép Nam Kim", "NLG": "Công ty Cổ phần Đầu tư Nam Long", "NT2": "Công ty Cổ phần Điện lực Dầu khí Nhơn Trạch 2",
-        "NTP": "Công ty Cổ phần Nhựa Thiếu niên Tiền Phong", "NVL": "Công ty Cổ phần Tập đoàn Đầu tư Địa đạo No Va (Novaland)",
+        "NTP": "Công ty Cổ phần Nhựa Thiếu niên Tiền Phong", "NVL": "Công ty Cổ phần Tập đoàn Đầu tư Địa đạo No Va",
         "OCB": "Ngân hàng TMCP Phương Đông", "OIL": "Tổng Công ty Dầu Việt Nam - CTCP", "PAN": "Công ty Cổ phần Tập đoàn PAN",
         "PC1": "Công ty Cổ phần Tập đoàn PC1", "PDR": "Công ty Cổ phần Phát triển Bất động sản Phát Đạt",
         "PHR": "Công ty Cổ phần Cao su Phước Hòa", "PLC": "Tổng Công ty Hóa dầu Petrolimex - CTCP", "PLX": "Tập đoàn Xăng dầu Việt Nam",
@@ -438,50 +436,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
             })
     return records
 
-def fetch_market_indices():
-    indices = {
-        "VN-INDEX": "^VNINDEX",
-        "HNX-INDEX": "^HNX",
-        "UPCOM-INDEX": "^UPCOM"
-    }
-    market_records = []
-    current_year = str(datetime.now().year)
-    today_str = datetime.today().strftime('%Y-%m-%d')
-    
-    for index_name, ticker_symbol in indices.items():
-        try:
-            t = yf.Ticker(ticker_symbol, session=session)
-            info = t.info
-            current_val = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0)
-            if not current_val:
-                hist = t.history(period="1mo")
-                if not hist.empty: current_val = float(hist['Close'].iloc[-1])
-            prev_close = info.get('previousClose', current_val)
-            change_val = current_val - prev_close
-            change_pct = (change_val / prev_close) * 100 if prev_close else 0
-            
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Giá trị chỉ số', 'Giá trị': float(current_val)
-            })
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Biến động điểm (Change)', 'Giá trị': float(change_val)
-            })
-            market_records.append({
-                'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                'Chỉ tiêu tiếng Việt': 'Biến động phần trăm (Percent Change)', 'Giá trị': float(change_pct)
-            })
-        except Exception:
-            pass
-    return market_records
-
 def process_single_ticker(symbol, category):
     recs = []
     suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
@@ -493,16 +447,22 @@ def process_single_ticker(symbol, category):
         for attempt in range(2):
             try:
                 ticker = yf.Ticker(full_ticker, session=session)
-                bs_df = getattr(ticker, 'balance_sheet', None)
-                 
-                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
+                
+                # 1. Bảng Cân đối kế toán (Balance Sheet) - Cả năm & Quý
+                bs_annual = getattr(ticker, 'balance_sheet', None)
+                recs.extend(parse_financial_df(symbol, bs_annual, 'Balance_Sheet', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
+                
+                # 2. Bảng Kết quả kinh doanh (Income Statement / Financials) - Cả năm & Quý
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
+                
+                # 3. Bảng Lưu chuyển tiền tệ (Cash Flow) - Cả năm & Quý
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 
-                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
+                # 4. Định giá, Cổ tức & Thị trường
+                recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_annual))
                 recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
                  
                 if recs:
@@ -530,14 +490,9 @@ def main():
     ticker_market_map = load_200_master_tickers()
     all_master_records = []
     success_count = 0
-     
-    print("📈 Đang cào dữ liệu 3 chỉ số thị trường vĩ mô...")
-    index_recs = fetch_market_indices()
-    if index_recs:
-        all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (200 mã chuẩn hóa)...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 bảng BCTC & Định giá cho {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -549,7 +504,7 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Đã hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"[{success_count}/{total_tickers}] Hoàn thành mã: {symbol} ({len(res)} bản ghi)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
@@ -559,21 +514,22 @@ def main():
         df_master = df_master.drop_duplicates()
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
+        df_master = df_master[df_master['Giá trị'] >= 0]
         df_master = df_master.sort_values(
             by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], 
             ascending=[True, True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%: data/vietnam_stock_database_tong_hop.csv...")
+    print("\n💾 Đang kết xuất tệp CSV institutional-grade vào: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
      
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH & LÀM SẠCH DỮ LIỆU GỐC CHO {total_tickers} MÃ!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
-    print(f" - Tổng dung lượng bản ghi lịch sử sạch 100%: {len(df_master):,}")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BẢNG BCTC CHO {total_tickers} MÃ!")
+    print(f" - Tổng mã ghi nhận: {success_count}/{total_tickers}")
+    print(f" - Tổng số dòng dữ liệu lịch sử sạch: {len(df_master):,}")
     print(f"==================================================")
 
 if __name__ == "__main__":
