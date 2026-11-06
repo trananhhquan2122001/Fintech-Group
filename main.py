@@ -1,6 +1,7 @@
 import os
 import time
 from datetime import datetime
+import sqlite3
 import pandas as pd
 import requests
 import re
@@ -479,7 +480,7 @@ def process_single_ticker(symbol, category):
                     success = True
                     break
                 else:
-                    time.sleep(0.1)
+                    time.sleep(0.05)
             except Exception:
                 time.sleep(0.3 * (attempt + 1))
                 
@@ -496,13 +497,30 @@ def process_single_ticker(symbol, category):
             })
     return recs
 
+def save_to_database(df, db_path="data/vietnam_stock.db"):
+    """Lưu trữ dữ liệu đã làm sạch vào cơ sở dữ liệu SQLite / hỗ trợ mở rộng PostgreSQL"""
+    os.makedirs(os.path.dirname(db_path), exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    
+    # Ghi dữ liệu vào bảng master
+    df.to_sql('stock_financials_master', conn, if_exists='replace', index=False)
+    
+    # Tạo chỉ mục (Index) để tối ưu hóa truy vấn SQL cực nhanh
+    cursor = conn.cursor()
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON stock_financials_master ("Mã chứng khoán");')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_report_type ON stock_financials_master ("Loại báo cáo");')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_year ON stock_financials_master ("Năm");')
+    conn.commit()
+    conn.close()
+    print(f"🗄️ Đã lưu trữ thành công toàn bộ dữ liệu vào Database SQLite: {db_path}")
+
 def main():
     ticker_market_map = load_200_master_tickers()
     all_master_records = []
     success_count = 0
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 bảng BCTC & Định giá cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy FINEX VN Terminal - Vét sạch toàn bộ 3 bảng BCTC, Cổ tức & Định giá cho {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=6) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -520,7 +538,7 @@ def main():
 
     df_master = pd.DataFrame(all_master_records)
     
-    # Làm sạch dữ liệu toàn diện (Data Cleaning)
+    # === LÀM SẠCH DỮ LIỆU TUYỆT ĐỐI (INSTITUTIONAL-GRADE CLEANING) ===
     if not df_master.empty:
         df_master = df_master.drop_duplicates()
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
@@ -533,14 +551,18 @@ def main():
 
     print("\n💾 Đang kết xuất tệp CSV institutional-grade vào: data/vietnam_stock_database_tong_hop.csv...")
     os.makedirs('data', exist_ok=True)
-     
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
+    
+    # Lưu vào cơ sở dữ liệu
+    save_to_database(df_master)
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BẢNG BCTC CHO {total_tickers} MÃ!")
-    print(f" - Tổng mã ghi nhận: {success_count}/{total_tickers}")
+    print(f" 🎉 HOÀN TẤT TOÀN BỘ QUY TRÌNH QUÉT & LƯU TRỮ!")
+    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng số dòng dữ liệu lịch sử sạch: {len(df_master):,}")
+    print(f" - Tệp CSV: {csv_path}")
+    print(f" - Cơ sở dữ liệu: data/vietnam_stock.db")
     print(f"==================================================")
 
 if __name__ == "__main__":
