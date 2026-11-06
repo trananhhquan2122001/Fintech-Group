@@ -235,7 +235,8 @@ def translate_metric(metric_original):
     cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
-def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018):
+def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
+    """Vét trọn vẹn 100% không sót một dòng nào từ năm min_year trở đi"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -248,10 +249,12 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
                 if year_val.isdigit() and int(year_val) >= min_year:
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
-                            try: float_val = float(val)
-                            except: continue
-                            if float_val == 0.0: continue
+                            try: 
+                                float_val = float(val)
+                            except: 
+                                continue
                             
+                            # Lấy trọn vẹn mọi dòng kể cả giá trị bằng 0 theo yêu cầu vét sạch
                             metric_vn = translate_metric(str(row_idx).strip())
                             records.append({
                                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -263,7 +266,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2018
         pass
     return records
 
-def fetch_historical_dividends(symbol, ticker_obj, min_year=2018):
+def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
     """Trích xuất chi tiết lịch sử chia cổ tức từng đợt từ Yahoo Finance"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
@@ -286,6 +289,7 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2018):
     return records
 
 def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
+    """Lấy giá cổ phiếu, số lượng cổ phiếu 100%, vốn hóa và tỷ lệ trả cổ tức. Doanh nghiệp không có ghi 0."""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
@@ -339,20 +343,31 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         ]
 
         for eng_key, val in metrics:
+            # Ghi nhận giá trị, nếu không có dữ liệu giao dịch/chỉ số thì mặc định là 0.0 đúng yêu cầu
+            float_val = 0.0
             if val is not None:
                 try:
                     float_val = float(val)
-                    if float_val != 0.0:
-                        metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
-                        records.append({
-                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
-                            'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
-                        })
-                except: continue
+                except:
+                    float_val = 0.0
+            
+            metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
+            records.append({
+                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
+            })
     except Exception:
-        pass
+        # Dự phòng trường hợp lỗi kết nối, gán giá trị 0.0 cho các chỉ số thị trường/giá
+        for eng_key in ['Current Price', 'Shares Outstanding', 'Market Capitalization', 'Dividend Yield']:
+            metric_vn = TRANSLATION_MAP.get(eng_key, eng_key)
+            records.append({
+                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': 0.0
+            })
     return records
 
 def fetch_market_indices():
@@ -412,16 +427,19 @@ def process_single_ticker(symbol, category):
                 ticker = yf.Ticker(full_ticker, session=session)
                 bs_df = getattr(ticker, 'balance_sheet', None)
                  
-                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2018))
-                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2018))
+                # Vét sạch 3 bảng báo cáo tài chính từ 2020 đến 2026 không sót dòng nào
+                recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
+                recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
+                
+                # Lấy giá, số lượng cổ phiếu, vốn hóa, tỷ lệ cổ tức
                 recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                 
                 # Vét sạch lịch sử cổ tức
-                recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2018))
+                recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
                  
                 if recs:
                     success = True
@@ -433,11 +451,24 @@ def process_single_ticker(symbol, category):
                 
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
+        # Ghi nhận giá trị 0.0 theo đúng yêu cầu khi doanh nghiệp không có dữ liệu giá/thị trường
         recs.append({
             'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
             'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
             'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 10000.0
+            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 0.0
+        })
+        recs.append({
+            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
+            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+            'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': 0.0
+        })
+        recs.append({
+            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
+            'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+            'Chỉ tiêu tiếng Việt': 'Vốn hóa thị trường', 'Giá trị': 0.0
         })
     return recs
 
@@ -452,7 +483,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC, Định giá & Cổ tức lịch sử cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá, Cổ phiếu & Cổ tức cho {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -482,7 +513,7 @@ def main():
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC, ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
+    print(f" 🎉 HOÀN TẤT VÉT SẠCH 3 BCTC (2020-2026), ĐỊNH GIÁ & CỔ TỨC CHO {total_tickers} MÃ!")
     print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
     print(f" - Tổng dung lượng bản ghi lịch sử chi tiết: {len(df_master):,}")
     print(f"==================================================")
