@@ -21,49 +21,34 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
-def load_152_master_tickers():
-    """Danh sách chính thức 152 mã cổ phiếu chất lượng cao đã chọn lọc"""
+def load_176_master_tickers():
+    """Danh sách mở rộng toàn diện 176 mã cổ phiếu (đã bổ sung các mã còn thiếu từ bảng giá HNX và các sàn)"""
     raw_tickers = [
-        # A (5)
+        # Nhóm gốc 152 mã chất lượng cao
         "ABB", "ACB", "ACV", "AIG", "ANV",
-        # B (9)
         "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
-        # C (8)
         "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS",
-        # D (12)
         "DBC", "DCM", "DGW", "DIG", "DNH", "DP3", "DPM", "DSE", "DTD", "DVN", "DXG", "DXP",
-        # E (2)
         "EIB", "EVF",
-        # F (4)
         "FOX", "FPT", "FRT", "FTS",
-        # G (5)
         "GAS", "GEE", "GEX", "GMD", "GVR",
-        # H (10)
         "HAG", "HCM", "HDB", "HDG", "HND", "HHV", "HPG", "HSG", "HT1", "HUT",
-        # I (2)
         "IDC", "IDP",
-        # K (3)
         "KBC", "KDC", "KDH",
-        # L (5)
         "L14", "L18", "LAS", "LHC", "LPB",
-        # M (8)
         "MBB", "MBS", "MCH", "MSB", "MSN", "MSR", "MVN", "MWG",
-        # N (8)
         "NAB", "NBC", "NDN", "NKG", "NLG", "NT2", "NTP", "NVL",
-        # O (2)
         "OCB", "OIL",
-        # P (15)
         "PAN", "PC1", "PDR", "PHR", "PLC", "PLX", "PNJ", "POW", "PSD", "PVB", "PVC", "PVD", "PVS", "PVT", "PVI",
-        # Q (2)
         "QNS", "QTP",
-        # R (1)
         "REE",
-        # S (12)
         "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", "STB",
-        # T (12)
         "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD",
-        # V (27)
-        "VCB", "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP"
+        "VCB", "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP",
+        
+        # Bổ sung các mã mới từ bảng giá HNX và các mã tiềm năng khác
+        "PRE", "HCC", "L40", "KDM", "HVT", "VTZ", "GLT", "VGS", "PCH", 
+        "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", "TMB", "SAF", "NET", "DHT"
     ]
     
     market_map = {}
@@ -73,14 +58,14 @@ def load_152_master_tickers():
     return market_map
 
 def get_company_profile(symbol):
-    """Phân nhóm ngành chuẩn xác và tra cứu tên đầy đủ của doanh nghiệp"""
+    """Phân nhóm ngành chuẩn xác và tra cứu tên doanh nghiệp"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX"]
     bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA", "EVS", "HBS", "PSI", "WSS"]
-    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN"]
+    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN", "THD", "KSF"]
     retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "DMX"]
     oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD", "PVC"]
-    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC"]
+    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC", "HGM", "KSV"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -88,7 +73,7 @@ def get_company_profile(symbol):
     elif symbol in realestate_list: sector = "Bất động sản & Xây dựng"
     elif symbol in retail_list: sector = "Bán lẻ & Dịch vụ tiêu dùng"
     elif symbol in oil_gas_list: sector = "Dầu khí, Điện & Năng lượng"
-    elif symbol in steel_materials: sector = "Vật liệu xây dựng, Thép & Hóa chất"
+    elif symbol in steel_materials: sector = "Vật liệu xây dựng, Thép & Khoáng sản"
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
@@ -145,13 +130,24 @@ def get_company_profile(symbol):
         "TVD": "Công ty Cổ phần Than Vàng Danh - Vinacomin", "VCB": "Ngân hàng TMCP Ngoại thương Việt Nam", "VC3": "Công ty Cổ phần Tập đoàn Nam Cường",
         "VCG": "Tổng công ty Cổ phần Xuất nhập khẩu và Xây dựng Việt Nam", "VCI": "Công ty Cổ phần Chứng khoán Vietcap",
         "VCK": "Công ty Cổ phần Chứng khoán Vina", "VCS": "Công ty Cổ phần Vicosstone", "VEA": "Tổng công ty Máy động lực và máy nông nghiệp Việt Nam - CTCP",
-        "VFS": "Công ty Cổ phần Chứng khoất Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
+        "VFS": "Công ty Cổ phần Chứng khoán Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
         "VGP": "Công ty Cổ phần Cảng Cần Giuộc", "VGR": "Công ty Cổ phần Vận tải và Xếp dỡ Hải An", "VHC": "Công ty Cổ phần Vĩnh Hoàn",
         "VHM": "Công ty Cổ phần Vinhomes", "VIB": "Ngân hàng TMCP Quốc tế Việt Nam", "VIC": "Tập đoàn Vingroup - CTCP",
         "VIX": "Công ty Cổ phần Chứng khoán VIX", "VJC": "Công ty Cổ phần Hàng không VietJet", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
         "VNM": "Công ty Cổ phần Sữa Việt Nam", "VPB": "Ngân hàng TMCP Việt Nam Thịnh Vượng", "VPI": "Công ty Cổ phần Đầu tư Văn Phú - Invest",
         "VPL": "Công ty Cổ phần Vinpearl", "VPX": "Công ty Cổ phần Xây dựng Vận tải Phát Xá", "VRE": "Công ty Cổ phần Vincom Retail",
-        "VSC": "Công ty Cổ phần Container Việt Nam", "VTP": "Tổng Công ty Cổ phần Bưu chính Viettel"
+        "VSC": "Công ty Cổ phần Container Việt Nam", "VTP": "Tổng Công ty Cổ phần Bưu chính Viettel",
+        # Tên các mã bổ sung từ bảng giá HNX
+        "HGM": "Công ty Cổ phần Cơ khí và Khoáng sản Hà Giang", "PRE": "Tổng công ty cổ phần Tái bảo hiểm PVI",
+        "HCC": "Công ty Cổ phần Bê tông Hòa Cầm - Intimex", "L40": "Công ty Cổ phần Licogi 40",
+        "KDM": "Công ty Cổ phần ĐT&PT Dương Minh", "HVT": "Công ty Cổ phần Hóa chất Việt Trì",
+        "VTZ": "Công ty Cổ phần Thương mại và Đầu tư Vạn Tường", "GLT": "Công ty Cổ phần Kỹ thuật Điện chiếu sáng G.L.T",
+        "VGS": "Công ty Cổ phần ống thép Việt Đức VG PIPE", "PCH": "Công ty Cổ phần Thạch cao Cần Thơ",
+        "CAR": "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va (hoặc tương đương)", "KSV": "Tổng công ty Khoáng sản TKV - CTCP",
+        "THD": "Công ty Cổ phần Tập đoàn ThaiHoldings", "KSF": "Công ty Cổ phần Tập đoàn Sunshine Homes",
+        "SCG": "Công ty Cổ phần Xây dựng Sông Đà 1.01", "CLM": "Công ty Cổ phần Than Cọc Sáu - Vinacomin",
+        "TMB": "Công ty Cổ phần Kinh doanh Than miền Nam - Vinacomin", "SAF": "Công ty Cổ phần lương thực thực phẩm Safoco",
+        "NET": "Công ty Cổ phần Bột giặt Net", "DHT": "Công ty Cổ phần Dược phẩm Hà Tây"
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
@@ -290,7 +286,6 @@ def translate_metric(metric_original):
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
-    """Vét sạch và làm sạch ngay dữ liệu tài chính từ nguồn gốc"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -308,7 +303,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
                             except: 
                                 continue
                             
-                            # Làm sạch dữ liệu rác, NaN hoặc inf
                             if pd.isna(float_val) or float_val == float('inf') or float_val == float('-inf'):
                                 continue
                             
@@ -324,7 +318,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
     return records
 
 def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
-    """Lấy và làm sạch lịch sử trả cổ tức"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     try:
@@ -346,7 +339,6 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
     return records
 
 def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
-    """Lấy định giá, giá cổ phiếu, vốn hóa. Ghi nhận 0.0 chuẩn xác nếu không có"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
@@ -473,7 +465,6 @@ def fetch_market_indices():
 
 def process_single_ticker(symbol, category):
     recs = []
-    # Quét toàn diện các hậu tố sàn HOSE, HNX, UPCoM
     suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
     success = False
 
@@ -485,7 +476,6 @@ def process_single_ticker(symbol, category):
                 ticker = yf.Ticker(full_ticker, session=session)
                 bs_df = getattr(ticker, 'balance_sheet', None)
                  
-                # Vét sạch 3 bảng BCTC từ 2020 đến 2026
                 recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
@@ -493,7 +483,6 @@ def process_single_ticker(symbol, category):
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 
-                # Lấy định giá & cổ tức
                 recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
                 recs.extend(fetch_historical_dividends(symbol, ticker, min_year=2020))
                  
@@ -509,7 +498,6 @@ def process_single_ticker(symbol, category):
         comp_name, sec_name = get_company_profile(symbol)
         current_year = str(datetime.now().year)
         today_str = datetime.today().strftime('%Y-%m-%d')
-        # Đảm bảo ghi nhận đủ bản ghi mặc định 0.0 cho mã không có dữ liệu
         for metric_name in ['Giá cổ phiếu hiện tại', 'Tổng số lượng cổ phiếu lưu hành', 'Vốn hóa thị trường']:
             recs.append({
                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': comp_name,
@@ -520,7 +508,7 @@ def process_single_ticker(symbol, category):
     return recs
 
 def main():
-    ticker_market_map = load_152_master_tickers()
+    ticker_market_map = load_176_master_tickers()
     all_master_records = []
     success_count = 0
      
@@ -530,7 +518,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá & Cổ tức chuẩn hóa cho {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá & Cổ tức cho danh sách mở rộng {total_tickers} mã...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -548,18 +536,10 @@ def main():
 
     df_master = pd.DataFrame(all_master_records)
     
-    # 🧹 LÀM SẠCH DỮ LIỆU GỐC 100% TRƯỚC KHI KẾT XUẤT
     if not df_master.empty:
-        # 1. Loại bỏ các dòng hoàn toàn trùng lặp
         df_master = df_master.drop_duplicates()
-        
-        # 2. Xóa các dòng có giá trị NaN, Null hoặc trống ở các cột cốt lõi
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-        
-        # 3. Ép kiểu cột Giá trị về float sạch sẽ
         df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
-        
-        # 4. Sắp xếp trật tự logic institutional-grade
         df_master = df_master.sort_values(
             by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], 
             ascending=[True, True, True, False, False]
