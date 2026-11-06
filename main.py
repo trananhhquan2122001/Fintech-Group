@@ -6,6 +6,8 @@ import pandas as pd
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Tự động kiểm tra và cài đặt thư viện yfinance nếu chưa có
 try:
@@ -15,12 +17,25 @@ except ImportError:
     os.system("pip install yfinance --quiet")
     import yfinance as yf
 
-# Thiết lập Session tối ưu kết nối mạng, vượt giới hạn rate limit
-session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
-})
+# Thiết lập Session nâng cao với cơ chế Retry & Exponential Backoff tự động chống nghẽn mạng (Rate Limit)
+def create_robust_session():
+    session = requests.Session()
+    retries = Retry(
+        total=5,
+        backoff_factor=1.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        raise_on_status=False
+    )
+    adapter = HTTPAdapter(max_retries=retries, pool_connections=50, pool_maxsize=50)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
+    })
+    return session
+
+global_session = create_robust_session()
 
 def load_200_master_tickers():
     """Danh sách chính thức toàn diện 200 mã cổ phiếu chất lượng cao (172 mã cũ + 28 mã mới bổ sung)"""
@@ -449,26 +464,27 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
 
 def process_single_ticker(symbol, category):
     recs = []
+    # Auto-discovery suffix tối ưu cho thị trường Việt Nam
     suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
     success = False
 
     for suffix in suffixes:
         if success: break
         full_ticker = f"{symbol}{suffix}"
-        for attempt in range(3):
+        for attempt in range(4):
             try:
-                ticker = yf.Ticker(full_ticker, session=session)
+                ticker = yf.Ticker(full_ticker, session=global_session)
                 
-                # 1. Bảng Cân đối kế toán (Balance Sheet) - Cả năm & Quý
+                # 1. Bảng Cân đối kế toán (Balance Sheet) - Năm & Quý
                 bs_annual = getattr(ticker, 'balance_sheet', None)
                 recs.extend(parse_financial_df(symbol, bs_annual, 'Balance_Sheet', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý', min_year=2020))
                 
-                # 2. Bảng Kết quả kinh doanh (Income Statement) - Cả năm & Quý
+                # 2. Bảng Kết quả kinh doanh (Income Statement) - Năm & Quý
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý', min_year=2020))
                 
-                # 3. Bảng Lưu chuyển tiền tệ (Cash Flow) - Cả năm & Quý
+                # 3. Bảng Lưu chuyển tiền tệ (Cash Flow) - Năm & Quý
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm', min_year=2020))
                 recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý', min_year=2020))
                 
@@ -480,9 +496,9 @@ def process_single_ticker(symbol, category):
                     success = True
                     break
                 else:
-                    time.sleep(0.05)
-            except Exception:
-                time.sleep(0.3 * (attempt + 1))
+                    time.sleep(0.1)
+            except Exception as e:
+                time.sleep(0.5 * (attempt + 1))
                 
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
@@ -498,43 +514,49 @@ def process_single_ticker(symbol, category):
     return recs
 
 def save_to_database(df, db_path="data/vietnam_stock.db"):
-    """Lưu trữ dữ liệu đã làm sạch vào cơ sở dữ liệu SQLite / hỗ trợ mở rộng PostgreSQL"""
+    """Lưu trữ dữ liệu vào SQLite sử dụng WAL mode tối ưu hóa tốc độ cao"""
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
+    conn.execute('PRAGMA journal_mode=WAL;')
+    conn.execute('PRAGMA synchronous=NORMAL;')
     
-    # Ghi dữ liệu vào bảng master
     df.to_sql('stock_financials_master', conn, if_exists='replace', index=False)
     
-    # Tạo chỉ mục (Index) để tối ưu hóa truy vấn SQL cực nhanh
     cursor = conn.cursor()
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_symbol ON stock_financials_master ("Mã chứng khoán");')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_report_type ON stock_financials_master ("Loại báo cáo");')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_year ON stock_financials_master ("Năm");')
     conn.commit()
     conn.close()
-    print(f"🗄️ Đã lưu trữ thành công toàn bộ dữ liệu vào Database SQLite: {db_path}")
+    print(f"🗄️ Đã kết xuất & tối ưu hóa thành công Cơ sở dữ liệu SQLite: {db_path}")
 
 def main():
     ticker_market_map = load_200_master_tickers()
     all_master_records = []
     success_count = 0
+    failed_tickers = []
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy FINEX VN Terminal - Vét sạch toàn bộ 3 bảng BCTC, Cổ tức & Định giá cho {total_tickers} mã...")
+    print(f"🚀 [FINEX VN Terminal] Khởi chạy đa luồng quy mô lớn quét sạch {total_tickers} mã doanh nghiệp...")
 
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    # Tối ưu hóa số luồng worker (max_workers=5) để bảo vệ kết nối mạng khỏi bị chặn
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         
         for future in as_completed(futures):
             symbol = futures[future]
             try:
                 res = future.result()
-                if res:
+                if res and len(res) > 3:
                     all_master_records.extend(res)
                     success_count += 1
-                    print(f"[{success_count}/{total_tickers}] Hoàn thành mã: {symbol} ({len(res)} bản ghi)")
+                    print(f"✅ [{success_count}/{total_tickers}] {symbol}: thu thập thành công {len(res)} bản ghi.")
+                else:
+                    failed_tickers.append(symbol)
+                    print(f"⚠️ [{symbol}] Không lấy đủ dữ liệu cơ bản.")
             except Exception as e:
-                print(f"Lỗi xử lý mã {symbol}: {e}")
+                failed_tickers.append(symbol)
+                print(f"❌ Lỗi xử lý mã {symbol}: {e}")
 
     df_master = pd.DataFrame(all_master_records)
     
@@ -549,20 +571,21 @@ def main():
             ascending=[True, True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV institutional-grade vào: data/vietnam_stock_database_tong_hop.csv...")
+    print("\n💾 Đang xuất file CSV và ghi vào Database...")
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
-    # Lưu vào cơ sở dữ liệu
     save_to_database(df_master)
      
-    print(f"==================================================")
-    print(f" 🎉 HOÀN TẤT TOÀN BỘ QUY TRÌNH QUÉT & LƯU TRỮ!")
-    print(f" - Tổng mã ghi nhận thành công: {success_count}/{total_tickers}")
+    print(f"\n==================================================")
+    print(f" 🎉 FINEX VN TERMINAL - BÁO CÁO TỔNG KẾT QUÉT DỮ LIỆU")
+    print(f" - Tổng mã khởi chạy: {total_tickers}")
+    print(f" - Mã thành công: {success_count}")
+    print(f" - Mã cần kiểm tra lại: {len(failed_tickers)}")
     print(f" - Tổng số dòng dữ liệu lịch sử sạch: {len(df_master):,}")
-    print(f" - Tệp CSV: {csv_path}")
-    print(f" - Cơ sở dữ liệu: data/vietnam_stock.db")
+    print(f" - Tệp lưu trữ CSV: {csv_path}")
+    print(f" - Cơ sở dữ liệu SQLite: data/vietnam_stock.db")
     print(f"==================================================")
 
 if __name__ == "__main__":
