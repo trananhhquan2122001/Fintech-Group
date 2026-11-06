@@ -6,13 +6,27 @@ import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Tự động kiểm tra và cài đặt thư viện yfinance nếu chưa có
+# ==========================================
+# 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN
+# ==========================================
+# Đã tích hợp sẵn API Key của bạn vào đây
+os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
+
+# Tự động kiểm tra và cài đặt yfinance
 try:
     import yfinance as yf
 except ImportError:
     print("⚙️ Đang cài đặt thư viện yfinance...")
     os.system("pip install yfinance --quiet")
     import yfinance as yf
+
+# Tự động cài đặt vnstock phiên bản mới nhất (v5)
+try:
+    from vnstock import Vnstock
+except ImportError:
+    print("⚙️ Đang cài đặt thư viện vnstock...")
+    os.system("pip install -U --extra-index-url https://vnstocks.com/api/packages vnstock --quiet")
+    from vnstock import Vnstock
 
 # Thiết lập Session tối ưu kết nối mạng
 session = requests.Session()
@@ -21,46 +35,30 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
+# ==========================================
+# 2. DANH SÁCH 242 MÃ VÀ THÔNG TIN DOANH NGHIỆP
+# ==========================================
 def load_242_master_tickers():
-    """Danh sách chính thức toàn diện 242 mã cổ phiếu chất lượng cao (200 mã cũ + 42 mã mới bổ sung)"""
     raw_tickers = [
-        # 172 mã trước đó
-        "ABB", "ACB", "ACV", "AIG", "ANV",
-        "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
-        "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS",
-        "DBC", "DCM", "DGW", "DIG", "DNH", "DP3", "DPM", "DSE", "DTD", "DVN", "DXG", "DXP",
-        "EIB", "EVF",
-        "FOX", "FPT", "FRT", "FTS",
-        "GAS", "GEE", "GEX", "GMD", "GVR",
-        "HAG", "HCM", "HDB", "HDG", "HND", "HHV", "HPG", "HSG", "HT1", "HUT",
-        "IDC", "IDP",
-        "KBC", "KDC", "KDH",
-        "L14", "L18", "LAS", "LHC", "LPB",
-        "MBB", "MBS", "MCH", "MSB", "MSN", "MSR", "MVN", "MWG",
-        "NAB", "NBC", "NDN", "NKG", "NLG", "NT2", "NTP", "NVL",
-        "OCB", "OIL",
-        "PAN", "PC1", "PDR", "PHR", "PLC", "PLX", "PNJ", "POW", "PSD", "PVB", "PVC", "PVD", "PVS", "PVT", "PVI",
-        "QNS", "QTP",
-        "REE",
-        "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", "STB",
-        "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD",
-        "VCB", "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP",
-        "PRE", "HCC", "L40", "KDM", "HVT", "VTZ", "GLT", "VGS", "PCH", 
-        "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", "TMB", "SAF", "NET", "DHT",
-        
-        # 28 mã mới bổ sung chính thức
-        "DGC", "SZC", "HVN", "BAB", "AGR", "ICT", "TLH", "BMI", "PET", "LSS", 
-        "HDC", "IJC", "TDC", "CTI", "SJD", "TMP", "SBA", "VSH", "TTA", "TV2", 
-        "VCP", "BFC", "DDV", "VGT", "SGP", "DPR", "DHC", "TCM",
-
-        # 42 mã UPCOM mới tích hợp
-        "CKA", "VLB", "HPP", "WSB", "F88", "SEA", "ODE", "PHP", "VXB", "APF",
-        "VNZ", "HLB", "TED", "VEF", "PAT", "FOC", "DTP", "SIV", "VGG", "AVC", 
-        "LSG", "CQN", "QPH", "TCW", "ACE", "VSF", "HAM", "SBM", "AGP", "LIC", 
-        "SCL", "CC1", "BWS", "NAS", "CLI", "VTK", "HMS", "PCC", "QHW", "MFS", 
-        "VEC", "HEC"
+        "ABB", "ACB", "ACV", "AIG", "ANV", "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
+        "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS", "DBC", "DCM", "DGW", "DIG", "DNH", "DP3", 
+        "DPM", "DSE", "DTD", "DVN", "DXG", "DXP", "EIB", "EVF", "FOX", "FPT", "FRT", "FTS", "GAS", "GEE", 
+        "GEX", "GMD", "GVR", "HAG", "HCM", "HDB", "HDG", "HND", "HHV", "HPG", "HSG", "HT1", "HUT", "IDC", 
+        "IDP", "KBC", "KDC", "KDH", "L14", "L18", "LAS", "LHC", "LPB", "MBB", "MBS", "MCH", "MSB", "MSN", 
+        "MSR", "MVN", "MWG", "NAB", "NBC", "NDN", "NKG", "NLG", "NT2", "NTP", "NVL", "OCB", "OIL", "PAN", 
+        "PC1", "PDR", "PHR", "PLC", "PLX", "PNJ", "POW", "PSD", "PVB", "PVC", "PVD", "PVS", "PVT", "PVI",
+        "QNS", "QTP", "REE", "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", 
+        "STB", "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD", "VCB", 
+        "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", 
+        "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP", "PRE", "HCC", 
+        "L40", "KDM", "HVT", "VTZ", "GLT", "VGS", "PCH", "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", 
+        "TMB", "SAF", "NET", "DHT", "DGC", "SZC", "HVN", "BAB", "AGR", "ICT", "TLH", "BMI", "PET", "LSS", 
+        "HDC", "IJC", "TDC", "CTI", "SJD", "TMP", "SBA", "VSH", "TTA", "TV2", "VCP", "BFC", "DDV", "VGT", 
+        "SGP", "DPR", "DHC", "TCM", "CKA", "VLB", "HPP", "WSB", "F88", "SEA", "ODE", "PHP", "VXB", "APF", 
+        "VNZ", "HLB", "TED", "VEF", "PAT", "FOC", "DTP", "SIV", "VGG", "AVC", "LSG", "CQN", "QPH", "TCW", 
+        "ACE", "VSF", "HAM", "SBM", "AGP", "LIC", "SCL", "CC1", "BWS", "NAS", "CLI", "VTK", "HMS", "PCC", 
+        "QHW", "MFS", "VEC", "HEC"
     ]
-    
     market_map = {}
     for t in raw_tickers:
         if t.strip(): 
@@ -68,7 +66,6 @@ def load_242_master_tickers():
     return market_map
 
 def get_company_profile(symbol):
-    """Phân nhóm ngành chuẩn xác và tra cứu tên doanh nghiệp cho 242 mã"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
     bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB", "BAB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA", "EVS", "HBS", "PSI", "WSS", "F88"]
@@ -89,7 +86,6 @@ def get_company_profile(symbol):
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
-        # 42 mã UPCOM mới tích hợp
         "CKA": "Công ty CP Xuất nhập khẩu Thủy sản Cà Mau", "VLB": "Công ty CP Xây dựng và Sản xuất Vật liệu Xây dựng Biên Hòa",
         "HPP": "Công ty CP Sơn Hải Phòng", "WSB": "Công ty CP Bia Sài Gòn - Miền Tây", "F88": "Công ty CP Đầu tư Kinh doanh F88",
         "SEA": "Tổng Công ty Thủy sản Việt Nam - CTCP", "ODE": "Công ty CP Dịch vụ Dầu khí Biển", "PHP": "Công ty CP Cảng Hải Phòng",
@@ -105,8 +101,6 @@ def get_company_profile(symbol):
         "VTK": "Công ty CP Tư vấn và Dịch vụ Viettel", "HMS": "Công ty CP Cơ khí Hà Nội", "PCC": "Công ty CP Tập đoàn Xây dựng PCC1",
         "QHW": "Công ty CP Nước Khoáng Quảng Ninh", "MFS": "Công ty CP Dịch vụ Kỹ thuật Mobifone", "VEC": "Tổng Công ty Cổ phần Điện tử và Tin học Việt Nam",
         "HEC": "Công ty CP Tư vấn Xây dựng Thủy lợi và Môi trường",
-
-        # Các mã mới bổ sung 28 mã
         "DGC": "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang", "SZC": "Công ty Cổ phần Sonadezi Châu Đức",
         "HVN": "Tổng Công ty Hàng không Việt Nam - CTCP (Vietnam Airlines)", "BAB": "Ngân hàng TMCP Bắc Á",
         "AGR": "Công ty Cổ phần Chứng khoán Agribank", "ICT": "Công ty Cổ phần Viễn thông - Giống cây trồng",
@@ -121,8 +115,6 @@ def get_company_profile(symbol):
         "DDV": "Công ty Cổ phần DAP - VINACHEM", "VGT": "Tập đoàn Dệt May Việt Nam - CTCP",
         "SGP": "Tổng Công ty Cảng Sài Gòn - CTCP", "DPR": "Công ty Cổ phần Cao su Đồng Phú",
         "DHC": "Công ty Cổ phần Đông Hải Bến Tre", "TCM": "Công ty Cổ phần Dệt mão Thành Công",
-        
-        # Các mã khác cơ bản
         "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "Tổng công ty Cảng hàng không Việt Nam",
         "AIG": "Công ty Cổ phần Tập đoàn Hóa chất Hùng Phát", "ANV": "Công ty Cổ phần Nam Việt", "BAF": "Công ty Cổ phần Nông nghiệp BAF Việt Nam",
         "BCM": "Tổng công ty Đầu tư và Phát triển Công nghiệp - CTCP", "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
@@ -196,11 +188,12 @@ def get_company_profile(symbol):
     }
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
+# ==========================================
+# 3. BỘ TỪ ĐIỂN DỊCH THUẬT FULL 100% CỦA BẠN
+# ==========================================
 TRANSLATION_MAP = {
-    'Balance_Sheet': 'Bảng cân đối kế toán',
-    'Income_Statement': 'Báo cáo kết quả kinh doanh',
-    'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ',
-    'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
+    'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
+    'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ', 'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
 
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông', 'Share Issued': 'Cổ phiếu đã phát hành',
     'Total Assets': 'Tổng tài sản', 'Current Assets': 'Tài sản ngắn hạn',
@@ -330,6 +323,9 @@ def translate_metric(metric_original):
     cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
+# ==========================================
+# 4. CÁC HÀM GỐC CỦA BẠN (ĐÃ KHÔI PHỤC 100%)
+# ==========================================
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
     records = []
     company_name, sector_name = get_company_profile(symbol)
@@ -508,6 +504,85 @@ def fetch_market_indices():
             pass
     return market_records
 
+# ==========================================
+# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (BỔ SUNG)
+# ==========================================
+def fetch_vnstock_financials(symbol):
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    
+    try:
+        stock = Vnstock().stock(symbol=symbol, source='VCI')
+        
+        # BCTC Năm
+        try:
+            df_bs = stock.finance.balance_sheet(period='year')
+            for _, row in df_bs.iterrows():
+                val = row.get('value', 0)
+                year_val = str(row.get('year', ''))
+                date_str = str(row.get('date', ''))
+                metric_raw = row.get('item', '')
+                if pd.notna(val) and year_val.isdigit() and int(year_val) >= 2020:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Bảng cân đối kế toán',
+                        'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': date_str,
+                        'Chỉ tiêu tiếng Việt': translate_metric(metric_raw), 'Giá trị': float(val)
+                    })
+        except Exception: pass
+
+        try:
+            df_is = stock.finance.income_statement(period='year')
+            for _, row in df_is.iterrows():
+                val = row.get('value', 0)
+                year_val = str(row.get('year', ''))
+                date_str = str(row.get('date', ''))
+                metric_raw = row.get('item', '')
+                if pd.notna(val) and year_val.isdigit() and int(year_val) >= 2020:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Báo cáo kết quả kinh doanh',
+                        'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': date_str,
+                        'Chỉ tiêu tiếng Việt': translate_metric(metric_raw), 'Giá trị': float(val)
+                    })
+        except Exception: pass
+
+        try:
+            df_cf = stock.finance.cash_flow(period='year')
+            for _, row in df_cf.iterrows():
+                val = row.get('value', 0)
+                year_val = str(row.get('year', ''))
+                date_str = str(row.get('date', ''))
+                metric_raw = row.get('item', '')
+                if pd.notna(val) and year_val.isdigit() and int(year_val) >= 2020:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Báo cáo lưu chuyển tiền tệ',
+                        'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': date_str,
+                        'Chỉ tiêu tiếng Việt': translate_metric(metric_raw), 'Giá trị': float(val)
+                    })
+        except Exception: pass
+
+        # Giá
+        try:
+            df_price = stock.trading.price_board(symbols_list=[symbol])
+            if not df_price.empty:
+                price = float(df_price.iloc[0].get('close_price', 0))
+                if price > 0:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                        'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+                        'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': price
+                    })
+        except Exception: pass
+    except Exception:
+        pass
+    return records
+
+# ==========================================
+# 6. HÀM ĐIỀU PHỐI (GHÉP YFINANCE VÀ VNSTOCK)
+# ==========================================
 def process_single_ticker(symbol, category):
     recs = []
     suffixes = [".VN", ".HN", ".UPCOM", ".HA", ".HM", ""]
@@ -539,6 +614,14 @@ def process_single_ticker(symbol, category):
             except Exception:
                 time.sleep(0.2)
                 
+    # GỌI VNSTOCK NẾU YFINANCE THẤT BẠI
+    if not success:
+        print(f" 🔄 yfinance thất bại, chuyển sang vnstock cho mã: {symbol}...")
+        vnstock_recs = fetch_vnstock_financials(symbol)
+        if vnstock_recs:
+            recs.extend(vnstock_recs)
+            success = True
+
     if not success:
         comp_name, sec_name = get_company_profile(symbol)
         current_year = str(datetime.now().year)
@@ -552,6 +635,9 @@ def process_single_ticker(symbol, category):
             })
     return recs
 
+# ==========================================
+# 7. HÀM MAIN
+# ==========================================
 def main():
     ticker_market_map = load_242_master_tickers()
     all_master_records = []
@@ -563,9 +649,8 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (242 mã chuẩn hóa)...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (Tích hợp yfinance & vnstock)...")
 
-    # Đã giảm max_workers xuống 5 để tránh bị Yahoo chặn (khắc phục lỗi thiếu mã)
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         
@@ -587,24 +672,17 @@ def main():
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
         
-        # Lọc bỏ chữ "Yahoo Finance" nếu có
-        for col in ['Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Chỉ tiêu tiếng Việt']:
-            if col in df_master.columns:
-                df_master[col] = df_master[col].astype(str).str.replace("Yahoo Finance", "", case=False).str.strip()
-
-        # Ép buộc chỉ lấy 9 cột (xóa sạch cột thừa bên phải)
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         df_master = df_master[standard_cols]
-
         df_master = df_master.sort_values(
             by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], 
             ascending=[True, True, True, False, False]
         )
 
-    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%: data/vietnam_stock_database_242_ma.csv...")
+    print("\n💾 Đang kết xuất tệp CSV chuẩn hóa sạch 100%...")
     os.makedirs('data', exist_ok=True)
      
-    csv_path = 'data/vietnam_stock_database_242_ma.csv'
+    csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
      
     print(f"==================================================")
