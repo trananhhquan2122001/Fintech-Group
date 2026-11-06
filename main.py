@@ -21,10 +21,10 @@ session.headers.update({
     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8'
 })
 
-def load_176_master_tickers():
-    """Danh sách mở rộng toàn diện 176 mã cổ phiếu (đã bổ sung các mã còn thiếu từ bảng giá HNX và các sàn)"""
+def load_200_master_tickers():
+    """Danh sách chính thức toàn diện 200 mã cổ phiếu chất lượng cao (172 mã cũ + 28 mã mới bổ sung)"""
     raw_tickers = [
-        # Nhóm gốc 152 mã chất lượng cao
+        # 172 mã trước đó
         "ABB", "ACB", "ACV", "AIG", "ANV",
         "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
         "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS",
@@ -45,10 +45,13 @@ def load_176_master_tickers():
         "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", "STB",
         "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD",
         "VCB", "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP",
-        
-        # Bổ sung các mã mới từ bảng giá HNX và các mã tiềm năng khác
         "PRE", "HCC", "L40", "KDM", "HVT", "VTZ", "GLT", "VGS", "PCH", 
-        "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", "TMB", "SAF", "NET", "DHT"
+        "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", "TMB", "SAF", "NET", "DHT",
+        
+        # 28 mã mới bổ sung chính thức
+        "DGC", "SZC", "HVN", "BAB", "AGR", "ICT", "TLH", "BMI", "PET", "LSS", 
+        "HDC", "IJC", "TDC", "CTI", "SJD", "TMP", "SBA", "VSH", "TTA", "TV2", 
+        "VCP", "BFC", "DDV", "VGT", "SGP", "DPR", "DHC", "TCM"
     ]
     
     market_map = {}
@@ -58,14 +61,14 @@ def load_176_master_tickers():
     return market_map
 
 def get_company_profile(symbol):
-    """Phân nhóm ngành chuẩn xác và tra cứu tên doanh nghiệp"""
+    """Phân nhóm ngành chuẩn xác và tra cứu tên doanh nghiệp cho 200 mã"""
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX"]
-    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB"]
+    bank_list = ["VCB", "BID", "TCB", "MBB", "ACB", "CTG", "VPB", "STB", "SHB", "HDB", "LPB", "MSB", "OCB", "NAB", "SSB", "EIB", "TPB", "ABB", "BAB"]
     securities_list = ["SSI", "VCI", "HCM", "VND", "SHS", "MBS", "FTS", "BSI", "CTS", "VIX", "VDS", "ORS", "AGR", "VFS", "DSE", "BVS", "EVF", "IPA", "EVS", "HBS", "PSI", "WSS"]
-    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN", "THD", "KSF"]
+    realestate_list = ["VIC", "VHM", "VRE", "BCM", "KBC", "IDC", "SIP", "SZC", "KDH", "NLG", "DXG", "PDR", "DIG", "CEO", "HDC", "NVL", "TCH", "VC3", "VPI", "SJS", "L14", "L18", "NDN", "THD", "KSF", "IJC", "TDC", "CTI"]
     retail_list = ["MWG", "FRT", "DGW", "PNJ", "PET", "DMX"]
-    oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD", "PVC"]
-    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC", "HGM", "KSV"]
+    oil_gas_list = ["GAS", "PLX", "PVD", "PVS", "PVT", "PVB", "BSR", "OIL", "POW", "DTK", "PGV", "NT2", "PGI", "PLC", "PSD", "PVC", "SJD", "TMP", "SBA", "VSH", "TTA", "TV2", "VCP"]
+    steel_materials = ["HPG", "HSG", "NKG", "GDA", "BMP", "NTP", "AAA", "DGC", "CSV", "LAS", "PHR", "DPM", "DCM", "BFC", "HPA", "VGS", "HT1", "LHC", "HGM", "KSV", "TLH", "DDV", "BFC", "DPR", "DHC"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -73,10 +76,27 @@ def get_company_profile(symbol):
     elif symbol in realestate_list: sector = "Bất động sản & Xây dựng"
     elif symbol in retail_list: sector = "Bán lẻ & Dịch vụ tiêu dùng"
     elif symbol in oil_gas_list: sector = "Dầu khí, Điện & Năng lượng"
-    elif symbol in steel_materials: sector = "Vật liệu xây dựng, Thép & Khoáng sản"
+    elif symbol in steel_materials: sector = "Vật liệu xây dựng, Thép & Hóa chất"
     else: sector = "Công nghiệp, Sản xuất & Hàng tiêu dùng"
 
     company_names = {
+        # Các mã mới bổ sung 28 mã
+        "DGC": "Công ty Cổ phần Tập đoàn Hóa chất Đức Giang", "SZC": "Công ty Cổ phần Sonadezi Châu Đức",
+        "HVN": "Tổng Công ty Hàng không Việt Nam - CTCP (Vietnam Airlines)", "BAB": "Ngân hàng TMCP Bắc Á",
+        "AGR": "Công ty Cổ phần Chứng khoán Agribank", "ICT": "Công ty Cổ phần Viễn thông - Giống cây trồng",
+        "TLH": "Công ty Cổ phần Tập đoàn Thép Tiến Lên", "BMI": "Tổng Công ty Cổ phần Bảo hiểm Bảo Minh",
+        "PET": "Tổng Công ty cổ phần Dịch vụ Tổng hợp Dầu khí", "LSS": "Công ty Cổ phần Mía đường Lam Sơn",
+        "HDC": "Công ty Cổ phần Phát triển Nhà Bà Rịa - Vũng Tàu", "IJC": "Công ty Cổ phần Phát triển Hạ tầng Kỹ thuật",
+        "TDC": "Công ty Cổ phần Kinh doanh và Phát triển Bình Dương", "CTI": "Công ty Cổ phần Đầu tư Phát triển C&T",
+        "SJD": "Công ty Cổ phần Thủy điện Cần Đơn", "TMP": "Công ty Cổ phần Thủy điện Thác Mơ",
+        "SBA": "Công ty Cổ phần Thủy điện Sông Ba Hạ", "VSH": "Công ty Cổ phần Thủy điện Vĩnh Sơn - Sông Hinh",
+        "TTA": "Công ty Cổ phần Đầu tư Trường Thành Việt Nam", "TV2": "Công ty Cổ phần Tư vấn Xây dựng Điện 2",
+        "VCP": "Công ty Cổ phần Xây dựng điện VNECO 3", "BFC": "Công ty Cổ phần Phân bón Bình Điền",
+        "DDV": "Công ty Cổ phần DAP - VINACHEM", "VGT": "Tập đoàn Dệt May Việt Nam - CTCP",
+        "SGP": "Tổng Công ty Cảng Sài Gòn - CTCP", "DPR": "Công ty Cổ phần Cao su Đồng Phú",
+        "DHC": "Công ty Cổ phần Đông Hải Bến Tre", "TCM": "Công ty Cổ phần Dệt mão Thành Công",
+        
+        # Các mã khác cơ bản
         "ABB": "Ngân hàng TMCP An Bình", "ACB": "Ngân hàng TMCP Á Châu", "ACV": "Tổng công ty Cảng hàng không Việt Nam",
         "AIG": "Công ty Cổ phần Tập đoàn Hóa chất Hùng Phát", "ANV": "Công ty Cổ phần Nam Việt", "BAF": "Công ty Cổ phần Nông nghiệp BAF Việt Nam",
         "BCM": "Tổng công ty Đầu tư và Phát triển Công nghiệp - CTCP", "BID": "Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
@@ -130,20 +150,19 @@ def get_company_profile(symbol):
         "TVD": "Công ty Cổ phần Than Vàng Danh - Vinacomin", "VCB": "Ngân hàng TMCP Ngoại thương Việt Nam", "VC3": "Công ty Cổ phần Tập đoàn Nam Cường",
         "VCG": "Tổng công ty Cổ phần Xuất nhập khẩu và Xây dựng Việt Nam", "VCI": "Công ty Cổ phần Chứng khoán Vietcap",
         "VCK": "Công ty Cổ phần Chứng khoán Vina", "VCS": "Công ty Cổ phần Vicosstone", "VEA": "Tổng công ty Máy động lực và máy nông nghiệp Việt Nam - CTCP",
-        "VFS": "Công ty Cổ phần Chứng khoán Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
+        "VFS": "Công ty Cổ phần Chứng khoất Nhất Việt", "VGC": "Tổng Công ty Viglacera - CTCP", "VGI": "Tổng Công ty Cổ phần Đầu tư Quốc tế Viettel",
         "VGP": "Công ty Cổ phần Cảng Cần Giuộc", "VGR": "Công ty Cổ phần Vận tải và Xếp dỡ Hải An", "VHC": "Công ty Cổ phần Vĩnh Hoàn",
         "VHM": "Công ty Cổ phần Vinhomes", "VIB": "Ngân hàng TMCP Quốc tế Việt Nam", "VIC": "Tập đoàn Vingroup - CTCP",
         "VIX": "Công ty Cổ phần Chứng khoán VIX", "VJC": "Công ty Cổ phần Hàng không VietJet", "VND": "Công ty Cổ phần Chứng khoán VNDIRECT",
         "VNM": "Công ty Cổ phần Sữa Việt Nam", "VPB": "Ngân hàng TMCP Việt Nam Thịnh Vượng", "VPI": "Công ty Cổ phần Đầu tư Văn Phú - Invest",
         "VPL": "Công ty Cổ phần Vinpearl", "VPX": "Công ty Cổ phần Xây dựng Vận tải Phát Xá", "VRE": "Công ty Cổ phần Vincom Retail",
         "VSC": "Công ty Cổ phần Container Việt Nam", "VTP": "Tổng Công ty Cổ phần Bưu chính Viettel",
-        # Tên các mã bổ sung từ bảng giá HNX
         "HGM": "Công ty Cổ phần Cơ khí và Khoáng sản Hà Giang", "PRE": "Tổng công ty cổ phần Tái bảo hiểm PVI",
         "HCC": "Công ty Cổ phần Bê tông Hòa Cầm - Intimex", "L40": "Công ty Cổ phần Licogi 40",
         "KDM": "Công ty Cổ phần ĐT&PT Dương Minh", "HVT": "Công ty Cổ phần Hóa chất Việt Trì",
         "VTZ": "Công ty Cổ phần Thương mại và Đầu tư Vạn Tường", "GLT": "Công ty Cổ phần Kỹ thuật Điện chiếu sáng G.L.T",
         "VGS": "Công ty Cổ phần ống thép Việt Đức VG PIPE", "PCH": "Công ty Cổ phần Thạch cao Cần Thơ",
-        "CAR": "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va (hoặc tương đương)", "KSV": "Tổng công ty Khoáng sản TKV - CTCP",
+        "CAR": "Công ty Cổ phần Tập đoàn Đầu tư Địa ốc No Va", "KSV": "Tổng công ty Khoáng sản TKV - CTCP",
         "THD": "Công ty Cổ phần Tập đoàn ThaiHoldings", "KSF": "Công ty Cổ phần Tập đoàn Sunshine Homes",
         "SCG": "Công ty Cổ phần Xây dựng Sông Đà 1.01", "CLM": "Công ty Cổ phần Than Cọc Sáu - Vinacomin",
         "TMB": "Công ty Cổ phần Kinh doanh Than miền Nam - Vinacomin", "SAF": "Công ty Cổ phần lương thực thực phẩm Safoco",
@@ -508,7 +527,7 @@ def process_single_ticker(symbol, category):
     return recs
 
 def main():
-    ticker_market_map = load_176_master_tickers()
+    ticker_market_map = load_200_master_tickers()
     all_master_records = []
     success_count = 0
      
@@ -518,7 +537,7 @@ def main():
         all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch 3 BCTC (2020-2026), Định giá & Cổ tức cho danh sách mở rộng {total_tickers} mã...")
+    print(f"🚀 Khởi chạy hệ thống đa luồng vét sạch toàn diện cho {total_tickers} mã (200 mã chuẩn hóa)...")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
