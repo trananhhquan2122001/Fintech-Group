@@ -23,9 +23,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
-          # NÂNG CẤP: Cài đặt vnstock v5 từ kho riêng
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
-          # NÂNG CẤP: Cài đặt thêm thư viện vnfinancialdata
           pip install --no-cache-dir vnfinancialdata
 
       - name: Run FINEX Enterprise Engine
@@ -34,30 +32,52 @@ jobs:
         run: |
           python main.py
 
-      - name: Commit and push changes to GitHub (Backup)
+      # ==========================================
+      # 1. LƯU FILE CSV LÊN GITHUB (GIỮ NGUYÊN)
+      # ==========================================
+      - name: Commit and push changes to GitHub (Backup CSV)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git fetch origin main
           git checkout main || git checkout -b main
+          # Vẫn add file CSV như bình thường để bạn có thể tải về kiểm tra
           git add data/vietnam_stock_database_tong_hop.csv || true
           git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset [skip ci]"
           git push origin main
 
-      - name: Push Dataset Directly to Hugging Face Space
+      # ==========================================
+      # 2. LƯU FILE LÊN HUGGING FACE DATASET (NÂNG CẤP)
+      # ==========================================
+      - name: Push Dataset to Hugging Face Dataset Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
-          from huggingface_hub import HfApi
+          from huggingface_hub import HfApi, create_repo
+          import os
+          
           api = HfApi()
+          # Sử dụng DATASET thay vì SPACE để tránh giới hạn 1GB
+          dataset_repo_id = 'trananhquan2001/finex-vn-dataset'
+          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          
+          print(f'Đang kiểm tra/tạo Dataset Repository: {dataset_repo_id}...')
+          try:
+              create_repo(repo_id=dataset_repo_id, repo_type='dataset', token=os.environ['HF_TOKEN'], exist_ok=True)
+              print('Dataset Repo đã sẵn sàng.')
+          except Exception as e:
+              print(f'Lỗi tạo dataset repo: {e}')
+              raise
+              
+          print(f'Đang upload file CSV ({file_path}) lên Dataset...')
           api.upload_file(
-              path_or_fileobj='data/vietnam_stock_database_tong_hop.csv',
-              path_in_repo='data/vietnam_stock_database_tong_hop.csv',
-              repo_id='trananhquan2001/trananhquan-terminal',
-              repo_type='space',
-              token='${{ secrets.HF_TOKEN }}'
+              path_or_fileobj=file_path,
+              path_in_repo='vietnam_stock_database_tong_hop.csv',
+              repo_id=dataset_repo_id,
+              repo_type='dataset',
+              token=os.environ['HF_TOKEN']
           )
-          print('Đã đẩy thành công lên Hugging Face Space!')
+          print('Đã đẩy thành công lên Hugging Face Dataset!')
           "
