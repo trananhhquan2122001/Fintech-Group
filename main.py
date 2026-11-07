@@ -11,7 +11,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # ==========================================
 os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
 
-# --- NÂNG CẤP: Cài đặt và Import vnfinancialdata ---
 try:
     import vnfinancialdata as vnf
 except ImportError:
@@ -248,9 +247,10 @@ def translate_metric(metric_original):
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
 # ==========================================
-# 4. HÀM CÀO DỮ LIỆU TỪ YFINANCE (CÓ LÀM SẠCH NGAY)
+# 4. HÀM CÀO DỮ LIỆU TỪ YFINANCE (NÂNG CẤP: BỎ GIỚI HẠN NĂM)
 # ==========================================
-def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020):
+def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000):
+    """Đã hạ min_year xuống 2000 để lấy sạch lịch sử"""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_type_vn = TRANSLATION_MAP.get(statement_type_raw, statement_type_raw)
@@ -264,7 +264,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
                         if pd.notna(val):
                             try: float_val = float(val)
                             except: continue
-                            # --- LÀM SẠCH NGAY: Bỏ qua NaN, vô cực và số 0 ---
+                            # LÀM SẠCH 100%: Bỏ qua NaN, vô cực và số 0
                             if pd.isna(float_val) or float_val == float('inf') or float_val == float('-inf') or float_val == 0: 
                                 continue
                             
@@ -278,7 +278,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2020
     except Exception: pass
     return records
 
-def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
+def fetch_historical_dividends(symbol, ticker_obj, min_year=2000):
     records = []
     company_name, sector_name = get_company_profile(symbol)
     try:
@@ -288,7 +288,6 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2020):
                 date_str = str(date_idx).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
                 if year_val.isdigit() and int(year_val) >= min_year:
-                    # LÀM SẠCH NGAY: Giá trị phải > 0
                     if pd.notna(div_val) and float(div_val) > 0:
                         records.append({
                             'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -346,7 +345,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
             if val is not None:
                 try:
                     float_val = float(val)
-                    # LÀM SẠCH NGAY
                     if pd.isna(float_val) or float_val == float('inf') or float_val == float('-inf') or float_val == 0: 
                         continue
                 except: continue
@@ -379,7 +377,6 @@ def fetch_market_indices():
             change_pct = (change_val / prev_close) * 100 if prev_close else 0
             
             for name, val in [('Giá trị chỉ số', current_val), ('Biến động điểm (Change)', change_val), ('Biến động phần trăm (Percent Change)', change_pct)]:
-                # LÀM SẠCH NGAY
                 if pd.notna(val) and float(val) != 0:
                     market_records.append({
                         'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
@@ -391,7 +388,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (CÓ LÀM SẠCH NGAY)
+# 5. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (NÂNG CẤP: BỎ GIỚI HẠN NĂM)
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -408,13 +405,13 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
             if col_str in ['item', 'item_en', 'unit', 'ticker', 'year', 'quarter', 'date', 'period', 'id', 'name', 'order', 'level', 'off_balance', 'category']: continue
             
             year_val = col_str.split('-')[0].split(' ')[0].strip()
-            if not year_val.isdigit() or int(year_val) < 2020: continue
+            # Đã hạ mốc năm xuống 2000
+            if not year_val.isdigit() or int(year_val) < 2000: continue
 
             val = row[col]
             if pd.notna(val):
                 try: float_val = float(val)
                 except: continue
-                # --- LÀM SẠCH NGAY: Bỏ qua số 0, NaN, vô cực ---
                 if pd.isna(float_val) or float_val in [float('inf'), float('-inf')] or float_val == 0: 
                     continue
                 
@@ -429,7 +426,7 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 def fetch_vnstock_financials(symbol):
     records = []
     try:
-        time.sleep(0.5) # Nghỉ ngắn tránh Rate Limit
+        time.sleep(0.5) 
         fin = Fundamental().equity(symbol)
         
         try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
@@ -450,7 +447,7 @@ def fetch_vnstock_financials(symbol):
             quote_df = Market().equity(symbol).quote()
             if quote_df is not None and not quote_df.empty:
                 price = float(quote_df.iloc[0].get('close_price', 0))
-                if price > 0: # LÀM SẠCH NGAY
+                if price > 0:
                     company_name, sector_name = get_company_profile(symbol)
                     records.append({
                         'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -464,18 +461,18 @@ def fetch_vnstock_financials(symbol):
     return records
 
 # ==========================================
-# 5B. HÀM CÀO DỮ LIỆU TỪ VNFINANCIALDATA (NÂNG CẤP)
+# 5B. HÀM CÀO DỮ LIỆU TỪ VNFINANCIALDATA (NÂNG CẤP LẤY CẢ BẢNG RATIO)
 # ==========================================
 def fetch_vnfinancialdata_bulk(ticker_market_map):
-    """Tải toàn bộ HSX và HNX một lần, lọc mã, và LÀM SẠCH NGAY"""
+    """Tải toàn bộ HSX và HNX một lần, thêm bảng Ratio để lấy vốn hóa, cổ tức"""
     records = []
     statements = {
         "balance_sheet": "Bảng cân đối kế toán",
         "income_statement": "Báo cáo kết quả kinh doanh",
-        "cash_flow": "Báo cáo lưu chuyển tiền tệ"
+        "cash_flow": "Báo cáo lưu chuyển tiền tệ",
+        "ratio": "Chỉ số tài chính & Định giá" # NÂNG CẤP: Thêm bảng ratio
     }
     
-    # Mã chuẩn hóa để lọc
     target_symbols = set(ticker_market_map.keys())
 
     for exchange in ["HSX", "HNX"]:
@@ -486,26 +483,25 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                 if df is not None and not df.empty:
                     # Chuẩn hóa tên cột
                     df = df.rename(columns={'ticker': 'Mã chứng khoán', 'year': 'Năm', 'item_name': 'Chỉ tiêu tiếng Việt', 'value': 'Giá trị'})
-                    
-                    # Chỉ lọc các mã trong danh sách 242
                     df = df[df['Mã chứng khoán'].isin(target_symbols)]
                     
                     for _, row in df.iterrows():
                         val = row['Giá trị']
-                        # --- LÀM SẠCH NGAY TẠI ĐÂY ---
                         try: float_val = float(val)
                         except: continue
                         
+                        # LÀM SẠCH 100%
                         if pd.isna(float_val) or float_val in [float('inf'), float('-inf')] or float_val == 0:
                             continue
                         
                         symbol = row['Mã chứng khoán']
                         company_name, sector_name = get_company_profile(symbol)
+                        year_val = str(row['Năm'])
                         
                         records.append({
                             'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                             'Tên ngành': sector_name, 'Loại báo cáo': stmt_name,
-                            'Loại kỳ': 'Năm', 'Năm': str(row['Năm']), 'Ngày kỳ': f"{row['Năm']}-12-31",
+                            'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': f"{year_val}-12-31",
                             'Chỉ tiêu tiếng Việt': translate_metric(row['Chỉ tiêu tiếng Việt']), 'Giá trị': float_val
                         })
             except Exception as e:
