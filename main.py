@@ -126,7 +126,7 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. TỪ ĐIỂN DỊCH THUẬT (PHỤC HỒI NGUYÊN VẸN 100%)
+# 3. TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN BẢN GỐC)
 # ==========================================
 TRANSLATION_MAP = {
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -213,13 +213,12 @@ TRANSLATION_MAP = {
 }
 
 # ==========================================
-# 4. HÀM XỬ LÝ DỊCH VÀ LÀM SẠCH TỨC THÌ
+# 4. HÀM XỬ LÝ DỊCH, VÁ CHỮ CẮT CỤT VÀ LÀM SẠCH
 # ==========================================
 def translate_metric(metric_original, is_vn=False):
     """Trả về None nếu không thể dịch (để xóa rác)."""
     cleaned_key = str(metric_original).strip()
     
-    # Nếu dữ liệu gốc đã là tiếng Việt chuẩn, trả về luôn
     if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
         return cleaned_key
     
@@ -254,15 +253,39 @@ def translate_metric(metric_original, is_vn=False):
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
     
-    # Nếu không dịch được -> Trả về None để code bỏ qua dòng rác
+    # Trả về None để code bỏ qua dòng rác
     return None
 
+def fix_truncated_text(text):
+    """Vá các từ bị cắt cụt từ nguồn vnfinancialdata"""
+    text = str(text).strip()
+    fixes = {
+        "Các khoản phải": "Các khoản phải thu",
+        "Lợi nhuận trước": "Lợi nhuận trước thuế",
+        "Thuế và các kho": "Thuế và các khoản phải nộp",
+        "Tiền và tương đ": "Tiền và tương đương tiền",
+        "TỔNG CỘNG N": "TỔNG CỘNG NỢ PHẢI TRẢ",
+        "VỐN CHỦ SỞ H": "VỐN CHỦ SỞ HỮU",
+        "Chi phí phải trả": "Chi phí phải trả",
+        "Chi phí trả trước": "Chi phí trả trước",
+        "Cổ phiếu phổ thô": "Cổ phiếu phổ thông",
+        "Đầu tư dài hạn k": "Đầu tư dài hạn khác",
+        "Lợi nhuận thuần": "Lợi nhuận thuần",
+        "Lưu chuyển tiền": "Lưu chuyển tiền thuần",
+        "Lãi / Lỗ từ đánh": "Lãi / Lỗ từ đánh giá lại tài sản",
+        "Tổng tài sản": "Tổng tài sản"
+    }
+    for k, v in fixes.items():
+        if text.startswith(k):
+            return v
+    return text
+
 def format_value(x):
-    """Xóa đuôi .0 thừa và giữ đúng số thập phân"""
-    if pd.isna(x) or x == 0: return x
+    """Trả về String để xóa đuôi .0"""
+    if pd.isna(x) or x == 0: return str(x)
     if x == int(x):
-        return int(x)
-    return float(f"{x:.4f}".rstrip('0').rstrip('.'))
+        return str(int(x))
+    return str(round(x, 4))
 
 # ==========================================
 # 5. CÁC HÀM CÀO DỮ LIỆU TỪ YFINANCE
@@ -286,6 +309,11 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000
                             
                             metric_vn = translate_metric(str(row_idx).strip())
                             if not metric_vn: continue
+                            
+                            # LỌC LOGIC (Xóa Tài sản khỏi báo cáo LCTT/KQKD)
+                            if statement_type_vn in ['Báo cáo lưu chuyển tiền tệ', 'Báo cáo kết quả kinh doanh']:
+                                if any(x in metric_vn for x in ['Tài sản', 'Nợ phải trả', 'Vốn chủ sở hữu']):
+                                    continue
                             
                             records.append({
                                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -434,6 +462,11 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
                 if pd.isna(float_val) or float_val in [float('inf'), float('-inf')] or float_val == 0: 
                     continue
                 
+                # LỌC LOGIC
+                if statement_type_vn in ['Báo cáo lưu chuyển tiền tệ', 'Báo cáo kết quả kinh doanh']:
+                    if any(x in metric_vn for x in ['Tài sản', 'Nợ phải trả', 'Vốn chủ sở hữu']):
+                        continue
+                
                 records.append({
                     'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                     'Tên ngành': sector_name, 'Loại báo cáo': statement_type_vn,
@@ -448,7 +481,6 @@ def fetch_vnstock_financials(symbol):
         time.sleep(1.0) 
         fin = Fundamental().equity(symbol)
         
-        # Lấy sạch 3 bảng
         try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
         except Exception: pass
         try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
@@ -530,12 +562,19 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                     company_name, sector_name = get_company_profile(symbol)
                     year_val = str(row['Năm'])
                     
+                    # VÁ CHỮ CẮT CỤT
+                    metric_vn = fix_truncated_text(translate_metric(row['Chỉ tiêu tiếng Việt'], is_vn=True))
+                    
+                    # LỌC LOGIC
+                    if stmt_name in ['Báo cáo lưu chuyển tiền tệ', 'Báo cáo kết quả kinh doanh']:
+                        if any(x in metric_vn for x in ['Tài sản', 'Nợ phải trả', 'Vốn chủ sở hữu']):
+                            continue
+
                     records.append({
                         'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                         'Tên ngành': sector_name, 'Loại báo cáo': stmt_name,
                         'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': f"{year_val}-12-31",
-                        'Chỉ tiêu tiếng Việt': translate_metric(row['Chỉ tiêu tiếng Việt'], is_vn=True), 
-                        'Giá trị': float_val
+                        'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': float_val
                     })
             except Exception as e:
                 print(f"  ⚠️ Lỗi tải {stmt_name} cho {exchange}: {e}")
@@ -619,18 +658,23 @@ def main():
     
     # --- QUY TRÌNH LÀM SẠCH DỮ LIỆU BẰNG PANDAS (LỚP BẢO VỆ CUỐI CÙNG) ---
     if not df_master.empty:
-        # 1. Xóa trùng lặp
-        df_master = df_master.drop_duplicates()
+        # 1. Xóa NaN
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-        df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
         
-        # 2. XÓA CÁC DÒNG CÓ GIÁ TRỊ = 0
+        # 2. CHUẨN HÓA CHUỖI (Xóa khoảng trắng thừa để lọc trùng lặp triệt để)
+        df_master['Chỉ tiêu tiếng Việt'] = df_master['Chỉ tiêu tiếng Việt'].astype(str).str.strip()
+        
+        # 3. Ép kiểu số và xóa giá trị 0
+        df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce').fillna(0.0)
         df_valid = df_master[df_master['Giá trị'] != 0].copy()
         
-        # 3. CHUẨN HÓA ĐỊNH DẠNG SỐ (XÓA ĐUÔI .0 THỪA)
+        # 4. XÓA TRÙNG LẶP (Dựa trên 5 trường cốt lõi)
+        df_valid = df_valid.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'])
+        
+        # 5. CHUẨN HÓA ĐỊNH DẠNG SỐ (Biến thành String để xóa đuôi .0)
         df_valid['Giá trị'] = df_valid['Giá trị'].apply(format_value)
         
-        # 4. ĐẢM BẢO ĐỦ 242 MÃ
+        # 6. ĐẢM BẢO ĐỦ 242 MÃ
         valid_symbols = set(df_valid['Mã chứng khoán'].unique())
         all_symbols = set(ticker_market_map.keys())
         missing_symbols = all_symbols - valid_symbols
@@ -643,11 +687,11 @@ def main():
                     'Mã chứng khoán': missing, 'Tên doanh nghiệp': comp_name,
                     'Tên ngành': sec_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
                     'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                    'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': 0
+                    'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': '0'
                 })
             df_valid = pd.concat([df_valid, pd.DataFrame(fallback_rows)], ignore_index=True)
 
-        # 5. Chỉ giữ 9 cột chuẩn và sắp xếp
+        # 7. Chỉ giữ 9 cột chuẩn và sắp xếp
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         df_master = df_valid[standard_cols]
         df_master = df_master.sort_values(by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], ascending=[True, True, True, False, False])
