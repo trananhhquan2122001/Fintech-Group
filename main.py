@@ -471,7 +471,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK
+# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (NÂNG CẤP CHỐNG CHẶN API)
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -505,40 +505,50 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 
 def fetch_vnstock_financials(symbol):
     records = []
-    try:
-        time.sleep(1.0) 
-        fin = Fundamental().equity(symbol)
-        
-        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
-        except Exception: pass
-        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
-        except Exception: pass
-        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
-        except Exception: pass
-        
-        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
-        except Exception: pass
-        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
-        except Exception: pass
-        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
-        except Exception: pass
-
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
-            quote_df = Market().equity(symbol).quote()
-            if quote_df is not None and not quote_df.empty:
-                price = float(quote_df.iloc[0].get('close_price', 0))
-                formatted_price = format_value(price)
-                if formatted_price:
-                    company_name, sector_name = get_company_profile(symbol)
-                    records.append({
-                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                        'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                        'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_price
-                    })
-        except Exception: pass
-        
-    except Exception: pass
+            # Tăng thời gian nghỉ lên 2 giây để tránh Rate Limit
+            time.sleep(2.0) 
+            fin = Fundamental().equity(symbol)
+            
+            try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
+            except Exception: pass
+            try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
+            except Exception: pass
+            try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
+            except Exception: pass
+            
+            try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
+            except Exception: pass
+            try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
+            except Exception: pass
+            try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
+            except Exception: pass
+
+            try:
+                quote_df = Market().equity(symbol).quote()
+                if quote_df is not None and not quote_df.empty:
+                    price = float(quote_df.iloc[0].get('close_price', 0))
+                    formatted_price = format_value(price)
+                    if formatted_price:
+                        company_name, sector_name = get_company_profile(symbol)
+                        records.append({
+                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+                            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_price
+                        })
+            except Exception: pass
+            
+            # Nếu lấy được dữ liệu thì thoát khỏi vòng lặp retry
+            if records: break
+            
+        except Exception as e:
+            # Nếu lỗi (Rate Limit), in ra và thử lại
+            print(f" ⚠️ Đang thử lại mã {symbol} lần {attempt + 1} do lỗi API...")
+            time.sleep(5) # Nghỉ lâu hơn nếu bị chặn
+            
     return records
 
 # ==========================================
@@ -663,9 +673,10 @@ def main():
     if index_recs: all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"\n🔄 BƯỚC 3: Cào bổ sung yfinance + vnstock...")
+    print(f"\n🔄 BƯỚC 3: Cào bổ sung yfinance + vnstock (Chạy đơn luồng để không bị block API)...")
     
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    # NÂNG CẤP: Chạy đơn luồng max_workers=1
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
             symbol = futures[future]
@@ -674,8 +685,7 @@ def main():
                 if res:
                     all_master_records.extend(res)
                     success_count += 1
-                    if success_count % 20 == 0:
-                        print(f"  [{success_count}/{total_tickers}] Đã xử lý: {symbol}")
+                    print(f"  [{success_count}/{total_tickers}] Đã xử lý: {symbol} ({len(res)} dòng)")
             except Exception as e:
                 print(f"Lỗi xử lý mã {symbol}: {e}")
 
