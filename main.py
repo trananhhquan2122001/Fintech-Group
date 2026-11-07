@@ -5,7 +5,6 @@ import pandas as pd
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from decimal import Decimal, ROUND_HALF_UP
 
 # ==========================================
 # 1. TÍCH HỢP API KEY VÀ CÀI ĐẶT THƯ VIỆN
@@ -297,6 +296,14 @@ def translate_metric(metric_original, is_vn=False):
     cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
     return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
 
+def final_format_for_csv(x):
+    """Định dạng đầu ra CSV: Số nguyên thì bỏ đuôi .0, số thực thì giữ 4 chữ số thập phân"""
+    if pd.isna(x): return ""
+    val = float(x)
+    if val.is_integer():
+        return str(int(val))
+    return str(round(val, 4))
+
 # ==========================================
 # 5. CÁC HÀM CÀO DỮ LIỆU TỪ YFINANCE
 # ==========================================
@@ -399,12 +406,9 @@ def fetch_market_indices():
     for index_name, ticker_symbol in indices.items():
         try:
             t = yf.Ticker(ticker_symbol, session=session)
-            info = t.info
-            current_val = info.get('regularMarketPrice') or info.get('currentPrice') or info.get('previousClose', 0)
-            if not current_val:
-                hist = t.history(period="1mo")
-                if not hist.empty: current_val = float(hist['Close'].iloc[-1])
-            prev_close = info.get('previousClose', current_val)
+            info = t.fast_info
+            current_val = info.get('last_price') or info.get('previous_close', 0)
+            prev_close = info.get('previous_close', current_val)
             change_val = current_val - prev_close
             change_pct = (change_val / prev_close) * 100 if prev_close else 0
             
@@ -667,6 +671,9 @@ def main():
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         df_master = df_valid[standard_cols]
         df_master = df_master.sort_values(by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], ascending=[True, True, True, False, False])
+
+        # 7. ĐỊNH DẠNG SỐ LẦN CUỐI (XÓA ĐUÔI .0)
+        df_master['Giá trị'] = df_master['Giá trị'].apply(final_format_for_csv)
 
     print("\n💾 Đang kết xuất tệp CSV...")
     os.makedirs('data', exist_ok=True)
