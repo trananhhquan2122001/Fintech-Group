@@ -359,14 +359,23 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
     current_price = 0.0; shares_out = 0.0; market_cap = 0.0; div_yield = 0.0
+    
     try:
-        # SỬA LỖI TREO 40 PHÚT: Dùng fast_info thay vì info để tránh bị Yahoo chặn 429
-        info = ticker_obj.fast_info if ticker_obj else {}
-        current_price = info.get('last_price', 0.0)
-        shares_out = info.get('shares', 0.0)
-        market_cap = info.get('market_cap', 0.0)
-        div_yield = 0.0 # fast_info không có dividendYield
-        
+        if ticker_obj:
+            # 1. Lấy Giá từ Lịch sử giao dịch (chắc chắn 100% không lỗi)
+            hist = ticker_obj.history(period="5d")
+            if not hist.empty:
+                current_price = float(hist['Close'].iloc[-1])
+            
+            # 2. Lấy Số lượng cổ phiếu
+            try:
+                info = ticker_obj.info
+                shares_out = float(info.get('sharesOutstanding', 0) or 0)
+                div_yield = float(info.get('dividendYield', 0) or 0) * 100 if info.get('dividendYield') else 0.0
+            except:
+                pass
+
+        # 3. Fallback shares từ Bảng cân đối kế toán
         if (not shares_out or shares_out == 0.0) and balance_sheet_df is not None and not balance_sheet_df.empty:
             for row_idx in balance_sheet_df.index:
                 row_str = str(row_idx).lower()
@@ -377,6 +386,8 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                             shares_out = float(val)
                             break
                     if shares_out: break
+                    
+        # 4. Tính Vốn hóa
         if (not market_cap or market_cap == 0.0) and current_price > 0 and shares_out > 0:
             market_cap = current_price * shares_out
             
@@ -406,9 +417,10 @@ def fetch_market_indices():
     for index_name, ticker_symbol in indices.items():
         try:
             t = yf.Ticker(ticker_symbol, session=session)
-            info = t.fast_info
-            current_val = info.get('last_price') or info.get('previous_close', 0)
-            prev_close = info.get('previous_close', current_val)
+            # Lấy giá từ history thay vì fast_info
+            hist = t.history(period="5d")
+            current_val = float(hist['Close'].iloc[-1]) if not hist.empty else 0
+            prev_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_val
             change_val = current_val - prev_close
             change_pct = (change_val / prev_close) * 100 if prev_close else 0
             
@@ -457,10 +469,10 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 
 def fetch_vnstock_financials(symbol):
     records = []
-    max_retries = 2 # Giảm số lần thử lại để không bị treo
+    max_retries = 2 
     for attempt in range(max_retries):
         try:
-            time.sleep(1.5) # Giảm thời gian chờ
+            time.sleep(1.5)
             fin = Fundamental().equity(symbol)
             
             # Lấy sạch 3 bảng Năm và Quý
@@ -619,7 +631,6 @@ def main():
     total_tickers = len(ticker_market_map)
     print(f"\n🔄 BƯỚC 3: Cào bổ sung yfinance + vnstock...")
     
-    # Tăng lên 3 luồng để chạy nhanh hơn (từ 40 phút xuống ~10 phút) mà không bị chặn API
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
@@ -686,6 +697,19 @@ def main():
     print(f" - Tổng số dòng dữ liệu: {len(df_master):,}")
     print(f" - Số mã: {len(df_master['Mã chứng khoán'].unique())}/242")
     print(f" - Kích thước file: {file_size_mb:.2f} MB")
+    print(f"==================================================")
+
+    # --- BÁO CÁO KIỂM TRA TỰ ĐỘNG ---
+    df_check = pd.read_csv(csv_path)
+    prices = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại']
+    shares = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành']
+    valid_p = set(prices[prices['Giá trị'].astype(float) > 0]['Mã chứng khoán'].unique())
+    valid_s = set(shares[shares['Giá trị'].astype(float) > 0]['Mã chứng khoán'].unique())
+    both = valid_p.intersection(valid_s)
+    print(f" 🔍 KIỂM TRA CHẤT LƯỢNG GIÁ & SLCP:")
+    print(f" - Mã có Giá (>0): {len(valid_p)}/242 mã")
+    print(f" - Mã có SLCP (>0): {len(valid_s)}/242 mã")
+    print(f" - Mã có CẢ 2: {len(both)}/242 mã")
     print(f"==================================================")
 
 if __name__ == "__main__":
