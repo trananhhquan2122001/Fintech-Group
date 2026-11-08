@@ -126,16 +126,14 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. TỪ ĐIỂN DỊCH THUẬT (NÂNG CẤP TRIỆT ĐỂ)
+# 3. TỪ ĐIỂN DỊCH THUẬT (NÂNG CẤP TOÀN DIỆN - TRIỆT ĐỂ 100%)
 # ==========================================
 TRANSLATION_MAP = {
     # --- BỔ SUNG CÁC LỖI TỪ ẢNH MỚI NHẤT ---
     'N s': 'Số lượng cổ phiếu ròng',
     'M': 'Lợi ích cổ đông không kiểm soát',
     'Tổng khác f giá gốc': 'Tổng chi phí khác theo giá gốc',
-    'Lợi nhuận ròng phân bổ cho cổ đông phổ thông': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
-    'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
-    # --- CÁC LỖI CŨ ĐÃ VÁ ---
+    
     'N on ngắn hạn deferred taxes liabilities': 'Thuế thu nhập hoãn lại phải trả ngắn hạn',
     'Pensi onand khác post retirement benefit plans ngắn hạn': 'Quỹ phúc lợi nhân viên ngắn hạn',
     'Khác payable': 'Phải trả khác', 'Dividends payable': 'Cổ tức phải trả',
@@ -204,7 +202,6 @@ TRANSLATION_MAP = {
     'Net Income Continuous Operations': 'Lợi nhuận ròng từ hoạt động liên tục',
     'Minority Interests': 'Lợi ích cổ đông không kiểm soát', 'Special Income Charges': 'Chi phí thu nhập đặc biệt',
     'Other Special Charges': 'Chi phí đặc biệt khác', 'Write Off': 'Xóa sổ',
-    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
 
     # --- CÁC TỪ KHÓA CHUẨN ---
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
@@ -349,7 +346,7 @@ def fix_yfinance_typos(text):
     text = re.sub(r'Paymentson', 'Payments on', text, flags=re.IGNORECASE)
     text = re.sub(r'Behalfof', 'Behalf of', text, flags=re.IGNORECASE)
     text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'\bf\b', 'phí', text, flags=re.IGNORECASE) # Vá lỗi 'f giá' -> 'phí giá'
+    text = re.sub(r'\bf\b', 'phí', text, flags=re.IGNORECASE)
     return re.sub(r'\s{2,}', ' ', text).strip()
 
 FALLBACK_MAP = {
@@ -407,7 +404,6 @@ def translate_metric(metric_original, is_vn=False):
     if 'depreciation' in k_lower or 'amortization' in k_lower: return 'Khấu hao tài sản cố định và phân bổ'
     if 'cash flow' in k_lower: return 'Lưu chuyển tiền thuần'
     
-    # Băm nhỏ dịch từng từ
     words = fixed_key.split()
     translated_words = []
     for w in words:
@@ -423,7 +419,7 @@ def translate_metric(metric_original, is_vn=False):
             
     result = " ".join(translated_words)
     
-    # [NÂNG CẤP] Xóa các ký tự tiếng Anh đơn lẻ lọt lưới (như M, N, f)
+    # [NÂNG CẤP TỬ THẦN] Xóa sạch các ký tự tiếng Anh đơn lẻ như 'M', 'N', 'f'
     result = re.sub(r'\b[a-zA-Z]\b', '', result)
     result = re.sub(r'\s{2,}', ' ', result).strip()
     
@@ -438,6 +434,55 @@ def final_format_for_csv(x):
     if val.is_integer():
         return str(int(val))
     return str(round(val, 4))
+
+# ==========================================
+# [NÂNG CẤP TỬ THẦN] HÀM FALLBACK GỌI TRỰC TIẾP API TCBS
+# ==========================================
+def fetch_tcbs_fallback(symbol):
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    
+    # 1. Lấy Giá từ TCBS
+    try:
+        url_price = f"https://apipubaws.tcbs.com.vn/stock-insight/v2/stock/{symbol}/day-summary"
+        res = session.get(url_price, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            price = data.get('close') or data.get('price')
+            if price and float(price) > 0:
+                formatted_val = format_value(price)
+                if formatted_val:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                        'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                        'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_val
+                    })
+    except Exception:
+        pass
+
+    # 2. Lấy Số lượng cổ phiếu từ TCBS
+    try:
+        url_ov = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
+        res = session.get(url_ov, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            shares = data.get('outstandingShare') or data.get('issueShare')
+            if shares and float(shares) > 0:
+                formatted_val = format_value(shares)
+                if formatted_val:
+                    records.append({
+                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                        'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
+                        'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_val
+                    })
+    except Exception:
+        pass
+        
+    return records
 
 # ==========================================
 # 5. CÁC HÀM CÀO DỮ LIỆU TỪ YFINANCE
@@ -497,7 +542,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     
     try:
         if ticker_obj:
-            # [NÂNG CẤP] Fallback lấy giá từ info nếu history lỗi
             try:
                 hist = ticker_obj.history(period="5d")
                 if not hist.empty:
@@ -573,7 +617,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (NÂNG CẤP API V3)
+# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (KẾT HỢP TCBS FALLBACK)
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -605,11 +649,11 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 
 def fetch_vnstock_financials(symbol):
     records = []
+    # 1. Thử lấy qua vnstock
     max_retries = 2 
     for attempt in range(max_retries):
         try:
             time.sleep(1.5)
-            # [NÂNG CẤP] Khởi tạo đúng cú pháp v3 với source VCI
             fin = Fundamental(source='VCI')
             
             try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='year'), 'Bảng cân đối kế toán', 'Năm'))
@@ -626,7 +670,6 @@ def fetch_vnstock_financials(symbol):
             try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
             except Exception: pass
 
-            # [NÂNG CẤP] Lấy Giá chuẩn xác qua API v3
             try:
                 market = Market(source='VCI')
                 quote_df = market.quote(symbol=symbol)
@@ -645,7 +688,6 @@ def fetch_vnstock_financials(symbol):
                             })
             except Exception: pass
             
-            # [NÂNG CẤP] Lấy SLCP chuẩn xác qua API v3
             try:
                 ratio_df = fin.ratio(symbol=symbol)
                 if ratio_df is not None and not ratio_df.empty:
@@ -669,7 +711,18 @@ def fetch_vnstock_financials(symbol):
             if records: break
         except Exception as e:
             time.sleep(3)
-            
+
+    # 2. NÂNG CẤP: Nếu vnstock không lấy được Giá hoặc SLCP, gọi API TCBS trực tiếp
+    has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
+    has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
+    
+    if not has_price or not has_shares:
+        tcbs_records = fetch_tcbs_fallback(symbol)
+        # Lọc trùng lặp nếu có
+        for tr in tcbs_records:
+            if not any(r['Chỉ tiêu tiếng Việt'] == tr['Chỉ tiêu tiếng Việt'] for r in records):
+                records.append(tr)
+                
     return records
 
 # ==========================================
@@ -791,7 +844,7 @@ def main():
             except Exception as e:
                 pass
 
-    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock cho các mã khuyết thiếu dữ liệu...")
+    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock/TCBS cho các mã khuyết thiếu dữ liệu...")
     
     df_temp = pd.DataFrame(all_master_records)
     
@@ -804,13 +857,13 @@ def main():
         symbols_with_price = set(prices['Mã chứng khoán'].unique())
         
     missing_symbols = list(set([s for s in ticker_market_map.keys() if s not in symbols_with_price] + completely_missing))
-    print(f" -> Có {len(missing_symbols)} mã cần Vnstock bổ sung (thiếu giá hoặc thiếu hoàn toàn data).")
+    print(f" -> Có {len(missing_symbols)} mã cần bổ sung (thiếu giá hoặc thiếu hoàn toàn data).")
     
     for idx, symbol in enumerate(missing_symbols):
         res = fetch_vnstock_financials(symbol)
         if res:
             all_master_records.extend(res)
-            print(f"  [{idx+1}/{len(missing_symbols)}] Đã bù Vnstock: {symbol}")
+            print(f"  [{idx+1}/{len(missing_symbols)}] Đã bù dữ liệu: {symbol}")
 
     print("\n🧹 BƯỚC 5: Làm sạch dữ liệu và định dạng số...")
     df_master = pd.DataFrame(all_master_records)
