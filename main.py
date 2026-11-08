@@ -126,7 +126,7 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. TỪ ĐIỂN DỊCH THUẬT (NÂNG CẤP TOÀN DIỆN - TRIỆT ĐỂ 100%)
+# 3. TỪ ĐIỂN DỊCH THUẬT (NÂNG CẤP TOÀN DIỆN)
 # ==========================================
 TRANSLATION_MAP = {
     # --- BỔ SUNG CÁC LỖI TỪ ẢNH MỚI NHẤT ---
@@ -376,13 +376,19 @@ FALLBACK_MAP = {
 def translate_metric(metric_original, is_vn=False):
     cleaned_key = clean_text(metric_original)
     
-    if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
-        return cleaned_key
-    
+    # 1. Kiểm tra từ điển chính xác trước (áp dụng cho cả tiếng Anh lẫn tiếng Việt lỗi)
     if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): return vie_v
 
+    # 2. Nếu là tiếng Việt, tiến hành làm sạch các từ tiếng Anh lọt lưới (như M, N s)
+    if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
+        cleaned_key = re.sub(r'\bM\b', 'Lợi ích cổ đông không kiểm soát', cleaned_key)
+        cleaned_key = re.sub(r'\bN s\b', 'Số lượng cổ phiếu ròng', cleaned_key)
+        cleaned_key = cleaned_key.replace('f giá gốc', 'phí giá gốc')
+        return cleaned_key
+
+    # 3. Tiếp tục xử lý cho tiếng Anh
     fixed_key = fix_yfinance_typos(cleaned_key)
     if fixed_key in TRANSLATION_MAP: return TRANSLATION_MAP[fixed_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
@@ -419,7 +425,7 @@ def translate_metric(metric_original, is_vn=False):
             
     result = " ".join(translated_words)
     
-    # [NÂNG CẤP TỬ THẦN] Xóa sạch các ký tự tiếng Anh đơn lẻ như 'M', 'N', 'f'
+    # Xóa sạch các ký tự tiếng Anh đơn lẻ như 'M', 'N', 'f'
     result = re.sub(r'\b[a-zA-Z]\b', '', result)
     result = re.sub(r'\s{2,}', ' ', result).strip()
     
@@ -436,15 +442,13 @@ def final_format_for_csv(x):
     return str(round(val, 4))
 
 # ==========================================
-# [NÂNG CẤP TỬ THẦN] HÀM FALLBACK GỌI TRỰC TIẾP API TCBS
+# [NÂNG CẤP TỬ THẦN] CÁC HÀM FALLBACK API
 # ==========================================
 def fetch_tcbs_fallback(symbol):
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
-    
-    # 1. Lấy Giá từ TCBS
     try:
         url_price = f"https://apipubaws.tcbs.com.vn/stock-insight/v2/stock/{symbol}/day-summary"
         res = session.get(url_price, timeout=10)
@@ -454,16 +458,8 @@ def fetch_tcbs_fallback(symbol):
             if price and float(price) > 0:
                 formatted_val = format_value(price)
                 if formatted_val:
-                    records.append({
-                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                        'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
-                        'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_val
-                    })
-    except Exception:
-        pass
-
-    # 2. Lấy Số lượng cổ phiếu từ TCBS
+                    records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_val})
+    except Exception: pass
     try:
         url_ov = f"https://apipubaws.tcbs.com.vn/tcanalysis/v1/ticker/{symbol}/overview"
         res = session.get(url_ov, timeout=10)
@@ -473,15 +469,65 @@ def fetch_tcbs_fallback(symbol):
             if shares and float(shares) > 0:
                 formatted_val = format_value(shares)
                 if formatted_val:
-                    records.append({
-                        'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                        'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                        'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str,
-                        'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_val
-                    })
-    except Exception:
-        pass
-        
+                    records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_val})
+    except Exception: pass
+    return records
+
+def fetch_vps_fallback(symbol):
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    try:
+        url = f"https://bgapidatafeed.vps.com.vn/getliststockdata/{symbol}"
+        res = session.get(url, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if isinstance(data, list) and len(data) > 0:
+                item = data[0]
+                price = item.get('lastPrice') or item.get('closePrice')
+                shares = item.get('listedShare') or item.get('issueShare')
+                
+                if price and float(price) > 0:
+                    formatted_val = format_value(price)
+                    if formatted_val:
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_val})
+                if shares and float(shares) > 0:
+                    formatted_val = format_value(shares)
+                    if formatted_val:
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_val})
+    except Exception: pass
+    return records
+
+def fetch_vndirect_fallback(symbol):
+    records = []
+    company_name, sector_name = get_company_profile(symbol)
+    current_year = str(datetime.now().year)
+    today_str = datetime.today().strftime('%Y-%m-%d')
+    try:
+        url_p = f"https://api-finfo.vndirect.com.vn/v4/stock_prices?sort=date:desc&q=code:{symbol}&size=1"
+        res = session.get(url_p, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('data') and len(data['data']) > 0:
+                price = data['data'][0].get('close')
+                if price and float(price) > 0:
+                    formatted_val = format_value(price)
+                    if formatted_val:
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_val})
+    except Exception: pass
+    try:
+        url_s = f"https://api-finfo.vndirect.com.vn/v4/company_statistics?q=code:{symbol}"
+        res = session.get(url_s, timeout=10)
+        if res.status_code == 200:
+            data = res.json()
+            if data.get('data') and len(data['data']) > 0:
+                shares = data['data'][0].get('listedShare') or data['data'][0].get('issueShare')
+                if shares and float(shares) > 0:
+                    formatted_val = format_value(shares)
+                    if formatted_val:
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_val})
+    except Exception: pass
     return records
 
 # ==========================================
@@ -546,8 +592,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 hist = ticker_obj.history(period="5d")
                 if not hist.empty:
                     current_price = float(hist['Close'].iloc[-1])
-            except:
-                pass
+            except: pass
                 
             try:
                 info = ticker_obj.info
@@ -555,8 +600,7 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                     current_price = float(info.get('regularMarketPrice', 0) or info.get('previousClose', 0) or 0)
                 shares_out = float(info.get('sharesOutstanding', 0) or 0)
                 div_yield = float(info.get('dividendYield', 0) or 0) * 100 if info.get('dividendYield') else 0.0
-            except:
-                pass
+            except: pass
 
         if (not shares_out or shares_out == 0.0) and balance_sheet_df is not None and not balance_sheet_df.empty:
             for row_idx in balance_sheet_df.index:
@@ -617,7 +661,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (KẾT HỢP TCBS FALLBACK)
+# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK & FALLBACK
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -649,76 +693,89 @@ def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
 
 def fetch_vnstock_financials(symbol):
     records = []
-    # 1. Thử lấy qua vnstock
-    max_retries = 2 
-    for attempt in range(max_retries):
+    # 1. Thử lấy qua vnstock VCI
+    try:
+        fin = Fundamental(source='VCI')
+        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='year'), 'Bảng cân đối kế toán', 'Năm'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
+        except Exception: pass
+        
+        try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
+        except Exception: pass
+        try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
+        except Exception: pass
+
         try:
-            time.sleep(1.5)
-            fin = Fundamental(source='VCI')
-            
-            try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='year'), 'Bảng cân đối kế toán', 'Năm'))
-            except Exception: pass
-            try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
-            except Exception: pass
-            try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
-            except Exception: pass
-            
-            try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
-            except Exception: pass
-            try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
-            except Exception: pass
-            try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
-            except Exception: pass
+            market = Market(source='VCI')
+            quote_df = market.quote(symbol=symbol)
+            if quote_df is not None and not quote_df.empty:
+                q = quote_df.iloc[0]
+                price = q.get('close_price') or q.get('match_price') or q.get('price')
+                if price and float(price) > 0:
+                    formatted_price = format_value(price)
+                    if formatted_price is not None:
+                        company_name, sector_name = get_company_profile(symbol)
+                        records.append({
+                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+                            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_price
+                        })
+        except Exception: pass
+        
+        try:
+            ratio_df = fin.ratio(symbol=symbol)
+            if ratio_df is not None and not ratio_df.empty:
+                shares = None
+                for col in ['outstanding_shares', 'issue_share', 'Ordinary Shares Number']:
+                    if col in ratio_df.columns:
+                        shares = ratio_df[col].iloc[0]
+                        break
+                if shares and float(shares) > 0:
+                    formatted_shares = format_value(shares)
+                    if formatted_shares is not None:
+                        company_name, sector_name = get_company_profile(symbol)
+                        records.append({
+                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
+                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
+                            'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_shares
+                        })
+        except Exception: pass
+    except Exception: pass
 
-            try:
-                market = Market(source='VCI')
-                quote_df = market.quote(symbol=symbol)
-                if quote_df is not None and not quote_df.empty:
-                    q = quote_df.iloc[0]
-                    price = q.get('close_price') or q.get('match_price') or q.get('price')
-                    if price and float(price) > 0:
-                        formatted_price = format_value(price)
-                        if formatted_price is not None:
-                            company_name, sector_name = get_company_profile(symbol)
-                            records.append({
-                                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                                'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                                'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': formatted_price
-                            })
-            except Exception: pass
-            
-            try:
-                ratio_df = fin.ratio(symbol=symbol)
-                if ratio_df is not None and not ratio_df.empty:
-                    shares = None
-                    for col in ['outstanding_shares', 'issue_share', 'Ordinary Shares Number']:
-                        if col in ratio_df.columns:
-                            shares = ratio_df[col].iloc[0]
-                            break
-                    if shares and float(shares) > 0:
-                        formatted_shares = format_value(shares)
-                        if formatted_shares is not None:
-                            company_name, sector_name = get_company_profile(symbol)
-                            records.append({
-                                'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                                'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                                'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                                'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': formatted_shares
-                            })
-            except Exception: pass
-
-            if records: break
-        except Exception as e:
-            time.sleep(3)
-
-    # 2. NÂNG CẤP: Nếu vnstock không lấy được Giá hoặc SLCP, gọi API TCBS trực tiếp
+    # 2. NÂNG CẤP: Nếu vnstock không lấy được Giá hoặc SLCP, gọi API Fallback
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
     
     if not has_price or not has_shares:
+        # Thử VPS trước (Rất ít khi chặn IP)
+        vps_recs = fetch_vps_fallback(symbol)
+        for vr in vps_recs:
+            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records):
+                records.append(vr)
+                
+    has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
+    has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
+
+    if not has_price or not has_shares:
+        # Thử VNDirect
+        vnd_recs = fetch_vndirect_fallback(symbol)
+        for vr in vnd_recs:
+            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records):
+                records.append(vr)
+
+    has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
+    has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
+
+    if not has_price or not has_shares:
+        # Thử TCBS
         tcbs_records = fetch_tcbs_fallback(symbol)
-        # Lọc trùng lặp nếu có
         for tr in tcbs_records:
             if not any(r['Chỉ tiêu tiếng Việt'] == tr['Chỉ tiêu tiếng Việt'] for r in records):
                 records.append(tr)
@@ -828,9 +885,9 @@ def main():
     if index_recs: all_master_records.extend(index_recs)
 
     total_tickers = len(ticker_market_map)
-    print(f"\n🔄 BƯỚC 3: Cào Yfinance (max_workers=3)...")
+    print(f"\n🔄 BƯỚC 3: Cào Yfinance (max_workers=5)...")
     
-    with ThreadPoolExecutor(max_workers=3) as executor:
+    with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
             symbol = futures[future]
@@ -844,7 +901,7 @@ def main():
             except Exception as e:
                 pass
 
-    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock/TCBS cho các mã khuyết thiếu dữ liệu...")
+    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock/VPS/VNDirect/TCBS cho các mã khuyết thiếu dữ liệu...")
     
     df_temp = pd.DataFrame(all_master_records)
     
@@ -887,6 +944,7 @@ def main():
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
+    # BÁO CÁO KIỂM TRA CHI TIẾT
     df_check = pd.read_csv(csv_path)
     prices = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại']
     shares = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành']
@@ -895,6 +953,10 @@ def main():
     both = valid_p.intersection(valid_s)
     
     unique_tickers_in_csv = df_check['Mã chứng khoán'].nunique()
+    
+    # Tìm danh sách các mã vẫn còn thiếu (nếu có) để in ra log Github
+    all_targets = set(ticker_market_map.keys())
+    still_missing_both = list(all_targets - both)
     
     print(f"==================================================")
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_master):,}")
@@ -905,6 +967,11 @@ def main():
     print(f" - Mã có Giá (>0): {len(valid_p)}/242 mã")
     print(f" - Mã có SLCP (>0): {len(valid_s)}/242 mã")
     print(f" - Mã có CẢ 2: {len(both)}/242 mã")
+    
+    if still_missing_both:
+        print(f" ⚠️ CÁC MÃ VẪN THIẾU CẢ 2 CHỈ SỐ: {', '.join(still_missing_both)}")
+    else:
+        print(f" ✅ TUYỆT VỜI! ĐÃ LẤY ĐƯỢC 100% GIÁ VÀ SLCP CỦA 242 MÃ.")
     print(f"==================================================")
 
 if __name__ == "__main__":
