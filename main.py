@@ -126,9 +126,49 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN)
+# 3. TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN + NÂNG CẤP)
 # ==========================================
 TRANSLATION_MAP = {
+    # --- [NÂNG CẤP] BỔ SUNG CÁC TỪ KHÓA BỊ SÓT TỪ YFINANCE / VNSTOCK ---
+    'Total Expenses': 'Tổng chi phí',
+    'Diluted NI Available Com Stockholders': 'Lợi nhuận ròng pha loãng phân bổ cho cổ đông phổ thông',
+    'OtherUnder Preferred Stock Dividends': 'Cổ tức cổ phiếu ưu đãi khác',
+    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
+    'Special Income Charges': 'Chi phí thu nhập đặc biệt',
+    'Other Special Charges': 'Chi phí đặc biệt khác',
+    'Write Off': 'Xóa sổ',
+    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
+    'Total Unusual Items': 'Tổng các khoản mục bất thường',
+    'Total Unusual Items Excluding Good': 'Tổng các khoản mục bất thường không bao gồm lợi thế thương mại',
+    'Net Income Continuous Operations': 'Lợi nhuận ròng từ hoạt động liên tục',
+    'Net Income Discontinuous Operations': 'Lợi nhuận ròng từ hoạt động không liên tục',
+    'Net Income Extraordinary': 'Lợi nhuận ròng bất thường',
+    'Net Income From Continuing Operation Net Minority Interest': 'Lợi nhuận ròng từ HĐKD liên tục trừ lợi ích cổ đông không kiểm soát',
+    'Reconciled Depreciation': 'Khấu hao được điều chỉnh',
+    'Total Operating Income As Reported': 'Tổng lợi nhuận HĐKD như báo cáo',
+    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi thuần ngoài HĐKD',
+    'Other Income Expense': 'Thu nhập/chi phí khác',
+    'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
+    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng',
+    'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
+    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
+    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
+    'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
+    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
+    'Net Income Including Noncontrolling Interests': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
+    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
+    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường',
+    'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
+    'Total Revenue': 'Tổng doanh thu',
+    'Operating Revenue': 'Doanh thu thuần',
+    'Cost Of Revenue': 'Giá vốn hàng bán',
+    'Gross Profit': 'Lợi nhuận gộp',
+    'Operating Expense': 'Chi phí hoạt động',
+    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
+    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
+    # --- KẾT THÚC NÂNG CẤP ---
+
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ', 'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông', 'Share Issued': 'Cổ phiếu đã phát hành',
@@ -164,25 +204,14 @@ TRANSLATION_MAP = {
     'Gains Losses Not Affecting Retained Earnings': 'Chênh lệch đánh giá lại tài sản và chênh lệch tỷ giá',
     'Minority Interest': 'Lợi ích cổ đông không kiểm soát', 'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát',
     'Working Capital': 'Vốn lưu động ròng',
-    'Total Revenue': 'Tổng doanh thu', 'Operating Revenue': 'Doanh thu thuần',
-    'Cost Of Revenue': 'Giá vốn hàng bán', 'Gross Profit': 'Lợi nhuận gộp',
-    'Operating Expense': 'Chi phí hoạt động', 'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
     'Selling And Marketing Expense': 'Chi phí bán hàng', 'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
     'Research And Development': 'Chi phí nghiên cứu và phát triển', 'Other Operating Expenses': 'Chi phí hoạt động khác',
-    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh', 'Net Interest Income': 'Thu nhập lãi thuần',
+    'Net Interest Income': 'Thu nhập lãi thuần',
     'Interest Expense': 'Chi phí lãi vay', 'Interest Income': 'Thu nhập lãi',
-    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)', 'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
-    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
-    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa', 'Pretax Income': 'Lợi nhuận kế toán trước thuế',
-    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp', 'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
-    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
-    'Net Income Including Noncontrolling Interests': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
-    'Net Income From Continuing Operation': 'Lợi nhuận sau thuế từ hoạt động tiếp tục',
-    'Net Income From Continuing And Discontinued Operation': 'Lợi nhuận thuần từ hoạt động tiếp tục và không tiếp tục',
-    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường', 'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
+    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
+    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa',
     'Gain On Sale Of Security': 'Lãi / Lỗ từ bán chứng khoán', 'Other Under Preferred Stock Dividend': 'Cổ tức cổ phiếu ưu đãi và điều chỉnh khác',
-    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)', 'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
-    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng', 'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Cash Flow From Continuing Operating Activities': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh tiếp tục',
     'Depreciation Amortization Depletion': 'Khấu hao tài sản cố định và phân bổ',
@@ -216,38 +245,27 @@ TRANSLATION_MAP = {
 # 4. LÕI LÀM SẠCH CHUYÊN SÂU (DEEP CLEANING CORE)
 # ==========================================
 def format_value(x):
-    """
-    Định dạng số cực chuẩn:
-    - Tự động xóa dấu phẩy, dấu chấm phân cách hàng nghìn của VN.
-    - Loại bỏ các số rác (> 1 tỷ tỷ VND).
-    """
     if pd.isna(x): return None
     try:
         if isinstance(x, str):
             x = x.replace(',', '').replace(' ', '')
-            if x.count('.') > 1: # Nếu có nhiều dấu chấm (VD: 6.618.324), xóa hết
+            if x.count('.') > 1: 
                 x = x.replace('.', '')
-                
         val = float(x)
-        
-        # Loại bỏ các số vô lý do lỗi từ nguồn (VD: 6.618.324.611.652.310)
         if abs(val) > 1e15: return None
-        
         if val == 0 or val != val or val in [float('inf'), float('-inf')]: return None
         return round(val, 4)
     except:
         return None
 
 def clean_text(text):
-    """Xóa mọi ký tự ẩn, khoảng trắng thừa, ngắt dòng"""
     if pd.isna(text): return ""
     text = str(text)
-    text = re.sub(r'[\n\r\t]+', ' ', text) # Xóa xuống dòng, tab
-    text = re.sub(r'\s{2,}', ' ', text)    # Xóa khoảng trắng đôi
+    text = re.sub(r'[\n\r\t]+', ' ', text) 
+    text = re.sub(r'\s{2,}', ' ', text)    
     return text.strip()
 
 def fix_truncated_text(text):
-    """Vá các từ bị cắt cụt từ nguồn dữ liệu"""
     text = clean_text(text)
     fixes = {
         "Các khoản phải": "Các khoản phải thu",
@@ -276,11 +294,14 @@ def translate_metric(metric_original, is_vn=False):
     if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
         return cleaned_key
     
+    # [NÂNG CẤP] Kiểm tra từ điển chính xác (phân biệt cả viết hoa/viết thường)
     if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): return vie_v
         
     k_lower = cleaned_key.lower()
+    
+    # [NÂNG CẤP] Fallback theo Regex thông minh hơn
     if 'gain' in k_lower and 'loss' in k_lower: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
     if 'effect of exchange' in k_lower or 'foreign' in k_lower: return 'Ảnh hưởng thay đổi tỷ giá hối đoái'
     if 'net income' in k_lower or 'net profit' in k_lower: return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
@@ -299,13 +320,11 @@ def translate_metric(metric_original, is_vn=False):
     if 'equity' in k_lower: return 'Vốn chủ sở hữu'
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
-
-    # KHÔI PHỤC DÒNG NÀY ĐỂ KHÔNG LÀM MẤT DÒNG NÀO
-    cleaned_viet = re.sub(r'[^a-zA-Zà-ỹÀ-Ỹ0-9\s]', ' ', cleaned_key)
-    return f"Chỉ tiêu tài chính: {cleaned_viet.strip()}"
+    
+    # Nếu vẫn không tìm thấy, trả về text gốc đã làm sạch (tránh bịa ra "Chỉ tiêu tài chính: English")
+    return cleaned_key
 
 def final_format_for_csv(x):
-    """Định dạng đầu ra CSV: Số nguyên thì bỏ đuôi .0, số thực thì giữ 4 chữ số thập phân"""
     if pd.isna(x): return ""
     val = float(x)
     if val.is_integer():
@@ -478,7 +497,6 @@ def fetch_vnstock_financials(symbol):
             time.sleep(1.5)
             fin = Fundamental().equity(symbol)
             
-            # Lấy sạch 3 bảng Năm và Quý
             try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(period='year'), 'Bảng cân đối kế toán', 'Năm'))
             except Exception: pass
             try: records.extend(parse_vnstock_df(symbol, fin.income_statement(period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
@@ -493,7 +511,6 @@ def fetch_vnstock_financials(symbol):
             try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
             except Exception: pass
 
-            # Lấy Giá
             try:
                 quote_df = Market().equity(symbol).quote()
                 if quote_df is not None and not quote_df.empty:
@@ -511,7 +528,6 @@ def fetch_vnstock_financials(symbol):
                             })
             except Exception: pass
             
-            # Lấy SLCP
             try:
                 ratio_df = Fundamental().equity(symbol).ratio()
                 if ratio_df is not None and not ratio_df.empty:
@@ -558,7 +574,8 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
     }
     target_symbols = set(ticker_market_map.keys())
 
-    for exchange in ["HSX", "HNX"]:
+    # [NÂNG CẤP] Thêm UPCOM vào danh sách sàn để không bị sót các mã như F88, SEA...
+    for exchange in ["HSX", "HNX", "UPCOM"]:
         for stmt_key, stmt_name in statements.items():
             try:
                 print(f"  📥 Đang tải {stmt_name} cho sàn {exchange}...")
@@ -595,7 +612,7 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                         'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': formatted_val
                     })
             except Exception as e:
-                print(f"  ⚠️ Lỗi tải {stmt_name} cho {exchange}: {e}")
+                pass # Bỏ qua lỗi in ra console để đỡ rối mắt
                 
     return records
 
@@ -620,7 +637,6 @@ def process_single_ticker(symbol, category):
                 recs.extend(fetch_historical_dividends(symbol, ticker))
                 break
         except Exception: pass
-
     return recs
 
 # ==========================================
@@ -631,7 +647,7 @@ def main():
     all_master_records = []
     success_count = 0
      
-    print("🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX & HNX)...")
+    print("🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX, HNX & UPCOM)...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs:
         all_master_records.extend(vnf_recs)
@@ -658,17 +674,21 @@ def main():
             except Exception as e:
                 pass
 
-    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock cho các mã thiếu Giá (HNX/UPCOM)...")
+    print(f"\n🐢 BƯỚC 4: Kiểm tra & Quét bù Vnstock cho các mã khuyết thiếu dữ liệu...")
     
-    # Tìm các mã chưa có giá
     df_temp = pd.DataFrame(all_master_records)
+    
+    # [NÂNG CẤP] Tìm cả những mã bị thiếu hoàn toàn khỏi danh sách, hoặc số dòng quá ít (< 20)
+    existing_symbols = set(df_temp['Mã chứng khoán'].unique()) if not df_temp.empty else set()
+    completely_missing = [s for s in ticker_market_map.keys() if s not in existing_symbols]
+    
     symbols_with_price = set()
     if not df_temp.empty:
         prices = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại') & (df_temp['Giá trị'].astype(float) > 0)]
         symbols_with_price = set(prices['Mã chứng khoán'].unique())
         
-    missing_symbols = [s for s in ticker_market_map.keys() if s not in symbols_with_price]
-    print(f" -> Có {len(missing_symbols)} mã cần Vnstock bổ sung.")
+    missing_symbols = list(set([s for s in ticker_market_map.keys() if s not in symbols_with_price] + completely_missing))
+    print(f" -> Có {len(missing_symbols)} mã cần Vnstock bổ sung (thiếu giá hoặc thiếu hoàn toàn data).")
     
     for idx, symbol in enumerate(missing_symbols):
         res = fetch_vnstock_financials(symbol)
@@ -683,14 +703,11 @@ def main():
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Chỉ tiêu tiếng Việt'] = df_master['Chỉ tiêu tiếng Việt'].apply(clean_text)
         
-        # Ép kiểu float và xóa 0
         df_master['Giá trị'] = pd.to_numeric(df_master['Giá trị'], errors='coerce')
         df_valid = df_master[df_master['Giá trị'].notna() & (df_master['Giá trị'] != 0)].copy()
         
-        # Xóa trùng lặp
         df_valid = df_valid.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
         
-        # Định dạng số không có đuôi .0
         df_valid['Giá trị'] = df_valid['Giá trị'].apply(final_format_for_csv)
         
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
@@ -701,7 +718,6 @@ def main():
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     
-    # BÁO CÁO KIỂM TRA TỰ ĐỘNG GIỐNG HỆT TOOL CỦA BẠN
     df_check = pd.read_csv(csv_path)
     prices = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại']
     shares = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành']
@@ -709,9 +725,13 @@ def main():
     valid_s = set(shares[shares['Giá trị'].astype(float) > 0]['Mã chứng khoán'].unique())
     both = valid_p.intersection(valid_s)
     
+    # [NÂNG CẤP] Thêm báo cáo số lượng mã thực tế đã lấy được
+    unique_tickers_in_csv = df_check['Mã chứng khoán'].nunique()
+    
     print(f"==================================================")
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_master):,}")
     print(f" - Kích thước file: {os.path.getsize(csv_path) / (1024 * 1024):.2f} MB")
+    print(f" - Số mã có dữ liệu: {unique_tickers_in_csv}/242 mã")
     print(f"--------------------------------------------------")
     print(f" 🔍 KIỂM TRA CHẤT LƯỢNG GIÁ & SLCP:")
     print(f" - Mã có Giá (>0): {len(valid_p)}/242 mã")
