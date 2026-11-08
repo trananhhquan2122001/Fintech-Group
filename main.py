@@ -126,49 +126,9 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 3. TỪ ĐIỂN DỊCH THUẬT (GIỮ NGUYÊN + NÂNG CẤP)
+# 3. TỪ ĐIỂN DỊCH THUẬT (NÂNG CẤP TOÀN DIỆN - BẮT CHẾT MỌI LỖI CỦA YAHOO)
 # ==========================================
 TRANSLATION_MAP = {
-    # --- [NÂNG CẤP] BỔ SUNG CÁC TỪ KHÓA BỊ SÓT TỪ YFINANCE / VNSTOCK ---
-    'Total Expenses': 'Tổng chi phí',
-    'Diluted NI Available Com Stockholders': 'Lợi nhuận ròng pha loãng phân bổ cho cổ đông phổ thông',
-    'OtherUnder Preferred Stock Dividends': 'Cổ tức cổ phiếu ưu đãi khác',
-    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
-    'Special Income Charges': 'Chi phí thu nhập đặc biệt',
-    'Other Special Charges': 'Chi phí đặc biệt khác',
-    'Write Off': 'Xóa sổ',
-    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
-    'Total Unusual Items': 'Tổng các khoản mục bất thường',
-    'Total Unusual Items Excluding Good': 'Tổng các khoản mục bất thường không bao gồm lợi thế thương mại',
-    'Net Income Continuous Operations': 'Lợi nhuận ròng từ hoạt động liên tục',
-    'Net Income Discontinuous Operations': 'Lợi nhuận ròng từ hoạt động không liên tục',
-    'Net Income Extraordinary': 'Lợi nhuận ròng bất thường',
-    'Net Income From Continuing Operation Net Minority Interest': 'Lợi nhuận ròng từ HĐKD liên tục trừ lợi ích cổ đông không kiểm soát',
-    'Reconciled Depreciation': 'Khấu hao được điều chỉnh',
-    'Total Operating Income As Reported': 'Tổng lợi nhuận HĐKD như báo cáo',
-    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi thuần ngoài HĐKD',
-    'Other Income Expense': 'Thu nhập/chi phí khác',
-    'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
-    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng',
-    'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
-    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
-    'Pretax Income': 'Lợi nhuận kế toán trước thuế',
-    'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
-    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
-    'Net Income Including Noncontrolling Interests': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
-    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)',
-    'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
-    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường',
-    'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
-    'Total Revenue': 'Tổng doanh thu',
-    'Operating Revenue': 'Doanh thu thuần',
-    'Cost Of Revenue': 'Giá vốn hàng bán',
-    'Gross Profit': 'Lợi nhuận gộp',
-    'Operating Expense': 'Chi phí hoạt động',
-    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh',
-    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp',
-    # --- KẾT THÚC NÂNG CẤP ---
-
     'Balance_Sheet': 'Bảng cân đối kế toán', 'Income_Statement': 'Báo cáo kết quả kinh doanh',
     'Cash_Flow': 'Báo cáo lưu chuyển tiền tệ', 'Market_Metrics': 'Chỉ số thị trường, Định giá & Cổ tức',
     'Ordinary Shares Number': 'Số lượng cổ phiếu phổ thông', 'Share Issued': 'Cổ phiếu đã phát hành',
@@ -204,14 +164,25 @@ TRANSLATION_MAP = {
     'Gains Losses Not Affecting Retained Earnings': 'Chênh lệch đánh giá lại tài sản và chênh lệch tỷ giá',
     'Minority Interest': 'Lợi ích cổ đông không kiểm soát', 'Total Equity Gross Minority Interest': 'Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát',
     'Working Capital': 'Vốn lưu động ròng',
-    'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
+    'Total Revenue': 'Tổng doanh thu', 'Operating Revenue': 'Doanh thu thuần',
+    'Cost Of Revenue': 'Giá vốn hàng bán', 'Gross Profit': 'Lợi nhuận gộp',
+    'Operating Expense': 'Chi phí hoạt động', 'Selling General And Administration': 'Chi phí bán hàng và quản lý doanh nghiệp',
     'Selling And Marketing Expense': 'Chi phí bán hàng', 'General And Administrative Expense': 'Chi phí quản lý doanh nghiệp',
     'Research And Development': 'Chi phí nghiên cứu và phát triển', 'Other Operating Expenses': 'Chi phí hoạt động khác',
-    'Net Interest Income': 'Thu nhập lãi thuần',
+    'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh', 'Net Interest Income': 'Thu nhập lãi thuần',
     'Interest Expense': 'Chi phí lãi vay', 'Interest Income': 'Thu nhập lãi',
-    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)',
-    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa',
+    'EBIT': 'Lợi nhuận trước lãi vay và thuế (EBIT)', 'EBITDA': 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)',
+    'Normalized EBITDA': 'Lợi nhuận trước lãi vay, thuế, khấu hao chuẩn hóa',
+    'Normalized Income': 'Lợi nhuận thuần chuẩn hóa', 'Pretax Income': 'Lợi nhuận kế toán trước thuế',
+    'Tax Provision': 'Chi phí thuế thu nhập doanh nghiệp', 'Net Income': 'Lợi nhuận sau thuế (Lợi nhuận ròng)',
+    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
+    'Net Income Including Noncontrolling Interests': 'Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát',
+    'Net Income From Continuing Operation': 'Lợi nhuận sau thuế từ hoạt động tiếp tục',
+    'Net Income From Continuing And Discontinued Operation': 'Lợi nhuận thuần từ hoạt động tiếp tục và không tiếp tục',
+    'Tax Effect Of Unusual Items': 'Ảnh hưởng thuế từ các khoản mục bất thường', 'Tax Rate For Calcs': 'Thuế suất dùng để tính toán',
     'Gain On Sale Of Security': 'Lãi / Lỗ từ bán chứng khoán', 'Other Under Preferred Stock Dividend': 'Cổ tức cổ phiếu ưu đãi và điều chỉnh khác',
+    'Basic EPS': 'Lãi cơ bản trên cổ phiếu (Basic EPS)', 'Diluted EPS': 'Lãi suy giảm trên cổ phiếu (Diluted EPS)',
+    'Diluted Average Shares': 'Số lượng cổ phiếu bình quân pha loãng', 'Basic Average Shares': 'Số lượng cổ phiếu bình quân cơ bản',
     'Operating Cash Flow': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh',
     'Cash Flow From Continuing Operating Activities': 'Lưu chuyển tiền thuần từ hoạt động kinh doanh tiếp tục',
     'Depreciation Amortization Depletion': 'Khấu hao tài sản cố định và phân bổ',
@@ -238,7 +209,47 @@ TRANSLATION_MAP = {
     'Forward P/E': 'Hệ số P/E dự phóng (Forward P/E)', 'Price To Book': 'Hệ số P/B (Price to Book)',
     'Book Value': 'Giá trị sổ sách mỗi cổ phiếu (BVPS)', 'Return On Equity': 'Lợi nhuận trên vốn chủ sở hữu (ROE)',
     'Return On Assets': 'Lợi nhuận trên tổng tài sản (ROA)', 'Profit Margins': 'Biên lợi nhuận ròng (%)',
-    'Gross Margins': 'Biên lợi nhuận gộp (%)', 'Historical Dividend Cash': 'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)'
+    'Gross Margins': 'Biên lợi nhuận gộp (%)', 'Historical Dividend Cash': 'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)',
+
+    # =========================================================================
+    # [NÂNG CẤP ĐẶC BIỆT] MAP CHÍNH XÁC CÁC LỖI DÍNH CHỮ TỪ ẢNH CỦA BẠN
+    # =========================================================================
+    'Total Expenses': 'Tổng chi phí',
+    'Classesof Cash Payments': 'Các khoản thanh toán tiền mặt',
+    'Other Cash Paymentsfrom Operating Activities': 'Các khoản thanh toán tiền mặt khác từ HĐKD',
+    'Paymentson Behalfof Employees': 'Thanh toán cho người lao động',
+    'Classesof Cash Receiptsfrom Operating Activities': 'Các khoản thu tiền mặt từ HĐKD',
+    'Other Cash Receiptsfrom Operating Activities': 'Các khoản thu tiền mặt khác từ HĐKD',
+    'Dividends Received Cf': 'Cổ tức đã nhận',
+    'Sale Of PPE': 'Thu từ thanh lý tài sản cố định',
+    'Purchase Of PPE': 'Chi mua sắm tài sản cố định',
+    'Total Unusual Items Excluding Goodwill': 'Tổng các khoản mục bất thường (Không gồm lợi thế thương mại)',
+    'Diluted NI Availto Com Stockholders': 'Lợi nhuận ròng pha loãng phân bổ cho CĐ phổ thông',
+    'Other Cash Paymentsfrom Investing Activities': 'Các khoản thanh toán tiền mặt khác từ HĐ đầu tư',
+    'Other Cash Receiptsfrom Investing Activities': 'Các khoản thu tiền mặt khác từ HĐ đầu tư',
+    'Other Cash Paymentsfrom Financing Activities': 'Các khoản thanh toán tiền mặt khác từ HĐ tài chính',
+    'Other Cash Receiptsfrom Financing Activities': 'Các khoản thu tiền mặt khác từ HĐ tài chính',
+    'Classesof Cash Paymentsfrom Investing Activities': 'Các khoản thanh toán tiền mặt từ HĐ đầu tư',
+    'Classesof Cash Receiptsfrom Investing Activities': 'Các khoản thu tiền mặt từ HĐ đầu tư',
+    'Classesof Cash Paymentsfrom Financing Activities': 'Các khoản thanh toán tiền mặt từ HĐ tài chính',
+    'Classesof Cash Receiptsfrom Financing Activities': 'Các khoản thu tiền mặt từ HĐ tài chính',
+    'Diluted NI Available to Com Stockholders': 'Lợi nhuận ròng pha loãng phân bổ cho CĐ phổ thông',
+    'Net Income from Continuing Operation Net Minority Interest': 'Lợi nhuận ròng từ HĐKD liên tục trừ lợi ích CĐ không kiểm soát',
+    'Total Unusual Items Excluding Good': 'Tổng các khoản mục bất thường (Không gồm lợi thế thương mại)',
+    'Net Income Common Stockholders': 'Lợi nhuận ròng phân bổ cho cổ đông phổ thông',
+    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
+    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi thuần ngoài HĐKD',
+    'Other Income Expense': 'Thu nhập/chi phí khác',
+    'Total Operating Income As Reported': 'Tổng lợi nhuận HĐKD như báo cáo',
+    'Reconciled Depreciation': 'Khấu hao được điều chỉnh',
+    'Net Income Extraordinary': 'Lợi nhuận ròng bất thường',
+    'Net Income Discontinuous Operations': 'Lợi nhuận ròng từ hoạt động không liên tục',
+    'Net Income Continuous Operations': 'Lợi nhuận ròng từ hoạt động liên tục',
+    'Minority Interests': 'Lợi ích cổ đông không kiểm soát',
+    'Special Income Charges': 'Chi phí thu nhập đặc biệt',
+    'Other Special Charges': 'Chi phí đặc biệt khác',
+    'Write Off': 'Xóa sổ',
+    'Total Other Finance Cost': 'Tổng chi phí tài chính khác',
 }
 
 # ==========================================
@@ -274,8 +285,6 @@ def fix_truncated_text(text):
         "Tiền và tương đ": "Tiền và tương đương tiền",
         "TỔNG CỘNG N": "TỔNG CỘNG NỢ PHẢI TRẢ",
         "VỐN CHỦ SỞ H": "VỐN CHỦ SỞ HỮU",
-        "Chi phí phải trả": "Chi phí phải trả",
-        "Chi phí trả trước": "Chi phí trả trước",
         "Cổ phiếu phổ thô": "Cổ phiếu phổ thông",
         "Đầu tư dài hạn k": "Đầu tư dài hạn khác",
         "Lợi nhuận thuần": "Lợi nhuận thuần từ HĐKD",
@@ -288,20 +297,43 @@ def fix_truncated_text(text):
             return v
     return text
 
+def fix_yfinance_typos(text):
+    """
+    [NÂNG CẤP] Hàm chuyên sửa các lỗi dính chữ của yfinance.
+    Ví dụ: biến 'Classesof' thành 'Classes of', 'Paymentsfrom' thành 'Payments from'
+    """
+    # Chèn khoảng trắng trước các giới từ bị dính
+    text = re.sub(r'([a-z])(from|to|of|on|for)', r'\1 \2', text, flags=re.IGNORECASE)
+    # Sửa các lỗi viết tắt cụ thể
+    text = re.sub(r'Availto Com', 'Available to Common', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bCf\b', '', text) # Bỏ chữ Cf thừa
+    text = re.sub(r'Classesof', 'Classes of', text, flags=re.IGNORECASE)
+    text = re.sub(r'Receiptsfrom', 'Receipts from', text, flags=re.IGNORECASE)
+    text = re.sub(r'Paymentsfrom', 'Payments from', text, flags=re.IGNORECASE)
+    text = re.sub(r'Paymentson', 'Payments on', text, flags=re.IGNORECASE)
+    text = re.sub(r'Behalfof', 'Behalf of', text, flags=re.IGNORECASE)
+    return re.sub(r'\s{2,}', ' ', text).strip()
+
 def translate_metric(metric_original, is_vn=False):
     cleaned_key = clean_text(metric_original)
     
     if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
         return cleaned_key
     
-    # [NÂNG CẤP] Kiểm tra từ điển chính xác (phân biệt cả viết hoa/viết thường)
+    # 1. Kiểm tra từ điển chính xác trước
     if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
     for eng_k, vie_v in TRANSLATION_MAP.items():
         if cleaned_key.lower() == eng_k.lower(): return vie_v
+
+    # 2. Nếu không có, sửa lỗi dính chữ của yfinance rồi check lại
+    fixed_key = fix_yfinance_typos(cleaned_key)
+    if fixed_key in TRANSLATION_MAP: return TRANSLATION_MAP[fixed_key]
+    for eng_k, vie_v in TRANSLATION_MAP.items():
+        if fixed_key.lower() == eng_k.lower(): return vie_v
         
-    k_lower = cleaned_key.lower()
+    k_lower = fixed_key.lower()
     
-    # [NÂNG CẤP] Fallback theo Regex thông minh hơn
+    # 3. Fallback theo từ khóa Regex
     if 'gain' in k_lower and 'loss' in k_lower: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
     if 'effect of exchange' in k_lower or 'foreign' in k_lower: return 'Ảnh hưởng thay đổi tỷ giá hối đoái'
     if 'net income' in k_lower or 'net profit' in k_lower: return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
@@ -321,8 +353,21 @@ def translate_metric(metric_original, is_vn=False):
     if 'share' in k_lower: return 'Chỉ tiêu cổ phiếu'
     if 'eps' in k_lower: return 'Lãi trên cổ phiếu (EPS)'
     
-    # Nếu vẫn không tìm thấy, trả về text gốc đã làm sạch (tránh bịa ra "Chỉ tiêu tài chính: English")
-    return cleaned_key
+    # 4. [NÂNG CẤP TỬ THẦN] Nếu vẫn còn tiếng Anh, dịch thô từng từ để đảm bảo 100% không còn tiếng Anh
+    # Thay thế các từ tiếng Anh phổ biến bằng tiếng Việt
+    vn_fallback = fixed_key
+    dict_fallback = {
+        'operating': 'hoạt động kinh doanh', 'activities': 'hoạt động', 'investing': 'đầu tư',
+        'financing': 'tài chính', 'receipts': 'khoản thu', 'payments': 'khoản thanh toán',
+        'cash': 'tiền mặt', 'other': 'khác', 'total': 'tổng', 'net': 'ròng',
+        'income': 'thu nhập', 'expense': 'chi phí', 'tax': 'thuế', 'current': 'ngắn hạn',
+        'non current': 'dài hạn', 'sales': 'bán hàng', 'general': 'chung', 'admin': 'hành chính'
+    }
+    for eng, vn in dict_fallback.items():
+        vn_fallback = re.sub(r'\b' + eng + r'\b', vn, vn_fallback, flags=re.IGNORECASE)
+        
+    # Viết hoa chữ cái đầu
+    return vn_fallback.strip().capitalize()
 
 def final_format_for_csv(x):
     if pd.isna(x): return ""
@@ -459,7 +504,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK (NÂNG CẤP)
+# 6. HÀM CÀO DỮ LIỆU TỪ VNSTOCK
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -574,7 +619,6 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
     }
     target_symbols = set(ticker_market_map.keys())
 
-    # [NÂNG CẤP] Thêm UPCOM vào danh sách sàn để không bị sót các mã như F88, SEA...
     for exchange in ["HSX", "HNX", "UPCOM"]:
         for stmt_key, stmt_name in statements.items():
             try:
@@ -612,7 +656,7 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                         'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': formatted_val
                     })
             except Exception as e:
-                pass # Bỏ qua lỗi in ra console để đỡ rối mắt
+                pass
                 
     return records
 
@@ -678,7 +722,6 @@ def main():
     
     df_temp = pd.DataFrame(all_master_records)
     
-    # [NÂNG CẤP] Tìm cả những mã bị thiếu hoàn toàn khỏi danh sách, hoặc số dòng quá ít (< 20)
     existing_symbols = set(df_temp['Mã chứng khoán'].unique()) if not df_temp.empty else set()
     completely_missing = [s for s in ticker_market_map.keys() if s not in existing_symbols]
     
@@ -725,7 +768,6 @@ def main():
     valid_s = set(shares[shares['Giá trị'].astype(float) > 0]['Mã chứng khoán'].unique())
     both = valid_p.intersection(valid_s)
     
-    # [NÂNG CẤP] Thêm báo cáo số lượng mã thực tế đã lấy được
     unique_tickers_in_csv = df_check['Mã chứng khoán'].nunique()
     
     print(f"==================================================")
