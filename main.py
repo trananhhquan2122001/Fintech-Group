@@ -38,28 +38,29 @@ session.headers.update({
 # ==========================================
 # 2. DANH SÁCH 242 MÃ VÀ THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN)
 # ==========================================
-def load_242_master_tickers():
-    raw_tickers = [
-        "ABB", "ACB", "ACV", "AIG", "ANV", "BAF", "BCM", "BID", "BMP", "BSI", "BSR", "BVH", "BVS", "BWE",
-        "CAP", "CEO", "CII", "CMG", "CTD", "CTG", "CTR", "CTS", "DBC", "DCM", "DGW", "DIG", "DNH", "DP3", 
-        "DPM", "DSE", "DTD", "DVN", "DXG", "DXP", "EIB", "EVF", "FOX", "FPT", "FRT", "FTS", "GAS", "GEE", 
-        "GEX", "GMD", "GVR", "HAG", "HCM", "HDB", "HDG", "HND", "HHV", "HPG", "HSG", "HT1", "HUT", "IDC", 
-        "IDP", "KBC", "KDC", "KDH", "L14", "L18", "LAS", "LHC", "LPB", "MBB", "MBS", "MCH", "MSB", "MSN", 
-        "MSR", "MVN", "MWG", "NAB", "NBC", "NDN", "NKG", "NLG", "NT2", "NTP", "NVL", "OCB", "OIL", "PAN", 
-        "PC1", "PDR", "PHR", "PLC", "PLX", "PNJ", "POW", "PSD", "PVB", "PVC", "PVD", "PVS", "PVT", "PVI",
-        "QNS", "QTP", "REE", "SAB", "SAS", "SBT", "SHB", "SHS", "SIP", "SJS", "SLS", "SNZ", "SSB", "SSI", 
-        "STB", "TAL", "TBD", "TCB", "TCH", "TCX", "TDM", "TID", "TIG", "TNG", "TOS", "TPB", "TVD", "VCB", 
-        "VC3", "VCG", "VCI", "VCK", "VCS", "VEA", "VFS", "VGC", "VGI", "VGP", "VGR", "VHC", "VHM", "VIB", 
-        "VIC", "VIX", "VJC", "VND", "VNM", "VPB", "VPI", "VPL", "VPX", "VRE", "VSC", "VTP", "PRE", "HCC", 
-        "L40", "KDM", "HVT", "VTZ", "GLT", "VGS", "PCH", "CAR", "HGM", "KSV", "THD", "KSF", "SCG", "CLM", 
-        "TMB", "SAF", "NET", "DHT", "DGC", "SZC", "HVN", "BAB", "AGR", "ICT", "TLH", "BMI", "PET", "LSS", 
-        "HDC", "IJC", "TDC", "CTI", "SJD", "TMP", "SBA", "VSH", "TTA", "TV2", "VCP", "BFC", "DDV", "VGT", 
-        "SGP", "DPR", "DHC", "TCM", "CKA", "VLB", "HPP", "WSB", "F88", "SEA", "ODE", "PHP", "VXB", "APF", 
-        "VNZ", "HLB", "TED", "VEF", "PAT", "FOC", "DTP", "SIV", "VGG", "AVC", "LSG", "CQN", "QPH", "TCW", 
-        "ACE", "VSF", "HAM", "SBM", "AGP", "LIC", "SCL", "CC1", "BWS", "NAS", "CLI", "VTK", "HMS", "PCC", 
-        "QHW", "MFS", "VEC", "HEC"
+def load_176_master_tickers():
+    raw_tickers = raw_tickers = [
+        'ACB', 'ANV', 'BAF', 'BCM', 'BID', 'BMP', 'BSI', 'BSR', 'BVH', 'BVS', 'BWE', 'CAP',
+        'CEO', 'CII', 'CMG', 'CTD', 'CTG', 'CTR', 'CTS', 'DBC', 'DCM', 'DGW', 'DIG', 'DP3',
+        'DPM', 'DSE', 'DTD', 'DXG', 'DXP', 'EIB', 'EVF', 'FPT', 'FRT', 'FTS', 'GAS', 'GEE',
+        'GEX', 'GMD', 'GVR', 'HAG', 'HCM', 'HDB', 'HDG', 'HHV', 'HPG', 'HSG', 'HT1', 'HUT',
+        'IDC', 'KBC', 'KDC', 'KDH', 'L14', 'L18', 'LAS', 'LHC', 'LPB', 'MBB', 'MBS', 'MCH',
+        'MSB', 'MSN', 'MWG', 'NAB', 'NBC', 'NDN', 'NKG', 'NLG', 'NT2', 'NTP', 'NVL', 'OCB',
+        'PAN', 'PC1', 'PDR', 'PHR', 'PLC', 'PLX', 'PNJ', 'POW', 'PSD', 'PVB', 'PVC', 'PVD',
+        'PVS', 'PVT', 'PVI', 'REE', 'SAB', 'SBT', 'SHB', 'SHS', 'SIP', 'SJS', 'SLS', 'SSB',
+        'SSI', 'STB', 'TAL', 'TCB', 'TCH', 'TCX', 'TDM', 'TIG', 'TNG', 'TPB', 'TVD', 'VCB',
+        'VC3', 'VCG', 'VCI', 'VCK', 'VCS', 'VFS', 'VGC', 'VGP', 'VHC', 'VHM', 'VIB', 'VIC',
+        'VIX', 'VJC', 'VND', 'VNM', 'VPB', 'VPI', 'VPL', 'VPX', 'VRE', 'VSC', 'VTP', 'L40',
+        'HVT', 'GLT', 'VGS', 'HGM', 'KSV', 'THD', 'KSF', 'SCG', 'CLM', 'TMB', 'SAF', 'NET',
+        'DHT', 'DGC', 'SZC', 'HVN', 'BAB', 'AGR', 'TLH', 'BMI', 'PET', 'LSS', 'HDC', 'IJC',
+        'TDC', 'CTI', 'SJD', 'TMP', 'SBA', 'VSH', 'TTA', 'TV2', 'VCP', 'BFC', 'DDV', 'SGP',
+        'DPR', 'DHC', 'TCM', 'HPP', 'PAT', 'DTP', 'SCL', 'HMS',
     ]
-    return {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
+    ticker_map = {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
+    if len(ticker_map) != 176:
+        raise ValueError(f"Danh sách mã không hợp lệ: kỳ vọng 176, thực tế {len(ticker_map)}")
+    print(f"\n📌 Danh sách mục tiêu FINEX: {len(ticker_map)} mã (đã loại 66 mã UPCoM theo bộ lọc hiện tại).")
+    return ticker_map
 
 def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
@@ -802,7 +803,7 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
     }
     target_symbols = set(ticker_market_map.keys())
 
-    for exchange in ["HSX", "HNX", "UPCOM"]:
+    for exchange in ["HSX", "HNX"]:
         for stmt_key, stmt_name in statements.items():
             try:
                 print(f"  📥 Đang tải {stmt_name} cho sàn {exchange}...")
@@ -870,11 +871,11 @@ def process_single_ticker(symbol, category):
 # 9. HÀM MAIN VÀ LÀM SẠCH DỮ LIỆU BẰNG PANDAS
 # ==========================================
 def main():
-    ticker_market_map = load_242_master_tickers()
+    ticker_market_map = load_176_master_tickers()
     all_master_records = []
     success_count = 0
      
-    print("🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX, HNX & UPCOM)...")
+    print("🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX & HNX)...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs:
         all_master_records.extend(vnf_recs)
@@ -961,12 +962,12 @@ def main():
     print(f"==================================================")
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_master):,}")
     print(f" - Kích thước file: {os.path.getsize(csv_path) / (1024 * 1024):.2f} MB")
-    print(f" - Số mã có dữ liệu: {unique_tickers_in_csv}/242 mã")
+    print(f" - Số mã có dữ liệu: {unique_tickers_in_csv}/176 mã")
     print(f"--------------------------------------------------")
     print(f" 🔍 KIỂM TRA CHẤT LƯỢNG GIÁ & SLCP:")
-    print(f" - Mã có Giá (>0): {len(valid_p)}/242 mã")
-    print(f" - Mã có SLCP (>0): {len(valid_s)}/242 mã")
-    print(f" - Mã có CẢ 2: {len(both)}/242 mã")
+    print(f" - Mã có Giá (>0): {len(valid_p)}/176 mã")
+    print(f" - Mã có SLCP (>0): {len(valid_s)}/176 mã")
+    print(f" - Mã có CẢ 2: {len(both)}/176 mã")
     
     if still_missing_both:
         print(f" ⚠️ CÁC MÃ VẪN THIẾU CẢ 2 CHỈ SỐ: {', '.join(still_missing_both)}")
