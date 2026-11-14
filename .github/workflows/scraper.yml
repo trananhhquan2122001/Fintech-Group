@@ -32,7 +32,7 @@ jobs:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python main.py
 
-      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (BẢN BẤT TỬ)
+      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (FIX LỖI CỘT DATE)
       - name: Clean Data & Push to Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -53,7 +53,6 @@ jobs:
           df = pd.read_csv(file_path)
           df = df.replace([np.inf, -np.inf], np.nan)
 
-          # 1. Ánh xạ cột
           rename_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
@@ -67,28 +66,27 @@ jobs:
           }
           df = df.rename(columns=rename_map)
 
-          # 2. Làm sạch dữ liệu
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
+          
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df[df['value'].notna() & (df['value'] != 0)]
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
 
           supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 
-          # 3. LẤY DANH SÁCH CỘT THỰC TẾ TỪ SUPABASE (Để tránh lỗi thiếu cột)
+          # 3. LẤY DANH SÁCH CỘT THỰC TẾ TỪ SUPABASE
           try:
               res = supabase.table('finex_stock_master').select('*').limit(1).execute()
               if res.data:
                   valid_cols = set(res.data[0].keys())
               else:
-                  valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics'}
+                  valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics', 'date'}
           except Exception as e:
               print(f'Không lấy được schema, dùng mặc định: {e}')
-              valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics'}
+              valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics', 'date'}
 
-          # 4. Tạo Payload an toàn
           records = []
           for _, row in df.iterrows():
               def clean_str(s):
@@ -114,13 +112,17 @@ jobs:
                   else:
                       extra[k] = v
                       
-              # Nếu bảng có cột extra_metrics thì nhét các cột lạ vào đó
               if 'extra_metrics' in valid_cols:
                   final_r['extra_metrics'] = extra if extra else {}
+
+              # 🚀 FIX CHÍ MẠNG: Xử lý cột 'date' bị NOT NULL từ schema cũ
+              if 'date' in valid_cols:
+                  # Gán date = report_date (hoặc ngày hôm nay nếu report_date trống)
+                  final_r['date'] = final_r.get('report_date') or datetime.now().strftime('%Y-%m-%d')
                   
-              # Đảm bảo mọi bản ghi đều có chung số lượng key (PostgREST yêu cầu)
+              # Đảm bảo mọi key trong valid_cols đều có mặt để PostgREST không báo lỗi
               for col in valid_cols:
-                  if col not in final_r and col != 'extra_metrics':
+                  if col not in final_r and col not in ['extra_metrics', 'created_at']:
                       final_r[col] = None
                       
               records.append(final_r)
