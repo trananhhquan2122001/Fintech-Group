@@ -42,13 +42,12 @@ jobs:
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git fetch origin main
           git checkout main || git checkout -b main
-          # Vẫn add file CSV như bình thường để bạn có thể tải về kiểm tra
           git add data/vietnam_stock_database_tong_hop.csv || true
           git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset [skip ci]"
           git push origin main
 
       # ==========================================
-      # 2. LƯU FILE LÊN HUGGING FACE DATASET (NÂNG CẤP)
+      # 2. LƯU FILE LÊN HUGGING FACE DATASET (ĐÃ ĐỔI TÊN)
       # ==========================================
       - name: Push Dataset to Hugging Face Dataset Repo
         env:
@@ -59,9 +58,11 @@ jobs:
           import os
           
           api = HfApi()
-          # Sử dụng DATASET thay vì SPACE để tránh giới hạn 1GB
           dataset_repo_id = 'trananhquan2001/finex-vn-dataset'
-          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          local_file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          
+          # Tên file mới hiển thị trên Hugging Face Dataset
+          remote_file_name = 'dulieu_hang_ngay.csv'
           
           print(f'Đang kiểm tra/tạo Dataset Repository: {dataset_repo_id}...')
           try:
@@ -71,10 +72,10 @@ jobs:
               print(f'Lỗi tạo dataset repo: {e}')
               raise
               
-          print(f'Đang upload file CSV ({file_path}) lên Dataset...')
+          print(f'Đang upload file lên Hugging Face với tên: {remote_file_name}...')
           api.upload_file(
-              path_or_fileobj=file_path,
-              path_in_repo='vietnam_stock_database_tong_hop.csv',
+              path_or_fileobj=local_file_path,
+              path_in_repo=remote_file_name,
               repo_id=dataset_repo_id,
               repo_type='dataset',
               token=os.environ['HF_TOKEN']
