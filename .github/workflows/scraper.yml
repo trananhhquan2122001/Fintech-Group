@@ -22,7 +22,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub
+          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub supabase
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
@@ -37,7 +37,6 @@ jobs:
 
           print('--- BƯỚC 1: CHẠY FINEX ENGINE ĐỂ CÀO DỮ LIỆU ---')
           # Gọi script chính hoặc module cào dữ liệu của anh ở đây
-          # (Giả lập đọc từ file dữ liệu thô vừa cào hoặc tích hợp trực tiếp)
           import main
           
           file_path = 'data/vietnam_stock_database_tong_hop.csv'
@@ -51,7 +50,6 @@ jobs:
           # Tầng 1: Làm sạch cơ bản & Loại bỏ giá trị rỗng/lỗi hệ thống (Null/NaN/Infinite)
           df = df.replace([np.inf, -np.inf], np.nan)
           initial_rows = len(df)
-          # Xóa các dòng thiếu thông tin trọng yếu (ví dụ: Mã cổ phiếu hoặc Ngày giao dịch)
           if 'ticker' in df.columns and 'date' in df.columns:
               df = df.dropna(subset=['ticker', 'date'])
           print(f'[Tầng 1] Đã loại bỏ dòng lỗi/rỗng. Còn lại: {len(df)}/{initial_rows} dòng.')
@@ -73,12 +71,10 @@ jobs:
 
           # Tầng 4: Xử lý giá trị ngoại lai (Outliers - Lọc biến động giá/khối lượng bất thường vô lý)
           if 'close' in df.columns:
-              # Lọc bỏ giá <= 0 hoặc các giá trị âm không hợp lệ trong tài chính
               df = df[df['close'] > 0]
           print('[Tầng 4] Đã lọc sạch các giá trị ngoại lai (outliers) về giá.')
 
           # Tầng 5: Điền đầy và làm mượt dữ liệu thiếu sót (Imputation / Interpolation nhẹ nhàng)
-          # Điền các giá trị số bằng 0 hoặc phương pháp nội suy nếu cần thiết cho các chỉ số kỹ thuật
           numeric_cols = df.select_dtypes(include=[np.number]).columns
           df[numeric_cols] = df[numeric_cols].fillna(0)
           print('[Tầng 5] Đã hoàn tất điền đầy các ô trống dữ liệu số bằng 0.')
@@ -105,7 +101,7 @@ jobs:
           git push origin main
 
       # ==========================================
-      # 2. LƯU FILE TRỰC TIẾP VÀO HUGGING FACE SPACE
+      # 2. LƯU FILE TRỰC TIẾP VÀO HUGGING FACE SPACE (GIỮ NGUYÊN)
       # ==========================================
       - name: Push Cleaned Dataset to Hugging Face Space Repo
         env:
@@ -131,4 +127,62 @@ jobs:
               token=os.environ['HF_TOKEN']
           )
           print('Đã đẩy file sạch trực tiếp vào Space thành công!')
+          "
+
+      # ==========================================
+      # 3. ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE POSTGRESQL (BỔ SUNG MỚI)
+      # ==========================================
+      - name: Push Cleaned Data to Supabase Master Table
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python -c "
+          import os
+          import pandas as pd
+          import numpy as np
+          from supabase import create_client
+
+          supabase_url = os.environ['SUPABASE_URL']
+          supabase_key = os.environ['SUPABASE_KEY']
+          
+          supabase = create_client(supabase_url, supabase_key)
+          
+          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          df = pd.read_csv(file_path)
+          df = df.replace({np.nan: None})
+
+          # Chuẩn hóa tên cột về chữ thường để khớp với bảng Supabase
+          df.columns = [c.strip().lower() for c in df.columns]
+          rename_map = {'symbol': 'ticker', 'ma_cp': 'ticker', 'time': 'date', 'ngay': 'date'}
+          df = df.rename(columns=rename_map)
+
+          standard_cols = {
+              'ticker', 'date', 'exchange', 'industry', 'company_name',
+              'open', 'high', 'low', 'close', 'volume', 'value',
+              'market_cap', 'pe', 'pb', 'ps', 'eps', 'bvps', 'roe', 'roa', 'dividend_yield'
+          }
+
+          records = []
+          for _, row in df.iterrows():
+              record = {}
+              extra = {}
+              for col, val in row.items():
+                  if col in standard_cols:
+                      if col == 'volume' and val is not None:
+                          record[col] = int(float(val))
+                      else:
+                          record[col] = val
+                  else:
+                      extra[col] = val
+              record['extra_metrics'] = extra
+              records.append(record)
+
+          print(f'Đang đồng bộ {len(records)} bản ghi vào bảng finex_stock_master trên Supabase...')
+          batch_size = 1000
+          for i in range(0, len(records), batch_size):
+              batch = records[i:i + batch_size]
+              response = supabase.table('finex_stock_master').upsert(batch).execute()
+
+          print('Đồng bộ Supabase thành công 100%!')
           "
