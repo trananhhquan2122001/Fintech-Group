@@ -36,6 +36,20 @@ session.headers.update({
 })
 
 # ==========================================
+# 🆕 0. TÍCH HỢP HUGGING FACE DATASET (MỚI)
+# ==========================================
+def load_daily_data_hf():
+    """Tải dữ liệu hàng ngày trực tiếp từ Hugging Face Dataset."""
+    DATA_URL = "https://huggingface.co/datasets/trananhquan2001/finex-vn-dataset/raw/main/dulieu_hang_ngay.csv"
+    try:
+        df = pd.read_csv(DATA_URL)
+        print(f"✅ Đã tải thành công {len(df)} dòng dữ liệu hàng ngày từ Hugging Face!")
+        return df
+    except Exception as e:
+        print(f"⚠️ Lỗi khi tải dữ liệu từ Hugging Face: {e}")
+        return pd.DataFrame()
+
+# ==========================================
 # 2. DANH SÁCH 242 MÃ VÀ THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN)
 # ==========================================
 def load_176_master_tickers():
@@ -874,8 +888,40 @@ def main():
     ticker_market_map = load_176_master_tickers()
     all_master_records = []
     success_count = 0
-     
-    print("🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX & HNX)...")
+
+    # 🆕 BƯỚC 0: TẢI DỮ LIỆU TỪ HUGGING FACE
+    print("🚀 BƯỚC 0: Tải dữ liệu hàng ngày từ Hugging Face Dataset...")
+    hf_df = load_daily_data_hf()
+    if not hf_df.empty:
+        standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
+        if all(col in hf_df.columns for col in standard_cols):
+            all_master_records.extend(hf_df.to_dict('records'))
+            print(f" ✅ Đã nạp {len(hf_df):,} dòng từ Hugging Face vào Master Records.")
+        else:
+            print(" ⚠️ Schema của Hugging Face không khớp hoàn toàn với crawler (thiếu cột chuẩn). Sẽ thử map...")
+            try:
+                if 'Mã chứng khoán' in hf_df.columns and 'Chỉ tiêu tiếng Việt' in hf_df.columns and 'Giá trị' in hf_df.columns:
+                    if 'Tên doanh nghiệp' not in hf_df.columns:
+                        hf_df['Tên doanh nghiệp'] = hf_df['Mã chứng khoán'].apply(lambda x: get_company_profile(x)[0])
+                    if 'Tên ngành' not in hf_df.columns:
+                        hf_df['Tên ngành'] = hf_df['Mã chứng khoán'].apply(lambda x: get_company_profile(x)[1])
+                    if 'Loại báo cáo' not in hf_df.columns:
+                        hf_df['Loại báo cáo'] = 'Chỉ số thị trường, Định giá & Cổ tức'
+                    if 'Loại kỳ' not in hf_df.columns:
+                        hf_df['Loại kỳ'] = 'Real-time'
+                    if 'Năm' not in hf_df.columns:
+                        hf_df['Năm'] = str(datetime.now().year)
+                    if 'Ngày kỳ' not in hf_df.columns:
+                        hf_df['Ngày kỳ'] = datetime.today().strftime('%Y-%m-%d')
+                    
+                    all_master_records.extend(hf_df[standard_cols].to_dict('records'))
+                    print(f" ✅ Đã map và nạp {len(hf_df):,} dòng từ Hugging Face.")
+                else:
+                    print(" ❌ Không thể tự động map schema Hugging Face. Bỏ qua.")
+            except Exception as e:
+                print(f" ❌ Lỗi khi map schema Hugging Face: {e}")
+
+    print("\n🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX & HNX)...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs:
         all_master_records.extend(vnf_recs)
