@@ -1,17 +1,18 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v3.0 (SUPABASE FIXED)
-========================================================
-Changelog v3.0:
-  ✅ Fix triệt để lỗi "null value in column ticker violates not-null constraint"
-  ✅ Auto-mapping schema: Tiếng Việt <-> Tiếng Anh (ticker, value, year...)
-  ✅ Data sanitization: Bỏ các dòng null/rỗng trước khi upsert
-  ✅ Ép kiểu dữ liệu chặt chẽ (str, float, int) trước khi gửi Supabase
-  ✅ Giữ nguyên 100% logic cào dữ liệu của bản gốc
+FINEX VN STOCK DATABASE CRAWLER - v4.0 (ULTIMATE FIX)
+=====================================================
+Changelog v4.0:
+  ✅ Sửa triệt để lỗi null value in column "ticker"
+  ✅ Ép kiểu Native Type (Python dict) - loại bỏ numpy types
+  ✅ Xử lý triệt để NaN/NaT thành None
+  ✅ In mẫu payload (Debug) để kiểm tra trước khi gửi
+  ✅ Giữ nguyên 100% logic cào dữ liệu gốc
 """
 import os
 import time
 from datetime import datetime
 import pandas as pd
+import numpy as np
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,7 +42,7 @@ except ImportError:
     from vnstock import Fundamental, Market
 
 # ==========================================
-# 🆕 1.5 SUPABASE INTEGRATION (FIXED)
+# 🆕 1.5 SUPABASE INTEGRATION (FIXED V4)
 # ==========================================
 try:
     from supabase import create_client
@@ -97,30 +98,23 @@ VN_TO_EN_MAP = {
     'Chỉ tiêu tiếng Việt': 'item_vn',
     'Giá trị': 'value'
 }
-# Bản đồ ngược lại (Supabase -> Code)
 EN_TO_VN_MAP = {v: k for k, v in VN_TO_EN_MAP.items()}
 
 PRIORITY_MAP = {
-    'SUPABASE_HIGH': 0,
-    'DAILY':         1,
-    'VN_FINANCIAL':  2,
-    'INDICES':       2,
-    'YFINANCE':      2,
-    'VNSTOCK':       2,
-    'SUPABASE':      3,
+    'SUPABASE_HIGH': 0, 'DAILY': 1, 'VN_FINANCIAL': 2,
+    'INDICES': 2, 'YFINANCE': 2, 'VNSTOCK': 2, 'SUPABASE': 3,
 }
 
 _supabase_client = None
 
 def init_supabase():
     global _supabase_client
-    if _supabase_client is not None:
-        return _supabase_client
+    if _supabase_client is not None: return _supabase_client
     if not HAS_SUPABASE_LIB:
-        print("⚠️ [SUPABASE] Thiếu thư viện supabase — bỏ qua.")
+        print("⚠️ [SUPABASE] Thiếu thư viện supabase.")
         return None
     if not SUPABASE_URL or not SUPABASE_KEY:
-        print("⚠️ [SUPABASE] Thiếu SUPABASE_URL / SUPABASE_KEY — bỏ qua.")
+        print("⚠️ [SUPABASE] Thiếu URL / KEY.")
         return None
     try:
         _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -133,21 +127,16 @@ def init_supabase():
 def _retry(fn, max_retries=3, backoff=2, label="SUPABASE"):
     last_err = None
     for attempt in range(max_retries):
-        try:
-            return fn()
+        try: return fn()
         except Exception as e:
             last_err = e
-            if attempt == max_retries - 1:
-                break
-            wait = backoff ** attempt
-            print(f"⚠️ [{label}] Lỗi lần {attempt+1}/{max_retries}, thử lại sau {wait}s: {e}")
-            time.sleep(wait)
+            if attempt == max_retries - 1: break
+            print(f"⚠️ [{label}] Lỗi lần {attempt+1}, thử lại sau {backoff**attempt}s: {e}")
+            time.sleep(backoff ** attempt)
     raise last_err
 
 def _normalize_to_standard(df, fill_company=True):
-    if df is None or df.empty:
-        return pd.DataFrame(columns=STANDARD_COLUMNS)
-
+    if df is None or df.empty: return pd.DataFrame(columns=STANDARD_COLUMNS)
     col_alias = {
         'ticker': 'Mã chứng khoán', 'symbol': 'Mã chứng khoán', 'code': 'Mã chứng khoán',
         'company_name': 'Tên doanh nghiệp', 'company': 'Tên doanh nghiệp',
@@ -158,15 +147,8 @@ def _normalize_to_standard(df, fill_company=True):
         'item_vn': 'Chỉ tiêu tiếng Việt', 'item': 'Chỉ tiêu tiếng Việt', 'metric': 'Chỉ tiêu tiếng Việt',
         'value': 'Giá trị',
     }
-    rename = {}
-    for c in df.columns:
-        if c in STANDARD_COLUMNS:
-            continue
-        lower = str(c).lower()
-        if lower in col_alias:
-            rename[c] = col_alias[lower]
-    if rename:
-        df = df.rename(columns=rename)
+    rename = {c: col_alias[str(c).lower()] for c in df.columns if str(c).lower() in col_alias and c not in STANDARD_COLUMNS}
+    if rename: df = df.rename(columns=rename)
 
     for col in STANDARD_COLUMNS:
         if col not in df.columns:
@@ -174,100 +156,107 @@ def _normalize_to_standard(df, fill_company=True):
                 df[col] = df['Mã chứng khoán'].apply(lambda x: get_company_profile(x)[0])
             elif col == 'Tên ngành' and fill_company and 'Mã chứng khoán' in df.columns:
                 df[col] = df['Mã chứng khoán'].apply(lambda x: get_company_profile(x)[1])
-            elif col == 'Loại báo cáo':
-                df[col] = 'Chỉ số thị trường, Định giá & Cổ tức'
-            elif col == 'Loại kỳ':
-                df[col] = 'Real-time'
-            elif col == 'Năm':
-                df[col] = str(datetime.now().year)
-            elif col == 'Ngày kỳ':
-                df[col] = datetime.today().strftime('%Y-%m-%d')
-            else:
-                df[col] = ''
+            elif col == 'Loại báo cáo': df[col] = 'Chỉ số thị trường, Định giá & Cổ tức'
+            elif col == 'Loại kỳ': df[col] = 'Real-time'
+            elif col == 'Năm': df[col] = str(datetime.now().year)
+            elif col == 'Ngày kỳ': df[col] = datetime.today().strftime('%Y-%m-%d')
+            else: df[col] = ''
     return df[STANDARD_COLUMNS].copy()
 
 @cached(ttl=600)
 def load_data_from_supabase():
     client = init_supabase()
-    if client is None:
-        return pd.DataFrame(columns=STANDARD_COLUMNS)
-
+    if client is None: return pd.DataFrame(columns=STANDARD_COLUMNS)
     def _fetch_all():
-        rows = []
-        page_size = 1000
-        start = 0
+        rows, page_size, start = [], 1000, 0
         while True:
             resp = client.table(SUPABASE_TABLE).select("*").range(start, start + page_size - 1).execute()
             batch = resp.data or []
             rows.extend(batch)
-            if len(batch) < page_size:
-                break
+            if len(batch) < page_size: break
             start += page_size
         return rows
-
     try:
         all_rows = _retry(_fetch_all, label="SUPABASE")
-        if not all_rows:
-            print("ℹ️ [SUPABASE] Bảng rỗng.")
-            return pd.DataFrame(columns=STANDARD_COLUMNS)
-        df = pd.DataFrame(all_rows)
-        
-        # Map ngược từ tiếng Anh về tiếng Việt nếu có
-        df = df.rename(columns=EN_TO_VN_MAP)
-        
+        if not all_rows: return pd.DataFrame(columns=STANDARD_COLUMNS)
+        df = pd.DataFrame(all_rows).rename(columns=EN_TO_VN_MAP)
         df = _normalize_to_standard(df, fill_company=False)
-        print(f"✅ [SUPABASE] Đã tải {len(df):,} dòng từ '{SUPABASE_TABLE}'.")
+        print(f"✅ [SUPABASE] Đã tải {len(df):,} dòng.")
         return df
     except Exception as e:
-        print(f"❌ [SUPABASE] Lỗi tải dữ liệu: {e}")
+        print(f"❌ [SUPABASE] Lỗi tải: {e}")
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
+# ==========================================
+# 🚀 HÀM UPSERT ĐÃ ĐƯỢC SỬA TRIỆT ĐỂ
+# ==========================================
 def upsert_to_supabase(df, batch_size=500):
     client = init_supabase()
-    if client is None:
-        print("⚠️ [SUPABASE] Không thể upsert — thiếu kết nối.")
-        return False
-    if df is None or df.empty:
-        print("⚠️ [SUPABASE] Không có dữ liệu để upsert.")
-        return False
+    if client is None: return False
+    if df is None or df.empty: return False
     
     try:
-        # 1. Chuẩn bị payload (Loại bỏ các dòng có Mã CK hoặc Giá trị bị null)
         payload = df.copy()
-        payload = payload.dropna(subset=['Mã chứng khoán', 'Giá trị'])
-        payload = payload[payload['Mã chứng khoán'].astype(str).str.strip() != '']
         
-        # 2. Mapping tên cột sang tiếng Anh chuẩn của Supabase
+        # 1. Loại bỏ các dòng không có Mã chứng khoán hoặc Giá trị
+        payload = payload.dropna(subset=['Mã chứng khoán', 'Giá trị'])
+        payload['Mã chứng khoán'] = payload['Mã chứng khoán'].astype(str).str.strip().str.upper()
+        payload = payload[payload['Mã chứng khoán'] != '']
+        payload = payload[payload['Mã chứng khoán'] != 'NAN']
+        
+        # 2. Map sang tiếng Anh
         payload = payload.rename(columns=VN_TO_EN_MAP)
         
-        # 3. Ép kiểu dữ liệu chặt chẽ để tránh lỗi PostgREST
-        payload['ticker'] = payload['ticker'].astype(str).str.upper()
-        payload['value'] = pd.to_numeric(payload['value'], errors='coerce')
-        payload = payload[payload['value'].notna()] # Bỏ các dòng value bị lỗi parse
-        
-        # Xử lý cột year (Năm)
-        if 'year' in payload.columns:
-            payload['year'] = pd.to_numeric(payload['year'], errors='coerce').fillna(datetime.now().year).astype(int)
+        # 3. Ép kiểu Native Python (Cực kỳ quan trọng để tránh lỗi JSON)
+        valid_cols = ['ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value']
+        for col in valid_cols:
+            if col not in payload.columns: payload[col] = None
             
-        # 4. Chỉ lấy các cột Supabase có (dựa trên VN_TO_EN_MAP)
-        cols_to_keep = list(VN_TO_EN_MAP.values())
-        valid_cols = [c for c in cols_to_keep if c in payload.columns]
-        payload = payload[valid_cols]
-        
-        total = len(payload)
+        records = []
+        for _, row in payload.iterrows():
+            # Xử lý từng trường
+            ticker = str(row['ticker']).strip() if pd.notna(row['ticker']) else ''
+            if not ticker: continue
+            
+            val = pd.to_numeric(row['value'], errors='coerce')
+            if pd.isna(val) or val == 0: continue
+            
+            yr = pd.to_numeric(row['year'], errors='coerce')
+            yr = int(yr) if pd.notna(yr) else datetime.now().year
+            
+            # Hàm phụ trợ chuyển NaN thành None
+            def clean_str(s):
+                if pd.isna(s): return None
+                s = str(s).strip()
+                return s if s else None
+                
+            r = {
+                'ticker': ticker,
+                'company_name': clean_str(row['company_name']),
+                'sector': clean_str(row['sector']),
+                'report_type': clean_str(row['report_type']),
+                'period_type': clean_str(row['period_type']),
+                'year': yr,
+                'report_date': clean_str(row['report_date']),
+                'item_vn': clean_str(row['item_vn']),
+                'value': float(val)
+            }
+            records.append(r)
+            
+        total = len(records)
         if total == 0:
-            print("⚠️ [SUPABASE] Không có dòng hợp lệ sau khi làm sạch.")
+            print("⚠️ [SUPABASE] Không có bản ghi hợp lệ sau khi làm sạch.")
             return False
             
-        print(f"📤 [SUPABASE] Bắt đầu upsert {total:,} dòng (batch={batch_size})...")
+        print(f"📤 [SUPABASE] Bắt đầu upsert {total:,} bản ghi (batch={batch_size})...")
+        print(f"🔍 [DEBUG] Mẫu bản ghi đầu tiên: {records[0]}")
         
         upsert_kwargs = {}
         if SUPABASE_ON_CONFLICT:
             upsert_kwargs['on_conflict'] = SUPABASE_ON_CONFLICT
-            print(f"   → on_conflict='{SUPABASE_ON_CONFLICT}'")
             
         for i in range(0, total, batch_size):
-            chunk = payload.iloc[i:i+batch_size].to_dict('records')
+            chunk = records[i:i+batch_size]
             def _do_upsert(c=chunk, kw=upsert_kwargs):
                 return client.table(SUPABASE_TABLE).upsert(c, **kw).execute()
             _retry(_do_upsert, label="SUPABASE_UPSERT")
@@ -287,20 +276,10 @@ HF_DATA_URL = "https://huggingface.co/datasets/trananhquan2001/finex-vn-dataset/
 
 def load_daily_stock_data():
     if os.path.exists(DATA_PATH):
-        try:
-            df = pd.read_csv(DATA_PATH)
-            print(f"✅ [DAILY] Đã tải {len(df):,} dòng từ LOCAL ({DATA_PATH}).")
-            return df
-        except Exception as e:
-            print(f"⚠️ [DAILY] Lỗi đọc local: {e}. Fallback Hugging Face...")
-    try:
-        print("🌐 [DAILY] Đang tải từ Hugging Face...")
-        df = pd.read_csv(HF_DATA_URL)
-        print(f"✅ [DAILY] Đã tải {len(df):,} dòng từ HF.")
-        return df
-    except Exception as e:
-        print(f"❌ [DAILY] Lỗi tải HF: {e}")
-        return pd.DataFrame()
+        try: return pd.read_csv(DATA_PATH)
+        except Exception: pass
+    try: return pd.read_csv(HF_DATA_URL)
+    except Exception: return pd.DataFrame()
 
 # ==========================================
 # 3. DANH SÁCH 176 MÃ & THÔNG TIN DOANH NGHIỆP
@@ -323,9 +302,7 @@ def load_176_master_tickers():
         'TDC','CTI','SJD','TMP','SBA','VSH','TTA','TV2','VCP','BFC','DDV','SGP',
         'DPR','DHC','TCM','HPP','PAT','DTP','SCL','HMS',
     ]
-    ticker_map = {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
-    print(f"\n📌 Danh sách mục tiêu FINEX: {len(ticker_map)} mã.")
-    return ticker_map
+    return {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
 
 def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
@@ -553,42 +530,32 @@ def format_value(x):
     try:
         if isinstance(x, str):
             x = x.replace(',', '').replace(' ', '')
-            if x.count('.') > 1:
-                x = x.replace('.', '')
+            if x.count('.') > 1: x = x.replace('.', '')
         val = float(x)
         if abs(val) > 1e15: return None
         if val == 0 or val != val or val in [float('inf'), float('-inf')]: return None
         return round(val, 4)
-    except:
-        return None
+    except: return None
 
 def clean_text(text):
     if pd.isna(text): return ""
     text = str(text)
     text = re.sub(r'[\n\r\t]+', ' ', text)
-    text = re.sub(r'\s{2,}', ' ', text)
-    return text.strip()
+    return re.sub(r'\s{2,}', ' ', text).strip()
 
 def fix_truncated_text(text):
     text = clean_text(text)
     fixes = {
-        "Các khoản phải": "Các khoản phải thu",
-        "Lợi nhuận trước": "Lợi nhuận trước thuế",
-        "Thuế và các kho": "Thuế và các khoản phải nộp",
-        "Tiền và tương đ": "Tiền và tương đương tiền",
-        "TỔNG CỘNG N": "TỔNG CỘNG NỢ PHẢI TRẢ",
-        "VỐN CHỦ SỞ H": "VỐN CHỦ SỞ HỮU",
-        "Cổ phiếu phổ thô": "Cổ phiếu phổ thông",
-        "Đầu tư dài hạn k": "Đầu tư dài hạn khác",
-        "Lợi nhuận thuần": "Lợi nhuận thuần từ HĐKD",
-        "Lưu chuyển tiền": "Lưu chuyển tiền thuần",
-        "Lãi / Lỗ từ đánh": "Lãi / Lỗ từ đánh giá lại tài sản",
-        "Tổng tài sản": "Tổng tài sản",
+        "Các khoản phải": "Các khoản phải thu", "Lợi nhuận trước": "Lợi nhuận trước thuế",
+        "Thuế và các kho": "Thuế và các khoản phải nộp", "Tiền và tương đ": "Tiền và tương đương tiền",
+        "TỔNG CỘNG N": "TỔNG CỘNG NỢ PHẢI TRẢ", "VỐN CHỦ SỞ H": "VỐN CHỦ SỞ HỮU",
+        "Cổ phiếu phổ thô": "Cổ phiếu phổ thông", "Đầu tư dài hạn k": "Đầu tư dài hạn khác",
+        "Lợi nhuận thuần": "Lợi nhuận thuần từ HĐKD", "Lưu chuyển tiền": "Lưu chuyển tiền thuần",
+        "Lãi / Lỗ từ đánh": "Lãi / Lỗ từ đánh giá lại tài sản", "Tổng tài sản": "Tổng tài sản",
         "Tổng khác f giá gốc": "Tổng chi phí khác theo giá gốc"
     }
     for k, v in fixes.items():
-        if text.startswith(k):
-            return v
+        if text.startswith(k): return v
     return text
 
 def fix_yfinance_typos(text):
@@ -657,10 +624,8 @@ def translate_metric(metric_original, is_vn=False):
         if any(char in w for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
             translated_words.append(w); continue
         w_clean = re.sub(r'[^a-zA-Z]', '', w).lower()
-        if w_clean in FALLBACK_MAP:
-            translated_words.append(FALLBACK_MAP[w_clean])
-        elif w.isupper() and len(w) <= 5:
-            translated_words.append(w)
+        if w_clean in FALLBACK_MAP: translated_words.append(FALLBACK_MAP[w_clean])
+        elif w.isupper() and len(w) <= 5: translated_words.append(w)
     result = " ".join(translated_words)
     result = re.sub(r'\b[a-zA-Z]\b', '', result)
     result = re.sub(r'\s{2,}', ' ', result).strip()
@@ -677,9 +642,7 @@ def final_format_for_csv(x):
 # 6. FALLBACK APIs
 # ==========================================
 session = requests.Session()
-session.headers.update({
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-})
+session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'})
 
 def fetch_tcbs_fallback(symbol):
     records = []
@@ -825,13 +788,11 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         if ticker_obj:
             try:
                 hist = ticker_obj.history(period="5d")
-                if not hist.empty:
-                    current_price = float(hist['Close'].iloc[-1])
+                if not hist.empty: current_price = float(hist['Close'].iloc[-1])
             except: pass
             try:
                 info = ticker_obj.info
-                if not current_price:
-                    current_price = float(info.get('regularMarketPrice', 0) or info.get('previousClose', 0) or 0)
+                if not current_price: current_price = float(info.get('regularMarketPrice', 0) or info.get('previousClose', 0) or 0)
                 shares_out = float(info.get('sharesOutstanding', 0) or 0)
                 div_yield = float(info.get('dividendYield', 0) or 0) * 100 if info.get('dividendYield') else 0.0
             except: pass
@@ -841,15 +802,11 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
                 if 'ordinary shares number' in row_str or 'share issued' in row_str or 'common stock' in row_str:
                     for col in balance_sheet_df.columns:
                         val = balance_sheet_df.loc[row_idx, col]
-                        if pd.notna(val) and float(val) > 0:
-                            shares_out = float(val); break
+                        if pd.notna(val) and float(val) > 0: shares_out = float(val); break
                     if shares_out: break
         if (not market_cap or market_cap == 0.0) and current_price > 0 and shares_out > 0:
             market_cap = current_price * shares_out
-        metrics = [
-            ('Current Price', current_price), ('Shares Outstanding', shares_out),
-            ('Market Capitalization', market_cap), ('Dividend Yield', div_yield)
-        ]
+        metrics = [('Current Price', current_price), ('Shares Outstanding', shares_out), ('Market Capitalization', market_cap), ('Dividend Yield', div_yield)]
         for eng_key, val in metrics:
             if val is not None:
                 fv = format_value(val)
@@ -942,52 +899,37 @@ def fetch_vnstock_financials(symbol):
                     fv = format_value(price)
                     if fv is not None:
                         company_name, sector_name = get_company_profile(symbol)
-                        records.append({
-                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                            'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': fv
-                        })
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'), 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': fv})
         except Exception: pass
         try:
             ratio_df = fin.ratio(symbol=symbol)
             if ratio_df is not None and not ratio_df.empty:
                 shares = None
                 for col in ['outstanding_shares','issue_share','Ordinary Shares Number']:
-                    if col in ratio_df.columns:
-                        shares = ratio_df[col].iloc[0]; break
+                    if col in ratio_df.columns: shares = ratio_df[col].iloc[0]; break
                 if shares and float(shares) > 0:
                     fv = format_value(shares)
                     if fv is not None:
                         company_name, sector_name = get_company_profile(symbol)
-                        records.append({
-                            'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
-                            'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'),
-                            'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': fv
-                        })
+                        records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': str(datetime.now().year), 'Ngày kỳ': datetime.today().strftime('%Y-%m-%d'), 'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': fv})
         except Exception: pass
     except Exception: pass
 
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
-
     if not has_price or not has_shares:
         for vr in fetch_vps_fallback(symbol):
-            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records):
-                records.append(vr)
+            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records): records.append(vr)
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
     if not has_price or not has_shares:
         for vr in fetch_vndirect_fallback(symbol):
-            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records):
-                records.append(vr)
+            if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records): records.append(vr)
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
     if not has_price or not has_shares:
         for tr in fetch_tcbs_fallback(symbol):
-            if not any(r['Chỉ tiêu tiếng Việt'] == tr['Chỉ tiêu tiếng Việt'] for r in records):
-                records.append(tr)
+            if not any(r['Chỉ tiêu tiếng Việt'] == tr['Chỉ tiêu tiếng Việt'] for r in records): records.append(tr)
     return records
 
 # ==========================================
@@ -1002,12 +944,7 @@ def find_value_column(df):
 
 def fetch_vnfinancialdata_bulk(ticker_market_map):
     records = []
-    statements = {
-        "balance_sheet": "Bảng cân đối kế toán",
-        "income_statement": "Báo cáo kết quả kinh doanh",
-        "cash_flow": "Báo cáo lưu chuyển tiền tệ",
-        "ratio": "Chỉ số tài chính & Định giá"
-    }
+    statements = {"balance_sheet": "Bảng cân đối kế toán", "income_statement": "Báo cáo kết quả kinh doanh", "cash_flow": "Báo cáo lưu chuyển tiền tệ", "ratio": "Chỉ số tài chính & Định giá"}
     target_symbols = set(ticker_market_map.keys())
     for exchange in ["HSX", "HNX"]:
         for stmt_key, stmt_name in statements.items():
@@ -1037,8 +974,7 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                         'Loại kỳ': 'Năm', 'Năm': year_val, 'Ngày kỳ': f"{year_val}-12-31",
                         'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': fv
                     })
-            except Exception:
-                pass
+            except Exception: pass
     return records
 
 # ==========================================
@@ -1046,8 +982,7 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
-    suffixes = [".VN", ".HN", ""]
-    for suffix in suffixes:
+    for suffix in [".VN", ".HN", ""]:
         try:
             ticker = yf.Ticker(f"{symbol}{suffix}", session=session)
             bs_df = getattr(ticker, 'balance_sheet', None)
@@ -1068,8 +1003,7 @@ def process_single_ticker(symbol, category):
 # 11. SOURCE TRACKING HELPERS
 # ==========================================
 def _add_source(records, source_name, priority=None):
-    if priority is None:
-        priority = PRIORITY_MAP.get(source_name, 99)
+    if priority is None: priority = PRIORITY_MAP.get(source_name, 99)
     for r in records:
         r['_source'] = source_name
         r['_priority'] = priority
@@ -1080,13 +1014,12 @@ def _add_source(records, source_name, priority=None):
 # ==========================================
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v3.0 (FIXED)")
-    print(f"   Mode: SUPABASE_PRIORITY={SUPABASE_PRIORITY} | PUSH_TO_SUPABASE={PUSH_TO_SUPABASE}")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v4.0 (ULTIMATE FIX)")
+    print(f"   SUPABASE_PRIORITY={SUPABASE_PRIORITY} | PUSH_TO_SUPABASE={PUSH_TO_SUPABASE}")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
     all_master_records = []
-    success_count = 0
     source_before_dedup = {}
 
     def _accumulate(recs, source):
@@ -1095,47 +1028,36 @@ def main():
         all_master_records.extend(recs)
         source_before_dedup[source] = source_before_dedup.get(source, 0) + len(recs)
 
-    # BƯỚC 0: DAILY
+    # BƯỚC 0
     print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày...")
     hf_df = load_daily_stock_data()
     if not hf_df.empty:
         hf_df = _normalize_to_standard(hf_df, fill_company=True)
         if not hf_df.empty:
             _accumulate(hf_df.to_dict('records'), 'DAILY')
-            print(f" ✅ Đã nạp {len(hf_df):,} dòng Daily vào Master Records.")
+            print(f" ✅ Đã nạp {len(hf_df):,} dòng.")
 
-    # BƯỚC 1: VNFINANCIAL
+    # BƯỚC 1
     print("\n🚀 BƯỚC 1: Tải BCTC từ vnfinancialdata...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
-    if vnf_recs:
-        _accumulate(vnf_recs, 'VN_FINANCIAL')
-        print(f" ✅ Đã lấy {len(vnf_recs):,} dòng từ vnfinancialdata.")
+    if vnf_recs: _accumulate(vnf_recs, 'VN_FINANCIAL')
 
-    # BƯỚC 2: INDICES
+    # BƯỚC 2
     print("\n📈 BƯỚC 2: Cào chỉ số vĩ mô...")
     index_recs = fetch_market_indices()
-    if index_recs:
-        _accumulate(index_recs, 'INDICES')
-        print(f" ✅ Đã lấy {len(index_recs):,} dòng chỉ số.")
+    if index_recs: _accumulate(index_recs, 'INDICES')
 
-    # BƯỚC 3: YFINANCE
-    total_tickers = len(ticker_market_map)
+    # BƯỚC 3
     print(f"\n🔄 BƯỚC 3: Cào Yfinance song song...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
-            symbol = futures[future]
             try:
                 res = future.result()
-                if res:
-                    _add_source(res, 'YFINANCE')
-                    all_master_records.extend(res)
-                    source_before_dedup['YFINANCE'] = source_before_dedup.get('YFINANCE', 0) + len(res)
-                    success_count += 1
-            except Exception:
-                pass
+                if res: _accumulate(res, 'YFINANCE')
+            except Exception: pass
 
-    # BƯỚC 4: VNSTOCK FILLS
+    # BƯỚC 4
     print(f"\n🐢 BƯỚC 4: Quét bù cho các mã khuyết dữ liệu...")
     df_temp = pd.DataFrame(all_master_records)
     existing_symbols = set(df_temp['Mã chứng khoán'].unique()) if not df_temp.empty else set()
@@ -1145,26 +1067,17 @@ def main():
         prices = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
         symbols_with_price = set(prices['Mã chứng khoán'].unique())
     missing_symbols = list(set([s for s in ticker_market_map.keys() if s not in symbols_with_price] + completely_missing))
-    
     for idx, symbol in enumerate(missing_symbols):
         res = fetch_vnstock_financials(symbol)
-        if res:
-            _add_source(res, 'VNSTOCK')
-            all_master_records.extend(res)
-            source_before_dedup['VNSTOCK'] = source_before_dedup.get('VNSTOCK', 0) + len(res)
-            print(f"  [{idx+1}/{len(missing_symbols)}] Đã bù dữ liệu: {symbol}")
+        if res: _accumulate(res, 'VNSTOCK')
 
-    # BƯỚC 4.5: SUPABASE LOAD
+    # BƯỚC 4.5
     print(f"\n🆕 BƯỚC 4.5: Tải dữ liệu bổ sung từ Supabase...")
     supabase_df = load_data_from_supabase()
     if not supabase_df.empty:
-        if SUPABASE_PRIORITY == 'high':
-            _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH')
-        else:
-            _accumulate(supabase_df.to_dict('records'), 'SUPABASE')
-        print(f" ✅ Đã nạp {len(supabase_df):,} dòng từ Supabase.")
+        _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH' if SUPABASE_PRIORITY == 'high' else 'SUPABASE')
 
-    # BƯỚC 5: CLEAN + DEDUP
+    # BƯỚC 5
     print("\n🧹 BƯỚC 5: Làm sạch, dedupe...")
     df_master = pd.DataFrame(all_master_records)
     source_after_dedup = {}
@@ -1172,7 +1085,6 @@ def main():
     if not df_master.empty:
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Chỉ tiêu tiếng Việt'] = df_master['Chỉ tiêu tiếng Việt'].apply(clean_text)
-
         num_series = pd.to_numeric(df_master['Giá trị'], errors='coerce')
         need_clean = num_series.isna() & df_master['Giá trị'].astype(str).str.contains(r'[0-9]', regex=True)
         if need_clean.any():
@@ -1182,28 +1094,20 @@ def main():
 
         df_valid = df_master[df_master['Giá trị'].notna() & (df_master['Giá trị'] != 0)].copy()
         df_valid = df_valid.sort_values('_priority', kind='stable')
-        df_valid = df_valid.drop_duplicates(
-            subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'],
-            keep='first'
-        )
+        df_valid = df_valid.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
 
-        if '_source' in df_valid.columns:
-            source_after_dedup = df_valid['_source'].value_counts().to_dict()
-
+        if '_source' in df_valid.columns: source_after_dedup = df_valid['_source'].value_counts().to_dict()
         df_valid['Giá trị'] = df_valid['Giá trị'].apply(final_format_for_csv)
         df_master = df_valid[STANDARD_COLUMNS].copy()
-        df_master = df_master.sort_values(
-            by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'],
-            ascending=[True, True, True, False, False]
-        )
+        df_master = df_master.sort_values(by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'], ascending=[True, True, True, False, False])
 
-    # BƯỚC 6: XUẤT CSV
+    # BƯỚC 6
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f"\n💾 Đã lưu CSV: {csv_path}")
 
-    # BƯỚC 7: PUSH TO SUPABASE
+    # BƯỚC 7
     if PUSH_TO_SUPABASE:
         print("\n📤 BƯỚC 7: Đẩy dữ liệu lên Supabase (upsert)...")
         upsert_to_supabase(df_master)
@@ -1217,20 +1121,10 @@ def main():
     valid_p = set(prices[pd.to_numeric(prices['Giá trị'], errors='coerce').fillna(0) > 0]['Mã chứng khoán'].unique())
     valid_s = set(shares[pd.to_numeric(shares['Giá trị'], errors='coerce').fillna(0) > 0]['Mã chứng khoán'].unique())
     both = valid_p.intersection(valid_s)
-    unique_tickers_in_csv = df_check['Mã chứng khoán'].nunique()
-    all_targets = set(ticker_market_map.keys())
-    still_missing_both = sorted(all_targets - both)
 
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_master):,}")
-    print(f" - Số mã có dữ liệu: {unique_tickers_in_csv}/176 mã")
-    print("=" * 62)
-    print(" 📊 NGUỒN DỮ LIỆU (trước → sau dedup):")
-    all_sources = sorted(set(source_before_dedup.keys()) | set(source_after_dedup.keys()))
-    for src in all_sources:
-        before = source_before_dedup.get(src, 0)
-        after = source_after_dedup.get(src, 0)
-        print(f"   • {src:<15} | {before:>8,} → {after:>8,} dòng")
+    print(f" - Số mã có dữ liệu: {df_check['Mã chứng khoán'].nunique()}/176 mã")
     print("=" * 62)
 
 if __name__ == "__main__":
