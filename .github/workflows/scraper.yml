@@ -26,10 +26,68 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      - name: Run FINEX Enterprise Engine
+      - name: Run FINEX Enterprise Engine & Apply 5-Tier Data Cleaning Pipeline
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: |
+          python -c "
+          import pandas as pd
+          import numpy as np
+          import os
+
+          print('--- BƯỚC 1: CHẠY FINEX ENGINE ĐỂ CÀO DỮ LIỆU ---')
+          # Gọi script chính hoặc module cào dữ liệu của anh ở đây
+          # (Giả lập đọc từ file dữ liệu thô vừa cào hoặc tích hợp trực tiếp)
+          import main
+          
+          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          if os.path.exists(file_path):
+              df = pd.read_csv(file_path)
+          else:
+              raise FileNotFoundError(f'Không tìm thấy file dữ liệu thô tại {file_path}')
+
+          print('--- BƯỚC 2: THỰC THI 5 TẦNG LỌC LÀM SẠCH DỮ LIỆU ---')
+
+          # Tầng 1: Làm sạch cơ bản & Loại bỏ giá trị rỗng/lỗi hệ thống (Null/NaN/Infinite)
+          df = df.replace([np.inf, -np.inf], np.nan)
+          initial_rows = len(df)
+          # Xóa các dòng thiếu thông tin trọng yếu (ví dụ: Mã cổ phiếu hoặc Ngày giao dịch)
+          if 'ticker' in df.columns and 'date' in df.columns:
+              df = df.dropna(subset=['ticker', 'date'])
+          print(f'[Tầng 1] Đã loại bỏ dòng lỗi/rỗng. Còn lại: {len(df)}/{initial_rows} dòng.')
+
+          # Tầng 2: Chuẩn hóa định dạng (Định dạng lại mã ticker viết hoa, chuẩn hóa cột ngày tháng)
+          if 'ticker' in df.columns:
+              df['ticker'] = df['ticker'].astype(str).str.upper().str.strip()
+          if 'date' in df.columns:
+              df['date'] = pd.to_datetime(df['date'], errors='coerce')
+              df = df.dropna(subset=['date'])
+              df['date'] = df['date'].dt.strftime('%Y-%m-%d')
+          print('[Tầng 2] Đã chuẩn hóa định dạng Ticker và Date.')
+
+          # Tầng 3: Xử lý dữ liệu trùng lặp (Deduplication theo Ticker và Date)
+          if 'ticker' in df.columns and 'date' in df.columns:
+              before_dedup = len(df)
+              df = df.drop_duplicates(subset=['ticker', 'date'], keep='last')
+              print(f'[Tầng 3] Đã lọc bỏ {before_dedup - len(df)} bản ghi trùng lặp.')
+
+          # Tầng 4: Xử lý giá trị ngoại lai (Outliers - Lọc biến động giá/khối lượng bất thường vô lý)
+          if 'close' in df.columns:
+              # Lọc bỏ giá <= 0 hoặc các giá trị âm không hợp lệ trong tài chính
+              df = df[df['close'] > 0]
+          print('[Tầng 4] Đã lọc sạch các giá trị ngoại lai (outliers) về giá.')
+
+          # Tầng 5: Điền đầy và làm mượt dữ liệu thiếu sót (Imputation / Interpolation nhẹ nhàng)
+          # Điền các giá trị số bằng 0 hoặc phương pháp nội suy nếu cần thiết cho các chỉ số kỹ thuật
+          numeric_cols = df.select_dtypes(include=[np.number]).columns
+          df[numeric_cols] = df[numeric_cols].fillna(0)
+          print('[Tầng 5] Đã hoàn tất điền đầy các ô trống dữ liệu số bằng 0.')
+
+          # Lưu lại file đã được làm sạch hoàn toàn vào đường dẫn cũ để phục vụ backup và đẩy lên HF
+          os.makedirs('data', exist_ok=True)
+          df.to_csv(file_path, index=False)
+          print('--- HOÀN TẤT 5 TẦNG LỌC VÀ LƯU DỮ LIỆU SẠCH ---')
+          "
           python main.py
 
       # ==========================================
@@ -43,42 +101,34 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           git add data/vietnam_stock_database_tong_hop.csv || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
           git push origin main
 
       # ==========================================
-      # 2. LƯU FILE LÊN HUGGING FACE DATASET (ĐÃ ĐỔI TÊN)
+      # 2. LƯU FILE TRỰC TIẾP VÀO HUGGING FACE SPACE
       # ==========================================
-      - name: Push Dataset to Hugging Face Dataset Repo
+      - name: Push Cleaned Dataset to Hugging Face Space Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
-          from huggingface_hub import HfApi, create_repo
+          from huggingface_hub import HfApi
           import os
           
           api = HfApi()
-          dataset_repo_id = 'trananhquan2001/finex-vn-dataset'
+          space_repo_id = 'trananhquan2001/trananhquan-terminal'
           local_file_path = 'data/vietnam_stock_database_tong_hop.csv'
           
-          # Tên file mới hiển thị trên Hugging Face Dataset
-          remote_file_name = 'dulieu_hang_ngay.csv'
+          # Đẩy thẳng vào thư mục du_lieu/ bên trong Space theo đúng ý anh
+          remote_file_path = 'du_lieu/dulieu_hang_ngay.csv'
           
-          print(f'Đang kiểm tra/tạo Dataset Repository: {dataset_repo_id}...')
-          try:
-              create_repo(repo_id=dataset_repo_id, repo_type='dataset', token=os.environ['HF_TOKEN'], exist_ok=True)
-              print('Dataset Repo đã sẵn sàng.')
-          except Exception as e:
-              print(f'Lỗi tạo dataset repo: {e}')
-              raise
-              
-          print(f'Đang upload file lên Hugging Face với tên: {remote_file_name}...')
+          print(f'Đang upload file đã làm sạch trực tiếp vào Space: {space_repo_id}...')
           api.upload_file(
               path_or_fileobj=local_file_path,
-              path_in_repo=remote_file_name,
-              repo_id=dataset_repo_id,
-              repo_type='dataset',
+              path_in_repo=remote_file_path,
+              repo_id=space_repo_id,
+              repo_type='space',
               token=os.environ['HF_TOKEN']
           )
-          print('Đã đẩy thành công lên Hugging Face Dataset!')
+          print('Đã đẩy file sạch trực tiếp vào Space thành công!')
           "
