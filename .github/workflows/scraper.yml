@@ -32,7 +32,7 @@ jobs:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python main.py
 
-      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (Đã sửa lỗi mapping)
+      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (BẢN BẤT TỬ)
       - name: Clean Data & Push to Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -53,38 +53,48 @@ jobs:
           df = pd.read_csv(file_path)
           df = df.replace([np.inf, -np.inf], np.nan)
 
-          # ⚠️ SỬA TẠI ĐÂY: Ánh xạ chính xác từ Tiếng Việt sang Tiếng Anh
-          # Nếu Supabase của bạn dùng tên khác, hãy sửa giá trị bên phải (vd: item_vn -> item)
+          # 1. Ánh xạ cột
           rename_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
-              'Tên ngành': 'sector',         # Nếu Supabase dùng 'industry', sửa thành 'industry'
+              'Tên ngành': 'sector',
               'Loại báo cáo': 'report_type',
               'Loại kỳ': 'period_type',
               'Năm': 'year',
               'Ngày kỳ': 'report_date',
-              'Chỉ tiêu tiếng Việt': 'item_vn', # Nếu Supabase dùng 'item' hoặc 'metric', hãy sửa lại
+              'Chỉ tiêu tiếng Việt': 'item_vn',
               'Giá trị': 'value'
           }
           df = df.rename(columns=rename_map)
 
-          # Dọn dẹp rác (Bỏ các dòng không có ticker hoặc value)
+          # 2. Làm sạch dữ liệu
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
-          
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df[df['value'].notna() & (df['value'] != 0)]
-          
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
 
-          # Chuyển sang dạng Native Python
+          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+
+          # 3. LẤY DANH SÁCH CỘT THỰC TẾ TỪ SUPABASE (Để tránh lỗi thiếu cột)
+          try:
+              res = supabase.table('finex_stock_master').select('*').limit(1).execute()
+              if res.data:
+                  valid_cols = set(res.data[0].keys())
+              else:
+                  valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics'}
+          except Exception as e:
+              print(f'Không lấy được schema, dùng mặc định: {e}')
+              valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics'}
+
+          # 4. Tạo Payload an toàn
           records = []
           for _, row in df.iterrows():
               def clean_str(s):
                   return str(s).strip() if pd.notna(s) else None
                   
-              records.append({
+              r = {
                   'ticker': str(row['ticker']),
                   'company_name': clean_str(row.get('company_name')),
                   'sector': clean_str(row.get('sector')),
@@ -92,18 +102,34 @@ jobs:
                   'period_type': clean_str(row.get('period_type')),
                   'year': int(row['year']),
                   'report_date': clean_str(row.get('report_date')),
-                  'item_vn': clean_str(row.get('item_vn')), # Chỗ này sẽ khớp với rename_map ở trên
+                  'item_vn': clean_str(row.get('item_vn')),
                   'value': float(row['value'])
-              })
+              }
+              
+              final_r = {}
+              extra = {}
+              for k, v in r.items():
+                  if k in valid_cols:
+                      final_r[k] = v
+                  else:
+                      extra[k] = v
+                      
+              # Nếu bảng có cột extra_metrics thì nhét các cột lạ vào đó
+              if 'extra_metrics' in valid_cols:
+                  final_r['extra_metrics'] = extra if extra else {}
+                  
+              # Đảm bảo mọi bản ghi đều có chung số lượng key (PostgREST yêu cầu)
+              for col in valid_cols:
+                  if col not in final_r and col != 'extra_metrics':
+                      final_r[col] = None
+                      
+              records.append(final_r)
 
           print(f'Đang đồng bộ {len(records)} bản ghi sạch vào bảng finex_stock_master...')
           
-          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
           batch_size = 500
-          
           for i in range(0, len(records), batch_size):
               batch = records[i:i + batch_size]
-              # Upsert dựa trên khóa chính
               supabase.table('finex_stock_master').upsert(
                   batch, 
                   on_conflict='ticker,report_type,period_type,report_date,item_vn'
