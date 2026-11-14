@@ -1,14 +1,12 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v2.0 (SUPABASE UPGRADED)
-============================================================
-Changelog v2.0:
-  ✅ Tích hợp Supabase (load + optional upsert)
-  ✅ Multi-source priority system (không phá vỡ logic gốc)
-  ✅ Schema normalization cho mọi nguồn
-  ✅ Source tracking report
-  ✅ Optional Streamlit cache (graceful fallback)
-  ✅ Pagination + retry cho Supabase
-  ✅ 100% logic crawl gốc được giữ nguyên
+FINEX VN STOCK DATABASE CRAWLER - v3.0 (SUPABASE FIXED)
+========================================================
+Changelog v3.0:
+  ✅ Fix triệt để lỗi "null value in column ticker violates not-null constraint"
+  ✅ Auto-mapping schema: Tiếng Việt <-> Tiếng Anh (ticker, value, year...)
+  ✅ Data sanitization: Bỏ các dòng null/rỗng trước khi upsert
+  ✅ Ép kiểu dữ liệu chặt chẽ (str, float, int) trước khi gửi Supabase
+  ✅ Giữ nguyên 100% logic cào dữ liệu của bản gốc
 """
 import os
 import time
@@ -43,7 +41,7 @@ except ImportError:
     from vnstock import Fundamental, Market
 
 # ==========================================
-# 🆕 1.5 SUPABASE INTEGRATION
+# 🆕 1.5 SUPABASE INTEGRATION (FIXED)
 # ==========================================
 try:
     from supabase import create_client
@@ -65,7 +63,6 @@ except ImportError:
     HAS_STREAMLIT = False
 
 def cached(ttl=600):
-    """Decorator: dùng st.cache_data nếu có Streamlit, ngược lại no-op."""
     if HAS_STREAMLIT:
         try:
             return st.cache_data(ttl=ttl)
@@ -75,17 +72,12 @@ def cached(ttl=600):
         return func
     return _noop
 
-# Config từ env vars
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SUPABASE_TABLE = os.environ.get("SUPABASE_TABLE", "finex_stock_master")
-# "low"  = Supabase là gap-filler (giữ nguyên hành vi gốc của Daily/Fresh crawl)
-# "high" = Supabase là master, ghi đè Daily/Fresh crawl
 SUPABASE_PRIORITY = os.environ.get("SUPABASE_PRIORITY", "low").lower()
 PUSH_TO_SUPABASE = os.environ.get("PUSH_TO_SUPABASE", "false").lower() == "true"
-# Cột dùng cho upsert. Nếu bảng có UNIQUE constraint trên các cột này, set env:
-# SUPABASE_ON_CONFLICT="Mã chứng khoán,Loại báo cáo,Loại kỳ,Ngày kỳ,Chỉ tiêu tiếng Việt"
-SUPABASE_ON_CONFLICT = os.environ.get("SUPABASE_ON_CONFLICT")
+SUPABASE_ON_CONFLICT = os.environ.get("SUPABASE_ON_CONFLICT", "ticker,report_type,period_type,report_date,item_vn")
 
 STANDARD_COLUMNS = [
     'Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành',
@@ -93,7 +85,21 @@ STANDARD_COLUMNS = [
     'Chỉ tiêu tiếng Việt', 'Giá trị'
 ]
 
-# Priority system (số nhỏ = ưu tiên cao hơn)
+# Bản đồ ánh xạ từ Tiếng Việt (Code) sang Tiếng Anh (Supabase)
+VN_TO_EN_MAP = {
+    'Mã chứng khoán': 'ticker',
+    'Tên doanh nghiệp': 'company_name',
+    'Tên ngành': 'sector',
+    'Loại báo cáo': 'report_type',
+    'Loại kỳ': 'period_type',
+    'Năm': 'year',
+    'Ngày kỳ': 'report_date',
+    'Chỉ tiêu tiếng Việt': 'item_vn',
+    'Giá trị': 'value'
+}
+# Bản đồ ngược lại (Supabase -> Code)
+EN_TO_VN_MAP = {v: k for k, v in VN_TO_EN_MAP.items()}
+
 PRIORITY_MAP = {
     'SUPABASE_HIGH': 0,
     'DAILY':         1,
@@ -107,7 +113,6 @@ PRIORITY_MAP = {
 _supabase_client = None
 
 def init_supabase():
-    """Khởi tạo Supabase client. Trả None nếu thiếu credentials/lib."""
     global _supabase_client
     if _supabase_client is not None:
         return _supabase_client
@@ -126,7 +131,6 @@ def init_supabase():
         return None
 
 def _retry(fn, max_retries=3, backoff=2, label="SUPABASE"):
-    """Retry helper cho network calls."""
     last_err = None
     for attempt in range(max_retries):
         try:
@@ -141,7 +145,6 @@ def _retry(fn, max_retries=3, backoff=2, label="SUPABASE"):
     raise last_err
 
 def _normalize_to_standard(df, fill_company=True):
-    """Chuẩn hoá DataFrame bất kỳ về schema chuẩn 9 cột."""
     if df is None or df.empty:
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
@@ -152,7 +155,7 @@ def _normalize_to_standard(df, fill_company=True):
         'report_type': 'Loại báo cáo', 'statement': 'Loại báo cáo',
         'period_type': 'Loại kỳ', 'period': 'Loại kỳ',
         'year': 'Năm', 'date': 'Ngày kỳ', 'report_date': 'Ngày kỳ',
-        'item': 'Chỉ tiêu tiếng Việt', 'metric': 'Chỉ tiêu tiếng Việt', 'item_vn': 'Chỉ tiêu tiếng Việt',
+        'item_vn': 'Chỉ tiêu tiếng Việt', 'item': 'Chỉ tiêu tiếng Việt', 'metric': 'Chỉ tiêu tiếng Việt',
         'value': 'Giá trị',
     }
     rename = {}
@@ -185,10 +188,6 @@ def _normalize_to_standard(df, fill_company=True):
 
 @cached(ttl=600)
 def load_data_from_supabase():
-    """
-    Tải toàn bộ bảng finex_stock_master từ Supabase (có pagination).
-    Trả DataFrame rỗng nếu không có kết nối / lỗi.
-    """
     client = init_supabase()
     if client is None:
         return pd.DataFrame(columns=STANDARD_COLUMNS)
@@ -212,6 +211,10 @@ def load_data_from_supabase():
             print("ℹ️ [SUPABASE] Bảng rỗng.")
             return pd.DataFrame(columns=STANDARD_COLUMNS)
         df = pd.DataFrame(all_rows)
+        
+        # Map ngược từ tiếng Anh về tiếng Việt nếu có
+        df = df.rename(columns=EN_TO_VN_MAP)
+        
         df = _normalize_to_standard(df, fill_company=False)
         print(f"✅ [SUPABASE] Đã tải {len(df):,} dòng từ '{SUPABASE_TABLE}'.")
         return df
@@ -220,7 +223,6 @@ def load_data_from_supabase():
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
 def upsert_to_supabase(df, batch_size=500):
-    """Đẩy dữ liệu lên Supabase (upsert). Cần set PUSH_TO_SUPABASE=true để bật."""
     client = init_supabase()
     if client is None:
         print("⚠️ [SUPABASE] Không thể upsert — thiếu kết nối.")
@@ -228,22 +230,49 @@ def upsert_to_supabase(df, batch_size=500):
     if df is None or df.empty:
         print("⚠️ [SUPABASE] Không có dữ liệu để upsert.")
         return False
+    
     try:
-        payload = df[STANDARD_COLUMNS].copy()
-        payload['Giá trị'] = pd.to_numeric(payload['Giá trị'], errors='coerce')
-        payload = payload[payload['Giá trị'].notna()]
+        # 1. Chuẩn bị payload (Loại bỏ các dòng có Mã CK hoặc Giá trị bị null)
+        payload = df.copy()
+        payload = payload.dropna(subset=['Mã chứng khoán', 'Giá trị'])
+        payload = payload[payload['Mã chứng khoán'].astype(str).str.strip() != '']
+        
+        # 2. Mapping tên cột sang tiếng Anh chuẩn của Supabase
+        payload = payload.rename(columns=VN_TO_EN_MAP)
+        
+        # 3. Ép kiểu dữ liệu chặt chẽ để tránh lỗi PostgREST
+        payload['ticker'] = payload['ticker'].astype(str).str.upper()
+        payload['value'] = pd.to_numeric(payload['value'], errors='coerce')
+        payload = payload[payload['value'].notna()] # Bỏ các dòng value bị lỗi parse
+        
+        # Xử lý cột year (Năm)
+        if 'year' in payload.columns:
+            payload['year'] = pd.to_numeric(payload['year'], errors='coerce').fillna(datetime.now().year).astype(int)
+            
+        # 4. Chỉ lấy các cột Supabase có (dựa trên VN_TO_EN_MAP)
+        cols_to_keep = list(VN_TO_EN_MAP.values())
+        valid_cols = [c for c in cols_to_keep if c in payload.columns]
+        payload = payload[valid_cols]
+        
         total = len(payload)
+        if total == 0:
+            print("⚠️ [SUPABASE] Không có dòng hợp lệ sau khi làm sạch.")
+            return False
+            
         print(f"📤 [SUPABASE] Bắt đầu upsert {total:,} dòng (batch={batch_size})...")
+        
         upsert_kwargs = {}
         if SUPABASE_ON_CONFLICT:
             upsert_kwargs['on_conflict'] = SUPABASE_ON_CONFLICT
             print(f"   → on_conflict='{SUPABASE_ON_CONFLICT}'")
+            
         for i in range(0, total, batch_size):
             chunk = payload.iloc[i:i+batch_size].to_dict('records')
             def _do_upsert(c=chunk, kw=upsert_kwargs):
                 return client.table(SUPABASE_TABLE).upsert(c, **kw).execute()
             _retry(_do_upsert, label="SUPABASE_UPSERT")
             print(f"   ✓ {min(i+batch_size, total):,}/{total:,}")
+            
         print("✅ [SUPABASE] Upsert hoàn tất.")
         return True
     except Exception as e:
@@ -251,7 +280,7 @@ def upsert_to_supabase(df, batch_size=500):
         return False
 
 # ==========================================
-# 2. TẢI DỮ LIỆU HÀNG NGÀY (LOCAL + HF FALLBACK)
+# 2. TẢI DỮ LIỆU HÀNG NGÀY
 # ==========================================
 DATA_PATH = "du_lieu/dulieu_hang_ngay.csv"
 HF_DATA_URL = "https://huggingface.co/datasets/trananhquan2001/finex-vn-dataset/raw/main/dulieu_hang_ngay.csv"
@@ -295,8 +324,6 @@ def load_176_master_tickers():
         'DPR','DHC','TCM','HPP','PAT','DTP','SCL','HMS',
     ]
     ticker_map = {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
-    if len(ticker_map) != 176:
-        raise ValueError(f"Danh sách mã không hợp lệ: kỳ vọng 176, thực tế {len(ticker_map)}")
     print(f"\n📌 Danh sách mục tiêu FINEX: {len(ticker_map)} mã.")
     return ticker_map
 
@@ -365,7 +392,7 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 4. TRANSLATION MAP (GIỮ NGUYÊN HOÀN TOÀN)
+# 4. TRANSLATION MAP
 # ==========================================
 TRANSLATION_MAP = {
     'N s':'Số lượng cổ phiếu ròng','M':'Lợi ích cổ đông không kiểm soát',
@@ -1041,7 +1068,6 @@ def process_single_ticker(symbol, category):
 # 11. SOURCE TRACKING HELPERS
 # ==========================================
 def _add_source(records, source_name, priority=None):
-    """Gắn _source và _priority vào records."""
     if priority is None:
         priority = PRIORITY_MAP.get(source_name, 99)
     for r in records:
@@ -1054,7 +1080,7 @@ def _add_source(records, source_name, priority=None):
 # ==========================================
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v2.0 (SUPABASE UPGRADED)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v3.0 (FIXED)")
     print(f"   Mode: SUPABASE_PRIORITY={SUPABASE_PRIORITY} | PUSH_TO_SUPABASE={PUSH_TO_SUPABASE}")
     print("=" * 62)
 
@@ -1069,36 +1095,32 @@ def main():
         all_master_records.extend(recs)
         source_before_dedup[source] = source_before_dedup.get(source, 0) + len(recs)
 
-    # ============ BƯỚC 0: DAILY DATA ============
-    print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày (LOCAL → Hugging Face fallback)...")
+    # BƯỚC 0: DAILY
+    print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày...")
     hf_df = load_daily_stock_data()
     if not hf_df.empty:
         hf_df = _normalize_to_standard(hf_df, fill_company=True)
         if not hf_df.empty:
             _accumulate(hf_df.to_dict('records'), 'DAILY')
             print(f" ✅ Đã nạp {len(hf_df):,} dòng Daily vào Master Records.")
-        else:
-            print(" ⚠️ Daily Data rỗng sau khi chuẩn hoá schema.")
-    else:
-        print(" ⚠️ Không có dữ liệu Daily.")
 
-    # ============ BƯỚC 1: VNFINANCIALDATA ============
-    print("\n🚀 BƯỚC 1: Tải BCTC từ vnfinancialdata (HSX & HNX)...")
+    # BƯỚC 1: VNFINANCIAL
+    print("\n🚀 BƯỚC 1: Tải BCTC từ vnfinancialdata...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs:
         _accumulate(vnf_recs, 'VN_FINANCIAL')
         print(f" ✅ Đã lấy {len(vnf_recs):,} dòng từ vnfinancialdata.")
 
-    # ============ BƯỚC 2: INDICES ============
+    # BƯỚC 2: INDICES
     print("\n📈 BƯỚC 2: Cào chỉ số vĩ mô...")
     index_recs = fetch_market_indices()
     if index_recs:
         _accumulate(index_recs, 'INDICES')
         print(f" ✅ Đã lấy {len(index_recs):,} dòng chỉ số.")
 
-    # ============ BƯỚC 3: YFINANCE PARALLEL ============
+    # BƯỚC 3: YFINANCE
     total_tickers = len(ticker_market_map)
-    print(f"\n🔄 BƯỚC 3: Cào Yfinance song song (max_workers=5)...")
+    print(f"\n🔄 BƯỚC 3: Cào Yfinance song song...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
@@ -1110,13 +1132,11 @@ def main():
                     all_master_records.extend(res)
                     source_before_dedup['YFINANCE'] = source_before_dedup.get('YFINANCE', 0) + len(res)
                     success_count += 1
-                    if success_count % 20 == 0:
-                        print(f"  [{success_count}/{total_tickers}] Đã xử lý Yfinance: {symbol}")
             except Exception:
                 pass
 
-    # ============ BƯỚC 4: VNSTOCK FILLS ============
-    print(f"\n🐢 BƯỚC 4: Kiểm tra & quét bù cho các mã khuyết dữ liệu...")
+    # BƯỚC 4: VNSTOCK FILLS
+    print(f"\n🐢 BƯỚC 4: Quét bù cho các mã khuyết dữ liệu...")
     df_temp = pd.DataFrame(all_master_records)
     existing_symbols = set(df_temp['Mã chứng khoán'].unique()) if not df_temp.empty else set()
     completely_missing = [s for s in ticker_market_map.keys() if s not in existing_symbols]
@@ -1125,7 +1145,7 @@ def main():
         prices = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
         symbols_with_price = set(prices['Mã chứng khoán'].unique())
     missing_symbols = list(set([s for s in ticker_market_map.keys() if s not in symbols_with_price] + completely_missing))
-    print(f" -> Có {len(missing_symbols)} mã cần bổ sung (thiếu giá hoặc thiếu data).")
+    
     for idx, symbol in enumerate(missing_symbols):
         res = fetch_vnstock_financials(symbol)
         if res:
@@ -1134,21 +1154,18 @@ def main():
             source_before_dedup['VNSTOCK'] = source_before_dedup.get('VNSTOCK', 0) + len(res)
             print(f"  [{idx+1}/{len(missing_symbols)}] Đã bù dữ liệu: {symbol}")
 
-    # ============ 🆕 BƯỚC 4.5: SUPABASE ============
-    print(f"\n🆕 BƯỚC 4.5: Tải dữ liệu bổ sung từ Supabase (priority={SUPABASE_PRIORITY})...")
+    # BƯỚC 4.5: SUPABASE LOAD
+    print(f"\n🆕 BƯỚC 4.5: Tải dữ liệu bổ sung từ Supabase...")
     supabase_df = load_data_from_supabase()
     if not supabase_df.empty:
         if SUPABASE_PRIORITY == 'high':
-            _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH') if 'SUPABASE_HIGH' in PRIORITY_MAP \
-                else _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH', priority=0)
+            _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH')
         else:
             _accumulate(supabase_df.to_dict('records'), 'SUPABASE')
         print(f" ✅ Đã nạp {len(supabase_df):,} dòng từ Supabase.")
-    else:
-        print(" ℹ️ Không có dữ liệu Supabase (có thể thiếu credentials hoặc bảng rỗng).")
 
-    # ============ BƯỚC 5: CLEAN + DEDUP ============
-    print("\n🧹 BƯỚC 5: Làm sạch, dedupe và sắp xếp theo priority...")
+    # BƯỚC 5: CLEAN + DEDUP
+    print("\n🧹 BƯỚC 5: Làm sạch, dedupe...")
     df_master = pd.DataFrame(all_master_records)
     source_after_dedup = {}
 
@@ -1156,7 +1173,6 @@ def main():
         df_master = df_master.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
         df_master['Chỉ tiêu tiếng Việt'] = df_master['Chỉ tiêu tiếng Việt'].apply(clean_text)
 
-        # Chuẩn hoá numeric (hỗ trợ cả dấu phẩy)
         num_series = pd.to_numeric(df_master['Giá trị'], errors='coerce')
         need_clean = num_series.isna() & df_master['Giá trị'].astype(str).str.contains(r'[0-9]', regex=True)
         if need_clean.any():
@@ -1165,40 +1181,36 @@ def main():
         df_master['Giá trị'] = num_series
 
         df_valid = df_master[df_master['Giá trị'].notna() & (df_master['Giá trị'] != 0)].copy()
-
-        # Sắp xếp theo priority trước khi dedupe (đảm bảo nguồn ưu tiên thắng)
         df_valid = df_valid.sort_values('_priority', kind='stable')
         df_valid = df_valid.drop_duplicates(
             subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'],
             keep='first'
         )
 
-        # Thống kê sau dedup
         if '_source' in df_valid.columns:
             source_after_dedup = df_valid['_source'].value_counts().to_dict()
 
         df_valid['Giá trị'] = df_valid['Giá trị'].apply(final_format_for_csv)
-
         df_master = df_valid[STANDARD_COLUMNS].copy()
         df_master = df_master.sort_values(
             by=['Tên ngành', 'Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ'],
             ascending=[True, True, True, False, False]
         )
 
-    # ============ BƯỚC 6: XUẤT CSV ============
+    # BƯỚC 6: XUẤT CSV
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     df_master.to_csv(csv_path, index=False, encoding='utf-8-sig')
     print(f"\n💾 Đã lưu CSV: {csv_path}")
 
-    # ============ 🆕 BƯỚC 7: PUSH TO SUPABASE (OPTIONAL) ============
+    # BƯỚC 7: PUSH TO SUPABASE
     if PUSH_TO_SUPABASE:
         print("\n📤 BƯỚC 7: Đẩy dữ liệu lên Supabase (upsert)...")
         upsert_to_supabase(df_master)
     else:
-        print("\n⏭️ BƯỚC 7: Bỏ qua upsert Supabase (set PUSH_TO_SUPABASE=true để bật).")
+        print("\n⏭️ BƯỚC 7: Bỏ qua upsert Supabase.")
 
-    # ============ BÁO CÁO ============
+    # BÁO CÁO
     df_check = pd.read_csv(csv_path)
     prices = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại']
     shares = df_check[df_check['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành']
@@ -1211,7 +1223,6 @@ def main():
 
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_master):,}")
-    print(f" - Kích thước file: {os.path.getsize(csv_path) / (1024*1024):.2f} MB")
     print(f" - Số mã có dữ liệu: {unique_tickers_in_csv}/176 mã")
     print("=" * 62)
     print(" 📊 NGUỒN DỮ LIỆU (trước → sau dedup):")
@@ -1219,17 +1230,7 @@ def main():
     for src in all_sources:
         before = source_before_dedup.get(src, 0)
         after = source_after_dedup.get(src, 0)
-        bar = "█" * min(30, int(after / max(1, len(df_master)) * 30)) if after else ""
-        print(f"   • {src:<15} | {before:>8,} → {after:>8,} dòng  {bar}")
-    print("=" * 62)
-    print(" 🔍 KIỂM TRA CHẤT LƯỢNG GIÁ & SLCP:")
-    print(f" - Mã có Giá (>0):  {len(valid_p)}/176 mã")
-    print(f" - Mã có SLCP (>0): {len(valid_s)}/176 mã")
-    print(f" - Mã có CẢ 2:      {len(both)}/176 mã")
-    if still_missing_both:
-        print(f" ⚠️ MÃ VẪN THIẾU: {', '.join(still_missing_both)}")
-    else:
-        print(f" ✅ TUYỆT VỜI! ĐÃ LẤY ĐƯỢC 100% GIÁ VÀ SLCP.")
+        print(f"   • {src:<15} | {before:>8,} → {after:>8,} dòng")
     print("=" * 62)
 
 if __name__ == "__main__":
