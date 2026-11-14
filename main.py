@@ -36,17 +36,35 @@ session.headers.update({
 })
 
 # ==========================================
-# 🆕 0. TÍCH HỢP HUGGING FACE DATASET (MỚI)
+# 🆕 0. TẢI DỮ LIỆU HÀNG NGÀY (LOCAL + HF FALLBACK)
 # ==========================================
-def load_daily_data_hf():
-    """Tải dữ liệu hàng ngày trực tiếp từ Hugging Face Dataset."""
-    DATA_URL = "https://huggingface.co/datasets/trananhquan2001/finex-vn-dataset/raw/main/dulieu_hang_ngay.csv"
+# Đường dẫn đến file dữ liệu hàng ngày bên trong Space
+DATA_PATH = "du_lieu/dulieu_hang_ngay.csv"
+HF_DATA_URL = "https://huggingface.co/datasets/trananhquan2001/finex-vn-dataset/raw/main/dulieu_hang_ngay.csv"
+
+def load_daily_stock_data():
+    """
+    Tải dữ liệu hàng ngày:
+    1. Ưu tiên đọc từ file local (du_lieu/dulieu_hang_ngay.csv) — nhanh, không phụ thuộc mạng.
+    2. Fallback: Tải trực tiếp từ Hugging Face URL nếu file local không tồn tại.
+    """
+    # ─── Ưu tiên 1: Đọc file local ───
+    if os.path.exists(DATA_PATH):
+        try:
+            df = pd.read_csv(DATA_PATH)
+            print(f"✅ [DAILY] Đã tải thành công {len(df):,} dòng dữ liệu từ thư mục du_lieu (LOCAL)!")
+            return df
+        except Exception as e:
+            print(f"⚠️ [DAILY] Lỗi đọc file local '{DATA_PATH}': {e}. Sẽ thử tải từ Hugging Face...")
+
+    # ─── Fallback: Tải từ Hugging Face URL ───
     try:
-        df = pd.read_csv(DATA_URL)
-        print(f"✅ Đã tải thành công {len(df)} dòng dữ liệu hàng ngày từ Hugging Face!")
+        print(f"🌐 [DAILY] Không có file local — đang tải từ Hugging Face URL...")
+        df = pd.read_csv(HF_DATA_URL)
+        print(f"✅ [DAILY] Đã tải thành công {len(df):,} dòng dữ liệu từ Hugging Face URL!")
         return df
     except Exception as e:
-        print(f"⚠️ Lỗi khi tải dữ liệu từ Hugging Face: {e}")
+        print(f"❌ [DAILY] Lỗi khi tải dữ liệu từ Hugging Face: {e}")
         return pd.DataFrame()
 
 # ==========================================
@@ -889,16 +907,16 @@ def main():
     all_master_records = []
     success_count = 0
 
-    # 🆕 BƯỚC 0: TẢI DỮ LIỆU TỪ HUGGING FACE
-    print("🚀 BƯỚC 0: Tải dữ liệu hàng ngày từ Hugging Face Dataset...")
-    hf_df = load_daily_data_hf()
+    # 🆕 BƯỚC 0: TẢI DỮ LIỆU HÀNG NGÀY (LOCAL + HF FALLBACK)
+    print("🚀 BƯỚC 0: Tải dữ liệu hàng ngày (ưu tiên local, fallback Hugging Face)...")
+    hf_df = load_daily_stock_data()
     if not hf_df.empty:
         standard_cols = ['Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành', 'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt', 'Giá trị']
         if all(col in hf_df.columns for col in standard_cols):
             all_master_records.extend(hf_df.to_dict('records'))
-            print(f" ✅ Đã nạp {len(hf_df):,} dòng từ Hugging Face vào Master Records.")
+            print(f" ✅ Đã nạp {len(hf_df):,} dòng từ Daily Data vào Master Records.")
         else:
-            print(" ⚠️ Schema của Hugging Face không khớp hoàn toàn với crawler (thiếu cột chuẩn). Sẽ thử map...")
+            print(" ⚠️ Schema của Daily Data không khớp hoàn toàn với crawler (thiếu cột chuẩn). Sẽ thử map...")
             try:
                 if 'Mã chứng khoán' in hf_df.columns and 'Chỉ tiêu tiếng Việt' in hf_df.columns and 'Giá trị' in hf_df.columns:
                     if 'Tên doanh nghiệp' not in hf_df.columns:
@@ -915,11 +933,11 @@ def main():
                         hf_df['Ngày kỳ'] = datetime.today().strftime('%Y-%m-%d')
                     
                     all_master_records.extend(hf_df[standard_cols].to_dict('records'))
-                    print(f" ✅ Đã map và nạp {len(hf_df):,} dòng từ Hugging Face.")
+                    print(f" ✅ Đã map và nạp {len(hf_df):,} dòng từ Daily Data.")
                 else:
-                    print(" ❌ Không thể tự động map schema Hugging Face. Bỏ qua.")
+                    print(" ❌ Không thể tự động map schema Daily Data. Bỏ qua.")
             except Exception as e:
-                print(f" ❌ Lỗi khi map schema Hugging Face: {e}")
+                print(f" ❌ Lỗi khi map schema Daily Data: {e}")
 
     print("\n🚀 BƯỚC 1: Tải dữ liệu BCTC từ vnfinancialdata (HSX & HNX)...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
