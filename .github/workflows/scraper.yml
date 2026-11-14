@@ -26,13 +26,13 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      # BƯỚC 1: CHẠY CRAWLER (Chỉ chạy 1 lần duy nhất)
+      # BƯỚC 1: CHẠY CRAWLER
       - name: Run FINEX Engine
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python main.py
 
-      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (Đã sửa lỗi Mapping)
+      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (Đã sửa lỗi mapping)
       - name: Clean Data & Push to Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -53,21 +53,22 @@ jobs:
           df = pd.read_csv(file_path)
           df = df.replace([np.inf, -np.inf], np.nan)
 
-          # 1. Ánh xạ chính xác từ Tiếng Việt (CSV) sang Tiếng Anh (Supabase)
+          # ⚠️ SỬA TẠI ĐÂY: Ánh xạ chính xác từ Tiếng Việt sang Tiếng Anh
+          # Nếu Supabase của bạn dùng tên khác, hãy sửa giá trị bên phải (vd: item_vn -> item)
           rename_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
-              'Tên ngành': 'sector',
+              'Tên ngành': 'sector',         # Nếu Supabase dùng 'industry', sửa thành 'industry'
               'Loại báo cáo': 'report_type',
               'Loại kỳ': 'period_type',
               'Năm': 'year',
               'Ngày kỳ': 'report_date',
-              'Chỉ tiêu tiếng Việt': 'item_vn',
+              'Chỉ tiêu tiếng Việt': 'item_vn', # Nếu Supabase dùng 'item' hoặc 'metric', hãy sửa lại
               'Giá trị': 'value'
           }
           df = df.rename(columns=rename_map)
 
-          # 2. Dọn dẹp rác (Bỏ các dòng không có ticker hoặc value)
+          # Dọn dẹp rác (Bỏ các dòng không có ticker hoặc value)
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
@@ -77,7 +78,7 @@ jobs:
           
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
 
-          # 3. Chuyển sang dạng Native Python (Tránh lỗi Numpy/NaN của thư viện PostgREST)
+          # Chuyển sang dạng Native Python
           records = []
           for _, row in df.iterrows():
               def clean_str(s):
@@ -85,13 +86,13 @@ jobs:
                   
               records.append({
                   'ticker': str(row['ticker']),
-                  'company_name': clean_str(row['company_name']),
-                  'sector': clean_str(row['sector']),
-                  'report_type': clean_str(row['report_type']),
-                  'period_type': clean_str(row['period_type']),
+                  'company_name': clean_str(row.get('company_name')),
+                  'sector': clean_str(row.get('sector')),
+                  'report_type': clean_str(row.get('report_type')),
+                  'period_type': clean_str(row.get('period_type')),
                   'year': int(row['year']),
-                  'report_date': clean_str(row['report_date']),
-                  'item_vn': clean_str(row['item_vn']),
+                  'report_date': clean_str(row.get('report_date')),
+                  'item_vn': clean_str(row.get('item_vn')), # Chỗ này sẽ khớp với rename_map ở trên
                   'value': float(row['value'])
               })
 
@@ -102,7 +103,7 @@ jobs:
           
           for i in range(0, len(records), batch_size):
               batch = records[i:i + batch_size]
-              # Upsert dựa trên khóa chính (ticker, report_type, period_type, report_date, item_vn)
+              # Upsert dựa trên khóa chính
               supabase.table('finex_stock_master').upsert(
                   batch, 
                   on_conflict='ticker,report_type,period_type,report_date,item_vn'
@@ -112,9 +113,7 @@ jobs:
           print('🎉 Đồng bộ Supabase thành công 100%!')
           "
 
-      # ==========================================
-      # 3. LƯU FILE CSV LÊN GITHUB
-      # ==========================================
+      # BƯỚC 3: LƯU FILE LÊN GITHUB
       - name: Commit and push changes to GitHub (Backup CSV)
         run: |
           git config --global user.name "github-actions[bot]"
@@ -126,9 +125,7 @@ jobs:
           git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
           git push origin main
 
-      # ==========================================
-      # 4. LƯU FILE VÀO HUGGING FACE SPACE
-      # ==========================================
+      # BƯỚC 4: LƯU FILE VÀO HUGGING FACE
       - name: Push Cleaned Dataset to Hugging Face Space Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
