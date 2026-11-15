@@ -26,14 +26,12 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      # BƯỚC 1: CHẠY CRAWLER
       - name: Run FINEX Engine
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
         run: python main.py
 
-      # BƯỚC 2: LÀM SẠCH & ĐỒNG BỘ SUPABASE (FIX LỖI CỘT DATE)
-      - name: Clean Data & Push to Supabase
+      - name: Clean Data & Push to Supabase (Pure 9-Columns)
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -45,7 +43,7 @@ jobs:
           from datetime import datetime
           from supabase import create_client
 
-          print('--- BƯỚC 2: LÀM SẠCH VÀ ĐỒNG BỘ SUPABASE ---')
+          print('--- BƯỚC 2: LÀM SẠCH VÀ ĐỒNG BỘ SUPABASE (PURE 9-COLUMNS) ---')
           file_path = 'data/vietnam_stock_database_tong_hop.csv'
           if not os.path.exists(file_path):
               raise FileNotFoundError(f'Không tìm thấy file {file_path}')
@@ -53,6 +51,7 @@ jobs:
           df = pd.read_csv(file_path)
           df = df.replace([np.inf, -np.inf], np.nan)
 
+          # Ánh xạ chuẩn xác 9 cột
           rename_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
@@ -66,33 +65,20 @@ jobs:
           }
           df = df.rename(columns=rename_map)
 
+          # Làm sạch dữ liệu
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
-          
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df[df['value'].notna() & (df['value'] != 0)]
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
-
-          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
-
-          # 3. LẤY DANH SÁCH CỘT THỰC TẾ TỪ SUPABASE
-          try:
-              res = supabase.table('finex_stock_master').select('*').limit(1).execute()
-              if res.data:
-                  valid_cols = set(res.data[0].keys())
-              else:
-                  valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics', 'date'}
-          except Exception as e:
-              print(f'Không lấy được schema, dùng mặc định: {e}')
-              valid_cols = {'ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value', 'extra_metrics', 'date'}
 
           records = []
           for _, row in df.iterrows():
               def clean_str(s):
                   return str(s).strip() if pd.notna(s) else None
                   
-              r = {
+              records.append({
                   'ticker': str(row['ticker']),
                   'company_name': clean_str(row.get('company_name')),
                   'sector': clean_str(row.get('sector')),
@@ -102,34 +88,13 @@ jobs:
                   'report_date': clean_str(row.get('report_date')),
                   'item_vn': clean_str(row.get('item_vn')),
                   'value': float(row['value'])
-              }
-              
-              final_r = {}
-              extra = {}
-              for k, v in r.items():
-                  if k in valid_cols:
-                      final_r[k] = v
-                  else:
-                      extra[k] = v
-                      
-              if 'extra_metrics' in valid_cols:
-                  final_r['extra_metrics'] = extra if extra else {}
-
-              # 🚀 FIX CHÍ MẠNG: Xử lý cột 'date' bị NOT NULL từ schema cũ
-              if 'date' in valid_cols:
-                  # Gán date = report_date (hoặc ngày hôm nay nếu report_date trống)
-                  final_r['date'] = final_r.get('report_date') or datetime.now().strftime('%Y-%m-%d')
-                  
-              # Đảm bảo mọi key trong valid_cols đều có mặt để PostgREST không báo lỗi
-              for col in valid_cols:
-                  if col not in final_r and col not in ['extra_metrics', 'created_at']:
-                      final_r[col] = None
-                      
-              records.append(final_r)
+              })
 
           print(f'Đang đồng bộ {len(records)} bản ghi sạch vào bảng finex_stock_master...')
           
+          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
           batch_size = 500
+          
           for i in range(0, len(records), batch_size):
               batch = records[i:i + batch_size]
               supabase.table('finex_stock_master').upsert(
@@ -141,7 +106,6 @@ jobs:
           print('🎉 Đồng bộ Supabase thành công 100%!')
           "
 
-      # BƯỚC 3: LƯU FILE LÊN GITHUB
       - name: Commit and push changes to GitHub (Backup CSV)
         run: |
           git config --global user.name "github-actions[bot]"
@@ -153,7 +117,6 @@ jobs:
           git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
           git push origin main
 
-      # BƯỚC 4: LƯU FILE VÀO HUGGING FACE
       - name: Push Cleaned Dataset to Hugging Face Space Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
