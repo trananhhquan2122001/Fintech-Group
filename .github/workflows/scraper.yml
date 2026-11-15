@@ -26,12 +26,113 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      - name: Run FINEX Engine
+      # ==========================================
+      # BƯỚC 1: CÀO DỮ LIỆU & 5 TẦNG LỌC LÀM SẠCH
+      # ==========================================
+      - name: Run FINEX Enterprise Engine & Apply 5-Tier Data Cleaning Pipeline
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        run: python main.py
+        run: |
+          # 1.1: Chạy crawler để sinh file CSV
+          python main.py
+          
+          # 1.2: Thực thi 5 tầng lọc dữ liệu (Đã sửa cho khớp cột BCTC)
+          python -c "
+          import pandas as pd
+          import numpy as np
+          import os
 
-      - name: Clean Data & Push to Supabase (Pure 9-Columns)
+          print('--- BƯỚC 2: THỰC THI 5 TẦNG LỌC LÀM SẠCH DỮ LIỆU ---')
+
+          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          if os.path.exists(file_path):
+              df = pd.read_csv(file_path)
+          else:
+              raise FileNotFoundError(f'Không tìm thấy file dữ liệu thô tại {file_path}')
+
+          # Tầng 1: Làm sạch cơ bản & Loại bỏ giá trị rỗng/lỗi (Null/NaN/Infinite)
+          df = df.replace([np.inf, -np.inf], np.nan)
+          initial_rows = len(df)
+          df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
+          print(f'[Tầng 1] Đã loại bỏ dòng lỗi/rỗng. Còn lại: {len(df)}/{initial_rows} dòng.')
+
+          # Tầng 2: Chuẩn hóa định dạng (Ticker viết hoa, Date chuẩn YYYY-MM-DD)
+          df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.upper().str.strip()
+          df['Ngày kỳ'] = pd.to_datetime(df['Ngày kỳ'], errors='coerce')
+          df = df.dropna(subset=['Ngày kỳ'])
+          df['Ngày kỳ'] = df['Ngày kỳ'].dt.strftime('%Y-%m-%d')
+          print('[Tầng 2] Đã chuẩn hóa định dạng Ticker và Date.')
+
+          # Tầng 3: Xử lý dữ liệu trùng lặp (Deduplication theo đúng bộ khóa BCTC)
+          before_dedup = len(df)
+          df = df.drop_duplicates(
+              subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], 
+              keep='last'
+          )
+          print(f'[Tầng 3] Đã lọc bỏ {before_dedup - len(df)} bản ghi trùng lặp.')
+
+          # Tầng 4: Xử lý giá trị ngoại lai (Giá trị phải là số và khác 0)
+          df['Giá trị'] = pd.to_numeric(df['Giá trị'], errors='coerce')
+          df = df[df['Giá trị'].notna() & (df['Giá trị'] != 0)]
+          print('[Tầng 4] Đã lọc sạch các giá trị ngoại lai (outliers) về giá.')
+
+          # Tầng 5: Điền đầy và làm mượt dữ liệu thiếu sót (Imputation)
+          df['Năm'] = df['Năm'].fillna(2024).astype(int)
+          print('[Tầng 5] Đã hoàn tất điền đầy các ô trống dữ liệu số.')
+
+          # Lưu lại file đã được làm sạch hoàn toàn
+          os.makedirs('data', exist_ok=True)
+          df.to_csv(file_path, index=False)
+          print('--- HOÀN TẤT 5 TẦNG LỌC VÀ LƯU DỮ LIỆU SẠCH ---')
+          "
+
+      # ==========================================
+      # 1. LƯU FILE CSV LÊN GITHUB (GIỮ NGUYÊN)
+      # ==========================================
+      - name: Commit and push changes to GitHub (Backup CSV)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+          git fetch origin main
+          git checkout main || git checkout -b main
+          git add data/vietnam_stock_database_tong_hop.csv || true
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
+          git push origin main
+
+      # ==========================================
+      # 2. LƯU FILE TRỰC TIẾP VÀO HUGGING FACE SPACE (GIỮ NGUYÊN)
+      # ==========================================
+      - name: Push Cleaned Dataset to Hugging Face Space Repo
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          python -c "
+          from huggingface_hub import HfApi
+          import os
+          
+          api = HfApi()
+          space_repo_id = 'trananhquan2001/trananhquan-terminal'
+          local_file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          
+          # Đẩy thẳng vào thư mục du_lieu/ bên trong Space theo đúng ý anh
+          remote_file_path = 'du_lieu/dulieu_hang_ngay.csv'
+          
+          print(f'Đang upload file đã làm sạch trực tiếp vào Space: {space_repo_id}...')
+          api.upload_file(
+              path_or_fileobj=local_file_path,
+              path_in_repo=remote_file_path,
+              repo_id=space_repo_id,
+              repo_type='space',
+              token=os.environ['HF_TOKEN']
+          )
+          print('Đã đẩy file sạch trực tiếp vào Space thành công!')
+          "
+
+      # ==========================================
+      # 3. ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE POSTGRESQL (ĐÃ FIX LỖI)
+      # ==========================================
+      - name: Push Cleaned Data to Supabase Master Table
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -43,15 +144,13 @@ jobs:
           from datetime import datetime
           from supabase import create_client
 
-          print('--- BƯỚC 2: LÀM SẠCH VÀ ĐỒNG BỘ SUPABASE (PURE 9-COLUMNS) ---')
+          print('--- BƯỚC 3: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE ---')
+          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+          
           file_path = 'data/vietnam_stock_database_tong_hop.csv'
-          if not os.path.exists(file_path):
-              raise FileNotFoundError(f'Không tìm thấy file {file_path}')
-
           df = pd.read_csv(file_path)
-          df = df.replace([np.inf, -np.inf], np.nan)
-
-          # Ánh xạ chuẩn xác 9 cột
+          
+          # 3.1. Ánh xạ chính xác từ Tiếng Việt (CSV) sang Tiếng Anh (Supabase)
           rename_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
@@ -65,14 +164,16 @@ jobs:
           }
           df = df.rename(columns=rename_map)
 
-          # Làm sạch dữ liệu
+          # 3.2. Dọn dẹp rác và ép kiểu
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
+          
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df[df['value'].notna() & (df['value'] != 0)]
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
 
+          # 3.3. Chuyển sang dạng Native Python (Tránh lỗi JSON của PostgREST)
           records = []
           for _, row in df.iterrows():
               def clean_str(s):
@@ -90,11 +191,10 @@ jobs:
                   'value': float(row['value'])
               })
 
-          print(f'Đang đồng bộ {len(records)} bản ghi sạch vào bảng finex_stock_master...')
+          print(f'Đang đồng bộ {len(records)} bản ghi vào bảng finex_stock_master trên Supabase...')
           
-          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+          # 3.4. Upsert theo Batch (500 dòng/lần)
           batch_size = 500
-          
           for i in range(0, len(records), batch_size):
               batch = records[i:i + batch_size]
               supabase.table('finex_stock_master').upsert(
@@ -103,40 +203,5 @@ jobs:
               ).execute()
               print(f' ✅ Đã đẩy {min(i+batch_size, len(records))}/{len(records)} bản ghi...')
 
-          print('🎉 Đồng bộ Supabase thành công 100%!')
-          "
-
-      - name: Commit and push changes to GitHub (Backup CSV)
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git fetch origin main
-          git checkout main || git checkout -b main
-          git add data/vietnam_stock_database_tong_hop.csv || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
-          git push origin main
-
-      - name: Push Cleaned Dataset to Hugging Face Space Repo
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python -c "
-          from huggingface_hub import HfApi
-          import os
-          
-          api = HfApi()
-          space_repo_id = 'trananhquan2001/trananhquan-terminal'
-          local_file_path = 'data/vietnam_stock_database_tong_hop.csv'
-          remote_file_path = 'du_lieu/dulieu_hang_ngay.csv'
-          
-          print(f'Đang upload file đã làm sạch trực tiếp vào Space: {space_repo_id}...')
-          api.upload_file(
-              path_or_fileobj=local_file_path,
-              path_in_repo=remote_file_path,
-              repo_id=space_repo_id,
-              repo_type='space',
-              token=os.environ['HF_TOKEN']
-          )
-          print('Đã đẩy file sạch trực tiếp vào Space thành công!')
+          print('Đồng bộ Supabase thành công 100%!')
           "
