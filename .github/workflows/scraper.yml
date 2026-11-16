@@ -3,11 +3,17 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 17 * * *' # Đã đổi: Chạy lúc 00:00 giờ Việt Nam
+    - cron: '0 17 * * *'
+
+# 🚀 CƠ CHẾ TỰ HỦY BẢN CŨ NẾU BỊ TREO
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
+    timeout-minutes: 25   # Tự động sập sau 25 phút
     permissions:
       contents: write
     steps:
@@ -26,149 +32,17 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      # ==========================================
-      # BƯỚC 1: CÀO DỮ LIỆU & 5 TẦNG LỌC LÀM SẠCH (VAS DICTIONARY)
-      # ==========================================
-      - name: Run FINEX Enterprise Engine & Apply 5-Tier Data Cleaning Pipeline
+      - name: Run FINEX Engine (With OS Timeout)
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PUSH_TO_SUPABASE: "true"
+        # Dùng lệnh timeout của Linux để ép chết tiến trình sau 15 phút
         run: |
-          # 1.1: Chạy crawler để sinh file CSV thô từ 6 nguồn
-          python main.py
-          
-          # 1.2: Thực thi 5 tầng lọc dữ liệu (Nhúng Toàn Bộ Từ Điển VAS & Kiểm tra Cân đối)
-          python -c "
-          import pandas as pd
-          import numpy as np
-          import os
-          import re
+          timeout 900 python main.py || echo "⚠️ Đã hết 15 phút, ép dừng để lưu dữ liệu!"
 
-          print('--- BƯỚC 2: THỰC THI 5 TẦNG LỌC LÀM SẠCH DỮ LIỆU (VAS) ---')
-
-          # TỪ ĐIỂN VAS (Thông tư 200 & 99/2025)
-          VAS_WHITELIST = set([
-              'Tài sản ngắn hạn', 'Tiền và các khoản tương đương tiền', 'Tiền', 'Các khoản tương đương tiền',
-              'Đầu tư tài chính ngắn hạn', 'Chứng khoán kinh doanh', 'Dự phòng giảm giá chứng khoán kinh doanh', 'Đầu tư nắm giữ đến ngày đáo hạn',
-              'Các khoản phải thu ngắn hạn', 'Phải thu ngắn hạn của khách hàng', 'Trả trước cho người bán ngắn hạn', 'Phải thu nội bộ ngắn hạn', 
-              'Phải thu theo tiến độ kế hoạch hợp đồng xây dựng', 'Phải thu về cho vay ngắn hạn', 'Phải thu ngắn hạn khác', 'Dự phòng phải thu ngắn hạn khó đòi', 'Tài sản thiếu chờ xử lý',
-              'Hàng tồn kho', 'Dự phòng giảm giá hàng tồn kho', 'Tài sản ngắn hạn khác', 'Chi phí trả trước ngắn hạn', 'Thuế GTGT được khấu trừ', 'Thuế và các khoản khác phải thu Nhà nước', 
-              'Giao dịch mua bán lại trái phiếu Chính phủ', 'Tài sản ngắn hạn khác', 'Tài sản dài hạn', 'Các khoản phải thu dài hạn', 'Phải thu dài hạn của khách hàng', 
-              'Trả trước cho người bán dài hạn', 'Vốn kinh doanh ở đơn vị trực thuộc', 'Phải thu nội bộ dài hạn', 'Phải thu về cho vay dài hạn', 'Phải thu dài hạn khác', 
-              'Dự phòng phải thu dài hạn khó đòi', 'Tài sản cố định', 'Tài sản cố định hữu hình', 'Nguyên giá', 'Hao mòn lũy kế', 'Tài sản cố định thuê tài chính', 
-              'Tài sản cố định vô hình', 'Bất động sản đầu tư', 'Tài sản dở dang dài hạn', 'Chi phí sản xuất, kinh doanh dở dang dài hạn', 'Chi phí xây dựng cơ bản dở dang',
-              'Đầu tư tài chính dài hạn', 'Đầu tư vào công ty con', 'Đầu tư vào công ty liên doanh, liên kết', 'Đầu tư góp vốn vào đơn vị khác', 'Dự phòng đầu tư tài chính dài hạn', 
-              'Tài sản dài hạn khác', 'Chi phí trả trước dài hạn', 'Tài sản thuế thu nhập hoãn lại', 'Thiết bị, vật tư, phụ tùng thay thế dài hạn', 'Tài sản dài hạn khác', 
-              'Lợi thế thương mại', 'Tổng cộng tài sản', 'Báo cáo tình hình tài chính', 'Nợ phải trả', 'Nợ ngắn hạn', 'Phải trả người bán ngắn hạn', 'Người mua trả tiền trước ngắn hạn',
-              'Thuế và các khoản phải nộp Nhà nước', 'Phải trả người lao động', 'Chi phí phải trả ngắn hạn', 'Phải trả nội bộ ngắn hạn', 'Phải trả theo tiến độ kế hoạch hợp đồng xây dựng',
-              'Doanh thu chưa thực hiện ngắn hạn', 'Phải trả ngắn hạn khác', 'Vay và nợ thuê tài chính ngắn hạn', 'Dự phòng phải trả ngắn hạn', 'Quỹ khen thưởng, phúc lợi',
-              'Quỹ bình ổn giá', 'Giao dịch mua bán lại trái phiếu Chính phủ', 'Nợ dài hạn', 'Phải trả người bán dài hạn', 'Người mua trả tiền trước dài hạn', 'Chi phí phải trả dài hạn',
-              'Phải trả nội bộ về vốn kinh doanh', 'Phải trả nội bộ dài hạn', 'Doanh thu chưa thực hiện dài hạn', 'Phải trả dài hạn khác', 'Vay và nợ thuê tài chính dài hạn',
-              'Trái phiếu chuyển đổi', 'Cổ phiếu ưu đãi', 'Thuế thu nhập hoãn lại phải trả', 'Dự phòng phải trả dài hạn', 'Quỹ phát triển khoa học và công nghệ',
-              'Vốn chủ sở hữu', 'Vốn góp của chủ sở hữu', 'Cổ phiếu phổ thông có quyền biểu quyết', 'Cổ phiếu ưu đãi', 'Thặng dư vốn cổ phần', 'Quyền chọn chuyển đổi trái phiếu',
-              'Vốn khác của chủ sở hữu', 'Cổ phiếu quỹ', 'Chênh lệch đánh giá lại tài sản', 'Chênh lệch tỷ giá hối đoái', 'Quỹ đầu tư phát triển', 'Quỹ hỗ trợ sắp xếp doanh nghiệp',
-              'Quỹ khác thuộc vốn chủ sở hữu', 'Lợi nhuận sau thuế chưa phân phối', 'LNST chưa phân phối lũy kế đến cuối kỳ trước', 'LNST chưa phân phối kỳ này', 
-              'Nguồn vốn đầu tư XDCB', 'Lợi ích cổ đông không kiểm soát', 'Nguồn kinh phí và quỹ khác', 'Nguồn kinh phí', 'Nguồn kinh phí đã hình thành TSCĐ', 'Tổng cộng nguồn vốn',
-              # KQKD
-              'Doanh thu bán hàng và cung cấp dịch vụ', 'Các khoản giảm trừ doanh thu', 'Doanh thu thuần về bán hàng và cung cấp dịch vụ', 'Doanh thu thuần', 'Giá vốn hàng bán',
-              'Lợi nhuận gộp về bán hàng và cung cấp dịch vụ', 'Lợi nhuận gộp', 'Doanh thu hoạt động tài chính', 'Chi phí tài chính', 'Trong đó: chi phí lãi vay', 'Chi phí lãi vay',
-              'Phần lãi/lỗ trong công ty liên doanh, liên kết', 'Chi phí bán hàng', 'Chi phí quản lý doanh nghiệp', 'Lợi nhuận thuần từ hoạt động kinh doanh',
-              'Thu nhập khác', 'Chi phí khác', 'Lợi nhuận khác', 'Tổng lợi nhuận kế toán trước thuế', 'Chi phí thuế TNDN hiện hành', 'Chi phí thuế TNDN hoãn lại',
-              'Lợi nhuận sau thuế TNDN', 'Lợi nhuận sau thuế thu nhập doanh nghiệp', 'LNST của công ty mẹ', 'LNST của cổ đông không kiểm soát',
-              'Lãi cơ bản trên cổ phiếu', 'Lãi suy giảm trên cổ phiếu',
-              # LCTT
-              'Lợi nhuận trước thuế', 'Khấu hao TSCĐ và BĐSĐT', 'Các khoản dự phòng', 'Lãi/lỗ chênh lệch tỷ giá do đánh giá lại các khoản mục tiền tệ gốc ngoại tệ',
-              'Lãi/lỗ chênh lệch tỷ giá', 'Lãi/lỗ từ hoạt động đầu tư', 'Các khoản điều chỉnh khác', 'Lợi nhuận từ HĐKD trước thay đổi vốn lưu động',
-              'Tăng/giảm các khoản phải thu', 'Tăng/giảm hàng tồn kho', 'Tăng/giảm các khoản phải trả', 'Tăng/giảm chi phí trả trước', 'Tăng/giảm chứng khoán kinh doanh',
-              'Tiền lãi vay đã trả', 'Chi phí đi vay đã trả', 'Thuế TNDN đã nộp', 'Tiền thu khác từ HĐKD', 'Tiền chi khác cho HĐKD', 'Lưu chuyển tiền thuần từ HĐKD',
-              'Tiền thu từ bán hàng, cung cấp dịch vụ và doanh thu khác', 'Tiền chi trả người cung cấp hàng hóa, dịch vụ', 'Tiền chi trả người lao động',
-              'Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác', 'Tiền thu thanh lý, nhượng bán TSCĐ và tài sản dài hạn khác', 'Tiền chi cho vay, mua công cụ nợ của đơn vị khác',
-              'Tiền thu hồi cho vay, bán lại công cụ nợ của đơn vị khác', 'Tiền chi đầu tư góp vốn vào đơn vị khác', 'Tiền thu hồi đầu tư góp vốn vào đơn vị khác',
-              'Tiền thu lãi cho vay, cổ tức và lợi nhuận được chia', 'Lưu chuyển tiền thuần từ HĐĐT', 'Tiền thu từ phát hành cổ phiếu, nhận vốn góp của chủ sở hữu',
-              'Tiền trả lại vốn góp, mua lại cổ phiếu đã phát hành', 'Tiền thu từ đi vay', 'Tiền trả nợ gốc vay', 'Tiền trả nợ gốc thuê tài chính',
-              'Cổ tức, lợi nhuận đã trả cho chủ sở hữu', 'Lưu chuyển tiền thuần từ HĐTC', 'Lưu chuyển tiền thuần trong kỳ', 'Tiền và tương đương tiền đầu kỳ',
-              'Ảnh hưởng của thay đổi tỷ giá quy đổi ngoại tệ', 'Tiền và tương đương tiền cuối kỳ', 'Thu nhập lãi thuần', 'Tiền gửi của khách hàng', 'Cho vay khách hàng',
-              'Doanh thu môi giới', 'Doanh thu tự doanh', 'Vốn điều lệ'
-          ])
-
-          ALIAS_TO_VAS = {
-              'Total Assets': 'Tổng cộng tài sản', 'Current Assets': 'Tài sản ngắn hạn', 'Total Non Current Assets': 'Tài sản dài hạn',
-              'Cash And Cash Equivalents': 'Tiền và các khoản tương đương tiền', 'Cash': 'Tiền và các khoản tương đương tiền', 'Cash Financial': 'Tiền và các khoản tương đương tiền',
-              'Short Term Investments': 'Đầu tư tài chính ngắn hạn', 'Other Short Term Investments': 'Đầu tư tài chính ngắn hạn', 'Accounts Receivable': 'Phải thu ngắn hạn của khách hàng',
-              'Receivables': 'Các khoản phải thu ngắn hạn', 'Inventory': 'Hàng tồn kho', 'Net PPE': 'Tài sản cố định hữu hình', 'Gross PPE': 'Nguyên giá',
-              'Accumulated Depreciation': 'Hao mòn lũy kế', 'Investments And Advances': 'Đầu tư tài chính dài hạn', 'Other Non Current Assets': 'Tài sản dài hạn khác',
-              'Total Liabilities Net Minority Interest': 'Nợ phải trả', 'Current Liabilities': 'Nợ ngắn hạn', 'Accounts Payable': 'Phải trả người bán ngắn hạn',
-              'Long Term Debt': 'Vay và nợ thuê tài chính dài hạn', 'Total Equity Gross Minority Interest': 'Vốn chủ sở hữu', 'Stockholders Equity': 'Vốn chủ sở hữu',
-              'Retained Earnings': 'Lợi nhuận sau thuế chưa phân phối', 'Minority Interest': 'Lợi ích cổ đông không kiểm soát', 'Share Capital': 'Vốn góp của chủ sở hữu',
-              'Total Revenue': 'Doanh thu bán hàng và cung cấp dịch vụ', 'Operating Revenue': 'Doanh thu thuần', 'Cost Of Revenue': 'Giá vốn hàng bán', 'Cost of Goods Sold': 'Giá vốn hàng bán',
-              'Gross Profit': 'Lợi nhuận gộp', 'Operating Income': 'Lợi nhuận thuần từ hoạt động kinh doanh', 'Net Income': 'Lợi nhuận sau thuế TNDN',
-              'Net Income Common Stockholders': 'LNST của công ty mẹ', 'Pretax Income': 'Tổng lợi nhuận kế toán trước thuế', 'Tax Provision': 'Chi phí thuế TNDN hiện hành',
-              'Interest Expense': 'Chi phí lãi vay', 'Basic EPS': 'Lãi cơ bản trên cổ phiếu', 'Diluted EPS': 'Lãi suy giảm trên cổ phiếu', 'Operating Cash Flow': 'Lưu chuyển tiền thuần từ HĐKD',
-              'Investing Cash Flow': 'Lưu chuyển tiền thuần từ HĐĐT', 'Financing Cash Flow': 'Lưu chuyển tiền thuần từ HĐTC',
-              'Capital Expenditure': 'Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác', 'Depreciation And Amortization': 'Khấu hao TSCĐ và BĐSĐT',
-              'Doanh thu thuần HĐKD': 'Doanh thu thuần', 'Lợi nhuận sau thuế thu nhập doanh nghiệp': 'Lợi nhuận sau thuế TNDN', 'LNST': 'Lợi nhuận sau thuế TNDN',
-              'Vốn CSH': 'Vốn chủ sở hữu', 'Nợ phải trả ngắn hạn': 'Nợ ngắn hạn', 'Nợ phải trả dài hạn': 'Nợ dài hạn'
-          }
-
-          def standardize_metric(metric_raw, report_type):
-              if 'Chỉ số thị trường' in report_type or 'Chỉ số vĩ mô' in report_type: return metric_raw
-              metric = str(metric_raw).strip()
-              if metric in VAS_WHITELIST: return metric
-              if metric in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric]
-              metric_no_code = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', metric)
-              if metric_no_code in VAS_WHITELIST: return metric_no_code
-              if metric_no_code in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric_no_code]
-              return None
-
-          file_path = 'data/vietnam_stock_database_tong_hop.csv'
-          if os.path.exists(file_path): df = pd.read_csv(file_path)
-          else: raise FileNotFoundError(f'Không tìm thấy file dữ liệu thô tại {file_path}')
-
-          # TẦNG 1
-          df = df.replace([np.inf, -np.inf], np.nan)
-          df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-          print(f'[Tầng 1] Đã loại bỏ dòng lỗi/rỗng. Còn lại: {len(df)} dòng.')
-
-          # TẦNG 2: VAS STANDARDIZATION
-          df['Chỉ tiêu tiếng Việt'] = df.apply(lambda row: standardize_metric(row['Chỉ tiêu tiếng Việt'], row['Loại báo cáo']), axis=1)
-          df = df.dropna(subset=['Chỉ tiêu tiếng Việt'])
-          df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.upper().str.strip()
-          print(f'[Tầng 2] Đã ép chuẩn Từ điển VAS. Còn lại: {len(df)} dòng.')
-
-          # TẦNG 3
-          df['Ngày kỳ'] = pd.to_datetime(df['Ngày kỳ'], errors='coerce')
-          df = df.dropna(subset=['Ngày kỳ'])
-          df['Ngày kỳ'] = df['Ngày kỳ'].dt.strftime('%Y-%m-%d')
-          before_dedup = len(df)
-          df = df.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='last')
-          print(f'[Tầng 3] Đã lọc bỏ {before_dedup - len(df)} bản ghi trùng lặp.')
-
-          # TẦNG 4: KIỂM TRA CÂN ĐỐI KẾ TOÁN
-          bctc_df = df[df['Loại báo cáo'] == 'Bảng cân đối kế toán']
-          if not bctc_df.empty:
-              pivot = bctc_df.pivot_table(index=['Mã chứng khoán', 'Ngày kỳ'], columns='Chỉ tiêu tiếng Việt', values='Giá trị', aggfunc='first').reset_index()
-              if all(c in pivot.columns for c in ['Tổng cộng tài sản', 'Nợ phải trả', 'Vốn chủ sở hữu']):
-                  pivot['is_invalid'] = (pivot['Tổng cộng tài sản'] - (pivot['Nợ phải trả'] + pivot['Vốn chủ sở hữu'])).abs() > 1000
-                  invalid_keys = pivot[pivot['is_invalid']][['Mã chứng khoán', 'Ngày kỳ']]
-                  df = df.merge(invalid_keys, on=['Mã chứng khoán', 'Ngày kỳ'], how='left', indicator=True)
-                  df = df[df['_merge'] == 'left_only'].drop(columns=['_merge'])
-                  print(f'[Tầng 4] Đã loại bỏ {len(invalid_keys)} kỳ BCTC vi phạm Tài sản = Nợ + Vốn.')
-
-          # TẦNG 5
-          df['Giá trị'] = pd.to_numeric(df['Giá trị'], errors='coerce')
-          df = df[df['Giá trị'].notna() & (df['Giá trị'] != 0)]
-          df['Năm'] = df['Năm'].fillna(2024).astype(int)
-          print('[Tầng 5] Đã hoàn tất điền đầy và lọc ngoại lai.')
-
-          os.makedirs('data', exist_ok=True)
-          df.to_csv(file_path, index=False)
-          df.to_parquet('data/vietnam_stock_database.parquet', engine='pyarrow', index=False)
-          print('--- HOÀN TẤT 5 TẦNG LỌC VÀ LƯU DỮ LIỆU SẠCH (CSV + PARQUET) ---')
-          "
-
-      # ==========================================
-      # 1. LƯU FILE CSV LÊN GITHUB (GIỮ NGUYÊN)
-      # ==========================================
-      - name: Commit and push changes to GitHub (Backup CSV)
+      - name: Commit and push changes to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -176,92 +50,26 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           git add data/ || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Master Dataset (Cleaned) [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Dataset (Cleaned) [skip ci]"
           git push origin main
 
-      # ==========================================
-      # 2. LƯU FILE PARQUET VÀO HUGGING FACE SPACE
-      # ==========================================
-      - name: Push Cleaned Dataset to Hugging Face Space Repo
+      - name: Push Cleaned Dataset to Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
           from huggingface_hub import HfApi
           import os
-          
           api = HfApi()
-          space_repo_id = 'trananhquan2001/trananhquan-terminal'
-          # Đẩy file Parquet thay vì CSV để tối ưu tốc độ
-          local_file_path = 'data/vietnam_stock_database.parquet'
-          remote_file_path = 'du_lieu/dulieu_hang_ngay.parquet'
-          
-          print(f'Đang upload file Parquet vào Space: {space_repo_id}...')
-          api.upload_file(
-              path_or_fileobj=local_file_path,
-              path_in_repo=remote_file_path,
-              repo_id=space_repo_id,
-              repo_type='space',
-              token=os.environ['HF_TOKEN']
-          )
-          print('Đã đẩy file sạch trực tiếp vào Space thành công!')
-          "
-
-      # ==========================================
-      # 3. ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE POSTGRESQL
-      # ==========================================
-      - name: Push Cleaned Data to Supabase Master Table
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          python -c "
-          import os
-          import pandas as pd
-          import numpy as np
-          from datetime import datetime
-          from supabase import create_client
-
-          print('--- BƯỚC 3: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE ---')
-          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
-          
-          file_path = 'data/vietnam_stock_database_tong_hop.csv'
-          df = pd.read_csv(file_path)
-          
-          rename_map = {
-              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name', 'Tên ngành': 'sector', 'Loại báo cáo': 'report_type',
-              'Loại kỳ': 'period_type', 'Năm': 'year', 'Ngày kỳ': 'report_date', 'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
-          }
-          df = df.rename(columns=rename_map)
-
-          df = df.dropna(subset=['ticker', 'value'])
-          df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
-          df = df[df['ticker'] != 'NAN']
-          df['value'] = pd.to_numeric(df['value'], errors='coerce')
-          df = df[df['value'].notna() & (df['value'] != 0)]
-          df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
-
-          records = []
-          for _, row in df.iterrows():
-              def clean_str(s): return str(s).strip() if pd.notna(s) else None
-              records.append({
-                  'ticker': str(row['ticker']), 'company_name': clean_str(row.get('company_name')),
-                  'sector': clean_str(row.get('sector')), 'report_type': clean_str(row.get('report_type')),
-                  'period_type': clean_str(row.get('period_type')), 'year': int(row['year']),
-                  'report_date': clean_str(row.get('report_date')), 'item_vn': clean_str(row.get('item_vn')),
-                  'value': float(row['value'])
-              })
-
-          print(f'Đang đồng bộ {len(records)} bản ghi vào bảng finex_stock_master trên Supabase...')
-          
-          batch_size = 500
-          for i in range(0, len(records), batch_size):
-              batch = records[i:i + batch_size]
-              supabase.table('finex_stock_master').upsert(
-                  batch, 
-                  on_conflict='ticker,report_type,period_type,report_date,item_vn'
-              ).execute()
-              print(f' ✅ Đã đẩy {min(i+batch_size, len(records))}/{len(records)} bản ghi...')
-
-          print('Đồng bộ Supabase thành công 100%!')
+          try:
+              api.upload_file(
+                  path_or_fileobj='data/vietnam_stock_database.parquet',
+                  path_in_repo='du_lieu/dulieu_hang_ngay.parquet',
+                  repo_id='trananhquan2001/trananhquan-terminal',
+                  repo_type='space',
+                  token=os.environ['HF_TOKEN']
+              )
+              print('Đã đẩy file Parquet thành công!')
+          except Exception as e:
+              print('Lỗi đẩy HuggingFace:', e)
           "
