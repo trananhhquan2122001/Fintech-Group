@@ -1,12 +1,11 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v11.0 (ORIGINAL STRUCTURE + FULL VAS)
-=======================================================================
-Changelog v11.0:
+FINEX VN STOCK DATABASE CRAWLER - v12.0 (100% ORIGINAL STRUCTURE & FULL VAS)
+============================================================================
+Changelog v12.0:
   ✅ Giữ nguyên 100% bộ khung code v4.0 gốc.
-  ✅ Nhúng toàn bộ Từ điển VAS 4 ngành (Doanh nghiệp, Ngân hàng, Chứng khoán, Bảo hiểm).
-  ✅ Áp dụng 5 tầng First-Principles Cleaning (không xóa dữ liệu mở rộng).
+  ✅ Nhúng toàn bộ Từ điển VAS 4 ngành (DN, Ngân hàng, Chứng khoán, Bảo hiểm).
+  ✅ Fix triệt để lỗi crash float('') và không xóa dữ liệu mở rộng.
   ✅ Cào dữ liệu lịch sử sâu (từ năm 2000).
-  ✅ Xuất file kép: CSV & Parquet tại thư mục data/.
 """
 import os
 import time
@@ -139,11 +138,9 @@ def standardize_metric(raw_metric, report_type):
     metric = clean_text(raw_metric)
     if not metric: return None
     
-    # 1. Khớp chính xác
     if metric in VAS_WHITELIST: return metric
     if metric in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric]
     
-    # 2. Xóa mã số trong ngoặc
     metric_no_code = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', metric)
     if metric_no_code in VAS_WHITELIST: return metric_no_code
     if metric_no_code in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric_no_code]
@@ -152,8 +149,9 @@ def standardize_metric(raw_metric, report_type):
         if alias.lower() == metric.lower() or alias.lower() == metric_no_code.lower():
             return standard
             
-    # 3. Giữ nguyên tên gốc nếu không khớp VAS
+    # GIỮ NGUYÊN TÊN GỐC NẾU KHÔNG KHỚP (Để không mất dữ liệu)
     return metric_no_code
+
 
 # ==========================================
 # 2. API KEY & CÀI ĐẶT THƯ VIỆN
@@ -180,7 +178,7 @@ except ImportError:
     from vnstock import Fundamental, Market
 
 # ==========================================
-# 3. SUPABASE INTEGRATION
+# 🆕 1.5 SUPABASE INTEGRATION (FIXED V4)
 # ==========================================
 try:
     from supabase import create_client
@@ -224,6 +222,7 @@ STANDARD_COLUMNS = [
     'Chỉ tiêu tiếng Việt', 'Giá trị'
 ]
 
+# Bản đồ ánh xạ từ Tiếng Việt (Code) sang Tiếng Anh (Supabase)
 VN_TO_EN_MAP = {
     'Mã chứng khoán': 'ticker',
     'Tên doanh nghiệp': 'company_name',
@@ -1193,22 +1192,18 @@ def apply_first_principles_cleaning(df):
     print(f"  [Tầng 5] ✅ Format hoàn tất. Còn {len(df):,} dòng.")
     return df[STANDARD_COLUMNS]
 
-
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v11.0 (ORIGINAL + FULL VAS)")
-    print(f"   SUPABASE_PRIORITY={SUPABASE_PRIORITY} | PUSH_TO_SUPABASE={PUSH_TO_SUPABASE}")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v12.0 (100% ORIGINAL STRUCTURE)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
     all_master_records = []
-    source_before_dedup = {}
 
     def _accumulate(recs, source):
         if not recs: return
         _add_source(recs, source)
         all_master_records.extend(recs)
-        source_before_dedup[source] = source_before_dedup.get(source, 0) + len(recs)
 
     # BƯỚC 0
     print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày...")
@@ -1288,7 +1283,6 @@ def main():
     if not df_clean.empty:
         print(f" - Số mã có dữ liệu: {df_clean['Mã chứng khoán'].nunique()}/176 mã")
     print("=" * 62)
-
 
 if __name__ == "__main__":
     main()
