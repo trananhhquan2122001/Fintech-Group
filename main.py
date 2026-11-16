@@ -1,13 +1,16 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v12.0 (100% ORIGINAL STRUCTURE & FULL VAS)
+FINEX VN STOCK DATABASE CRAWLER - v12.1 (100% ORIGINAL + CLEAN BLANK SPACES)
 ============================================================================
-Changelog v12.0:
-  ✅ Giữ nguyên 100% bộ khung code v4.0 gốc.
-  ✅ Nhúng toàn bộ Từ điển VAS 4 ngành (DN, Ngân hàng, Chứng khoán, Bảo hiểm).
-  ✅ Fix triệt để lỗi crash float('') và không xóa dữ liệu mở rộng.
-  ✅ Cào dữ liệu lịch sử sâu (từ năm 2000).
+Changelog v12.1:
+  ✅ Giữ nguyên 100% bộ khung code v12.0 gốc của bạn.
+  ✅ Tự động lọc bỏ hoàn toàn các dòng có Giá trị = 0 (không còn dòng trắng).
+  ✅ Chống treo bằng socket timeout 15s (do vẫn dùng VNStock).
+  ✅ Tự động lưu vào Database Supabase nếu bật biến môi trường.
 """
 import os
+import socket
+socket.setdefaulttimeout(15)  # ⚡ Chống treo mạng (Quan trọng vì có dùng VNStock)
+
 import time
 from datetime import datetime
 import pandas as pd
@@ -151,7 +154,6 @@ def standardize_metric(raw_metric, report_type):
             
     # GIỮ NGUYÊN TÊN GỐC NẾU KHÔNG KHỚP (Để không mất dữ liệu)
     return metric_no_code
-
 
 # ==========================================
 # 2. API KEY & CÀI ĐẶT THƯ VIỆN
@@ -346,7 +348,7 @@ def upsert_to_supabase(df, batch_size=500):
             if not ticker: continue
             
             val = pd.to_numeric(row['value'], errors='coerce')
-            if pd.isna(val) or val == 0: continue
+            if pd.isna(val) or val == 0: continue  # Bỏ qua giá trị 0
             
             yr = pd.to_numeric(row['year'], errors='coerce')
             yr = int(yr) if pd.notna(yr) else datetime.now().year
@@ -1146,7 +1148,7 @@ def apply_first_principles_cleaning(df):
     # Tầng 2
     df['Chỉ tiêu tiếng Việt'] = df.apply(lambda row: standardize_metric(row['Chỉ tiêu tiếng Việt'], row['Loại báo cáo']), axis=1)
     df = df.dropna(subset=['Chỉ tiêu tiếng Việt'])
-    print(f"  [Tầng 2] Ép chuẩn VAS Dictionary (Giữ dữ liệu mở rộng). Còn {len(df):,} dòng.")
+    print(f"  [Tầng 2] Ép chuẩn VAS Dictionary. Còn {len(df):,} dòng.")
     
     # Tầng 3
     if '_priority' in df.columns:
@@ -1172,29 +1174,34 @@ def apply_first_principles_cleaning(df):
                 print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra.")
         except Exception: pass
     
-    # Tầng 5
-    print("  [Tầng 5] Format số liệu (Giữ nguyên số 0)...")
+    # Tầng 5: XÓA DÒNG TRẮNG
+    print("  [Tầng 5] Loại bỏ hoàn toàn giá trị 0 (Xóa dòng trắng) & Format số liệu...")
+    
+    # Lọc bỏ các dòng có giá trị bằng 0
+    df = df[df['Giá trị'] != 0]
+
     def safe_format(x):
         try:
             if pd.isna(x): return ""
             f = float(x)
+            if f == 0: return "" # Đảm bảo không còn số 0
             if f.is_integer(): return str(int(f))
             return str(round(f, 4))
         except (ValueError, TypeError):
             return ""
             
     df['Giá trị'] = df['Giá trị'].apply(safe_format)
-    df = df[df['Giá trị'] != ""]
+    df = df[df['Giá trị'] != ""] # Lọc bỏ rỗng
     
     if 'Năm' in df.columns:
         df['Năm'] = pd.to_numeric(df['Năm'], errors='coerce').fillna(datetime.now().year).astype(int)
         
-    print(f"  [Tầng 5] ✅ Format hoàn tất. Còn {len(df):,} dòng.")
+    print(f"  [Tầng 5] ✅ Đã xóa dòng trắng & Format hoàn tất. Còn {len(df):,} dòng.")
     return df[STANDARD_COLUMNS]
 
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v12.0 (100% ORIGINAL STRUCTURE)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v12.1 (100% ORIGINAL, NO BLANKS)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
