@@ -1,11 +1,13 @@
 name: Financial Data Scraper Pipeline
 
 on:
+  # Cho phép bấm chạy thủ công
   workflow_dispatch:
+  # Chạy tự động lúc 00:00 giờ Việt Nam (17:00 UTC)
   schedule:
     - cron: '0 17 * * *'
 
-# 🚀 CƠ CHẾ TỰ HỦY BẢN CŨ NẾU BỊ TREO
+# 🛡️ CƠ CHẾ CHỐNG TREO: Tự động hủy bản cũ nếu có bản mới push lên
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -13,7 +15,8 @@ concurrency:
 jobs:
   run-scraper:
     runs-on: ubuntu-latest
-    timeout-minutes: 25   # Tự động sập sau 25 phút
+    # Tự động kill toàn bộ job nếu chạy quá 25 phút
+    timeout-minutes: 25
     permissions:
       contents: write
     steps:
@@ -32,17 +35,20 @@ jobs:
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
-      - name: Run FINEX Engine (With OS Timeout)
+      # ==========================================
+      # BƯỚC 1: CÀO DỮ LIỆU (main.py V15.0)
+      # ==========================================
+      - name: Run FINEX Enterprise Engine
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-          PUSH_TO_SUPABASE: "true"
-        # Dùng lệnh timeout của Linux để ép chết tiến trình sau 15 phút
+        # Dùng timeout của Linux để ép dừng sau 12 phút nếu bị treo
         run: |
-          timeout 900 python main.py || echo "⚠️ Đã hết 15 phút, ép dừng để lưu dữ liệu!"
+          timeout 720 python main.py || echo "⚠️ Đã hết 12 phút, ép dừng để lưu dữ liệu!"
 
-      - name: Commit and push changes to GitHub
+      # ==========================================
+      # BƯỚC 2: LƯU FILE LÊN GITHUB (BACKUP)
+      # ==========================================
+      - name: Commit and push changes to GitHub (Backup CSV & Parquet)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -53,23 +59,93 @@ jobs:
           git diff --staged --quiet || git commit -m "Auto-update FINEX Dataset (Cleaned) [skip ci]"
           git push origin main
 
-      - name: Push Cleaned Dataset to Hugging Face Space
+      # ==========================================
+      # BƯỚC 3: LƯU FILE VÀO HUGGING FACE SPACE
+      # ==========================================
+      - name: Push Cleaned Dataset to Hugging Face Space Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
           from huggingface_hub import HfApi
           import os
+          
           api = HfApi()
+          space_repo_id = 'trananhquan2001/trananhquan-terminal'
+          
+          print(f'Đang upload file Parquet vào Space: {space_repo_id}...')
           try:
               api.upload_file(
                   path_or_fileobj='data/vietnam_stock_database.parquet',
                   path_in_repo='du_lieu/dulieu_hang_ngay.parquet',
-                  repo_id='trananhquan2001/trananhquan-terminal',
+                  repo_id=space_repo_id,
                   repo_type='space',
                   token=os.environ['HF_TOKEN']
               )
-              print('Đã đẩy file Parquet thành công!')
+              print('✅ Đã đẩy file Parquet thành công!')
           except Exception as e:
-              print('Lỗi đẩy HuggingFace:', e)
+              print(f'❌ Lỗi đẩy HuggingFace: {e}')
+          "
+
+      # ==========================================
+      # BƯỚC 4: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE
+      # ==========================================
+      - name: Push Cleaned Data to Supabase Master Table
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python -c "
+          import os
+          import pandas as pd
+          from datetime import datetime
+          from supabase import create_client
+
+          print('--- BƯỚC 4: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE ---')
+          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+          
+          file_path = 'data/vietnam_stock_database_tong_hop.csv'
+          if not os.path.exists(file_path):
+              print('Không tìm thấy file CSV, bỏ qua!')
+              exit(0)
+              
+          df = pd.read_csv(file_path)
+          
+          rename_map = {
+              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name', 'Tên ngành': 'sector', 
+              'Loại báo cáo': 'report_type', 'Loại kỳ': 'period_type', 'Năm': 'year', 
+              'Ngày kỳ': 'report_date', 'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
+          }
+          df = df.rename(columns=rename_map)
+
+          df = df.dropna(subset=['ticker', 'value'])
+          df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
+          df = df[df['ticker'] != 'NAN']
+          
+          df['value'] = pd.to_numeric(df['value'], errors='coerce')
+          df = df[df['value'].notna()]
+          df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
+
+          records = []
+          for _, row in df.iterrows():
+              def clean_str(s): return str(s).strip() if pd.notna(s) else None
+              records.append({
+                  'ticker': str(row['ticker']), 'company_name': clean_str(row.get('company_name')),
+                  'sector': clean_str(row.get('sector')), 'report_type': clean_str(row.get('report_type')),
+                  'period_type': clean_str(row.get('period_type')), 'year': int(row['year']),
+                  'report_date': clean_str(row.get('report_date')), 'item_vn': clean_str(row.get('item_vn')),
+                  'value': float(row['value'])
+              })
+
+          print(f'Đang đồng bộ {len(records)} bản ghi vào Supabase...')
+          
+          for i in range(0, len(records), 500):
+              batch = records[i:i + 500]
+              supabase.table('finex_stock_master').upsert(
+                  batch, 
+                  on_conflict='ticker,report_type,period_type,report_date,item_vn'
+              ).execute()
+              print(f' ✅ Đã đẩy {min(i+500, len(records))}/{len(records)} bản ghi...')
+
+          print('🎉 Đồng bộ Supabase thành công 100%!')
           "
