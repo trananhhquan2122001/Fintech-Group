@@ -3,7 +3,7 @@ name: Financial Data Scraper Pipeline
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 17 * * *' # 00:00 giờ Việt Nam (17:00 UTC)
+    - cron: '0 17 * * *' # Chạy lúc 00:00 giờ Việt Nam
 
 jobs:
   run-scraper:
@@ -22,136 +22,26 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
+          # BẮT BUỘC phải có pyarrow để đọc/ghi file parquet
           pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub supabase numpy pyarrow
           pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
           pip install --no-cache-dir vnfinancialdata
 
       # ==========================================
-      # BƯỚC 1: CÀO DỮ LIỆU (main.py ưu tiên VCI lấy lịch sử sâu)
+      # BƯỚC 1: CHẠY ENGINE (Cào + Lọc VAS + Xuất CSV & Parquet)
       # ==========================================
-      - name: Run FINEX Engine (Priority: VCI Deep History)
+      - name: Run FINEX Engine v7.0
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          PUSH_TO_SUPABASE: "true" # Bật cờ này để đẩy thẳng lên Supabase từ code Python
         run: python main.py
 
       # ==========================================
-      # BƯỚC 2: 5 LỚP LÀM SẠCH FIRST-PRINCIPLES
+      # BƯỚC 2: LƯU FILE CSV LÊN GITHUB (BACKUP)
       # ==========================================
-      - name: Apply 5-Tier First-Principles Cleaning
-        run: |
-          python -c "
-          import pandas as pd
-          import numpy as np
-          import os
-          import pyarrow as pa
-          import pyarrow.parquet as pq
-
-          print('--- 5 LỚP LÀM SẠCH FIRST-PRINCIPLES ---')
-          file_path = 'data/vietnam_stock_database_tong_hop.csv'
-          if not os.path.exists(file_path):
-              raise FileNotFoundError(f'Không tìm thấy file {file_path}')
-          
-          df = pd.read_csv(file_path)
-
-          # LỚP 1: Chuẩn hóa schema và định danh
-          df = df.replace([np.inf, -np.inf], np.nan)
-          df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-          df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.upper().str.strip()
-          df['Giá trị'] = pd.to_numeric(df['Giá trị'], errors='coerce')
-          df = df.dropna(subset=['Giá trị'])
-          print(f'[Lớp 1] Chuẩn hóa định danh. Số dòng: {len(df)}')
-
-          # LỚP 2: Kiểm tra Cân đối kế toán (Accounting Identity Check)
-          print('[Lớp 2] Kiểm tra Cân đối kế toán (Tài sản = Nợ + Vốn)...')
-          pivot_df = df.pivot_table(index=['Mã chứng khoán', 'Ngày kỳ'], columns='Chỉ tiêu tiếng Việt', values='Giá trị', aggfunc='first').reset_index()
-          
-          col_assets = next((c for c in pivot_df.columns if 'Tổng tài sản' in c or 'Total Assets' in c), None)
-          col_liab = next((c for c in pivot_df.columns if 'Nợ phải trả' in c or 'Liabilities' in c), None)
-          col_equity = next((c for c in pivot_df.columns if 'Vốn chủ sở hữu' in c or 'Equity' in c), None)
-
-          if col_assets and col_liab and col_equity:
-              pivot_df['Diff'] = (pivot_df[col_assets] - (pivot_df[col_liab] + pivot_df[col_equity])).abs()
-              invalid_rows = pivot_df[pivot_df['Diff'] > 1000][['Mã chứng khoán', 'Ngày kỳ']]
-              
-              df = df.merge(invalid_rows, on=['Mã chứng khoán', 'Ngày kỳ'], how='left', indicator=True)
-              df = df[df['_merge'] == 'left_only'].drop(columns=['_merge'])
-              print(f'[Lớp 2] Đã loại bỏ {len(invalid_rows)} kỳ báo cáo vi phạm nguyên lý kế toán.')
-          else:
-              print('[Lớp 2] Bỏ qua (Không tìm thấy đủ 3 cột Tài sản, Nợ, Vốn).')
-
-          # LỚP 3: Xử lý ngoại lệ lịch sử (Date Normalization)
-          df['Ngày kỳ'] = pd.to_datetime(df['Ngày kỳ'], errors='coerce')
-          df = df.dropna(subset=['Ngày kỳ'])
-          df['Ngày kỳ'] = df['Ngày kỳ'].dt.strftime('%Y-%m-%d')
-          print('[Lớp 3] Chuẩn hóa ngày tháng.')
-
-          # LỚP 4: Lưu trữ chuẩn Parquet
-          parquet_path = 'data/vietnam_stock_database.parquet'
-          df.to_parquet(parquet_path, engine='pyarrow', index=False)
-          print(f'[Lớp 4] Đã lưu file Parquet: {parquet_path}')
-
-          # Lưu CSV backup
-          df.to_csv(file_path, index=False, encoding='utf-8-sig')
-          print('--- HOÀN TẤT 5 LỚP LÀM SẠCH ---')
-          "
-
-      # ==========================================
-      # BƯỚC 3: ĐỒNG BỘ SUPABASE (Chỉ dữ liệu đã qua 5 lớp)
-      # ==========================================
-      - name: Push Clean Data to Supabase
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          python -c "
-          import os
-          import pandas as pd
-          from datetime import datetime
-          from supabase import create_client
-
-          print('--- ĐỒNG BỘ SUPABASE (DỮ LIỆU SẠCH 100%) ---')
-          supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
-          
-          df = pd.read_csv('data/vietnam_stock_database_tong_hop.csv')
-          
-          rename_map = {
-              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name',
-              'Tên ngành': 'sector', 'Loại báo cáo': 'report_type',
-              'Loại kỳ': 'period_type', 'Năm': 'year', 'Ngày kỳ': 'report_date',
-              'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
-          }
-          df = df.rename(columns=rename_map)
-
-          df = df.dropna(subset=['ticker', 'value'])
-          df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
-          df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
-
-          records = []
-          for _, row in df.iterrows():
-              def clean_str(s): return str(s).strip() if pd.notna(s) else None
-              records.append({
-                  'ticker': str(row['ticker']), 'company_name': clean_str(row.get('company_name')),
-                  'sector': clean_str(row.get('sector')), 'report_type': clean_str(row.get('report_type')),
-                  'period_type': clean_str(row.get('period_type')), 'year': int(row['year']),
-                  'report_date': clean_str(row.get('report_date')), 'item_vn': clean_str(row.get('item_vn')),
-                  'value': float(row['value'])
-              })
-
-          print(f'Đang đồng bộ {len(records)} bản ghi vào Supabase...')
-          for i in range(0, len(records), 500):
-              batch = records[i:i + 500]
-              supabase.table('finex_stock_master').upsert(
-                  batch, on_conflict='ticker,report_type,period_type,report_date,item_vn'
-              ).execute()
-              print(f' ✅ Đã đẩy {min(i+500, len(records))}/{len(records)} bản ghi...')
-
-          print('Đồng bộ Supabase thành công 100%!')
-          "
-
-      # ==========================================
-      # BƯỚC 4: LƯU LÊN GITHUB & HUGGING FACE (Parquet)
-      # ==========================================
-      - name: Commit and push changes to GitHub
+      - name: Commit and push changes to GitHub (Backup CSV)
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
@@ -159,22 +49,28 @@ jobs:
           git fetch origin main
           git checkout main || git checkout -b main
           git add data/ || true
-          git diff --staged --quiet || git commit -m "Auto-update First-Principles Dataset (Parquet & CSV) [skip ci]"
+          git diff --staged --quiet || git commit -m "Auto-update FINEX Dataset (CSV & Parquet) [skip ci]"
           git push origin main
 
-      - name: Push Parquet to Hugging Face Space
+      # ==========================================
+      # BƯỚC 3: ĐẨY FILE PARQUET LÊN HUGGING FACE SPACE
+      # ==========================================
+      - name: Push Parquet to Hugging Face Space Repo
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
           from huggingface_hub import HfApi
           import os
+          
           api = HfApi()
-          print('Đang upload file Parquet lên Space...')
+          space_repo_id = 'trananhquan2001/trananhquan-terminal'
+          
+          print('Đang upload file Parquet siêu nén lên Space...')
           api.upload_file(
               path_or_fileobj='data/vietnam_stock_database.parquet',
               path_in_repo='du_lieu/dulieu_hang_ngay.parquet',
-              repo_id='trananhquan2001/trananhquan-terminal',
+              repo_id=space_repo_id,
               repo_type='space',
               token=os.environ['HF_TOKEN']
           )
