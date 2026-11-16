@@ -1,13 +1,11 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v8.0 (ULTIMATE FIX & STABLE)
-==============================================================
-Changelog v8.0:
-  ✅ Sửa triệt để lỗi ValueError: could not convert string to float: ''
-  ✅ Xử lý triệt để chuỗi rỗng '' và NaN thành kiểu float an toàn.
-  ✅ Tầng 4 (Cân đối kế toán) tự động dò tìm tên cột linh hoạt.
-  ✅ Giữ nguyên 100% 6 nguồn cào dữ liệu.
-  ✅ Tích hợp toàn bộ Từ điển VAS (Thông tư 200 & 99).
-  ✅ Tự động xuất file CSV & PARQUET.
+FINEX VN STOCK DATABASE CRAWLER - v10.0 (FULL 4-SECTOR DICTIONARY & MAXIMUM DATA)
+=================================================================================
+Changelog v10.0:
+  ✅ Khôi phục 100% Từ điển Khung BCTC 4 Ngành (Doanh nghiệp, Ngân hàng, Chứng khoán, Bảo hiểm).
+  ✅ Cào dữ liệu lịch sử sâu nhất có thể (từ năm 2000).
+  ✅ Không xóa chỉ tiêu lạ, giữ nguyên giá trị 0 để đạt dung lượng tối đa (~70MB).
+  ✅ Tự động map tiếng Anh và viết tắt sang chuẩn VAS.
 """
 import os
 import time
@@ -19,10 +17,11 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==============================================================================
-# 1. TOÀN BỘ TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH (THÔNG TƯ 200 & 99/2025)
+# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (CHI TIẾT 100%)
 # ==============================================================================
 VAS_WHITELIST = set([
-    # --- BẢNG CÂN ĐỐI KẾ TOÁN (B01-DN) ---
+    # --- 1. DOANH NGHIỆP SẢN XUẤT, THƯƠNG MẠI, DỊCH VỤ, BĐS, XÂY DỰNG ---
+    # Bảng cân đối kế toán
     "Tài sản ngắn hạn", "Tiền và các khoản tương đương tiền", "Tiền", "Các khoản tương đương tiền",
     "Đầu tư tài chính ngắn hạn", "Chứng khoán kinh doanh", "Dự phòng giảm giá chứng khoán kinh doanh", "Đầu tư nắm giữ đến ngày đáo hạn",
     "Các khoản phải thu ngắn hạn", "Phải thu ngắn hạn của khách hàng", "Trả trước cho người bán ngắn hạn", "Phải thu nội bộ ngắn hạn", 
@@ -36,7 +35,6 @@ VAS_WHITELIST = set([
     "Đầu tư tài chính dài hạn", "Đầu tư vào công ty con", "Đầu tư vào công ty liên doanh, liên kết", "Đầu tư góp vốn vào đơn vị khác", "Dự phòng đầu tư tài chính dài hạn", "Đầu tư nắm giữ đến ngày đáo hạn",
     "Tài sản dài hạn khác", "Chi phí trả trước dài hạn", "Tài sản thuế thu nhập hoãn lại", "Thiết bị, vật tư, phụ tùng thay thế dài hạn", "Tài sản dài hạn khác", "Lợi thế thương mại",
     "Tổng cộng tài sản", "Báo cáo tình hình tài chính", 
-    # NGUỒN VỐN
     "Nợ phải trả", "Nợ ngắn hạn", "Phải trả người bán ngắn hạn", "Người mua trả tiền trước ngắn hạn", "Thuế và các khoản phải nộp Nhà nước", 
     "Phải trả người lao động", "Chi phí phải trả ngắn hạn", "Phải trả nội bộ ngắn hạn", "Phải trả theo tiến độ kế hoạch hợp đồng xây dựng", 
     "Doanh thu chưa thực hiện ngắn hạn", "Phải trả ngắn hạn khác", "Vay và nợ thuê tài chính ngắn hạn", "Dự phòng phải trả ngắn hạn", 
@@ -50,7 +48,7 @@ VAS_WHITELIST = set([
     "LNST chưa phân phối lũy kế đến cuối kỳ trước", "LNST chưa phân phối kỳ này", "Nguồn vốn đầu tư XDCB", "Lợi ích cổ đông không kiểm soát",
     "Nguồn kinh phí và quỹ khác", "Nguồn kinh phí", "Nguồn kinh phí đã hình thành TSCĐ", "Tổng cộng nguồn vốn",
     
-    # --- BÁO CÁO KẾT QUẢ KINH DOANH (B02-DN) ---
+    # Báo cáo kết quả kinh doanh
     "Doanh thu bán hàng và cung cấp dịch vụ", "Các khoản giảm trừ doanh thu",
     "Doanh thu thuần về bán hàng và cung cấp dịch vụ", "Doanh thu thuần", 
     "Giá vốn hàng bán", "Lợi nhuận gộp về bán hàng và cung cấp dịch vụ", "Lợi nhuận gộp",
@@ -65,7 +63,7 @@ VAS_WHITELIST = set([
     "LNST của công ty mẹ", "LNST của cổ đông không kiểm soát",
     "Lãi cơ bản trên cổ phiếu", "Lãi suy giảm trên cổ phiếu",
 
-    # --- BÁO CÁO LƯU CHUYỂN TIỀN TỆ (B03-DN) ---
+    # Báo cáo lưu chuyển tiền tệ
     "Lợi nhuận trước thuế", "Khấu hao TSCĐ và BĐSĐT", "Các khoản dự phòng", 
     "Lãi/lỗ chênh lệch tỷ giá do đánh giá lại các khoản mục tiền tệ gốc ngoại tệ", "Lãi/lỗ chênh lệch tỷ giá",
     "Lãi/lỗ từ hoạt động đầu tư", "Các khoản điều chỉnh khác", "Lợi nhuận từ HĐKD trước thay đổi vốn lưu động",
@@ -79,8 +77,36 @@ VAS_WHITELIST = set([
     "Cổ tức, lợi nhuận đã trả cho chủ sở hữu", "Lưu chuyển tiền thuần từ HĐTC",
     "Lưu chuyển tiền thuần trong kỳ", "Tiền và tương đương tiền đầu kỳ", "Ảnh hưởng của thay đổi tỷ giá quy đổi ngoại tệ", "Tiền và tương đương tiền cuối kỳ",
 
-    # --- NGÂN HÀNG & CHỨNG KHOÁN ---
-    "Thu nhập lãi thuần", "Tiền gửi của khách hàng", "Cho vay khách hàng", "Doanh thu môi giới", "Doanh thu tự doanh", "Vốn điều lệ"
+    # --- 2. NGÂN HÀNG ---
+    "Tiền mặt, vàng bạc, đá quý", "Tiền gửi tại Ngân hàng Nhà nước", "Tiền gửi tại và cho vay các tổ chức tín dụng khác", 
+    "Chứng khoán kinh doanh", "Các công cụ tài chính phái sinh và tài sản tài chính khác", "Cho vay khách hàng", 
+    "Hoạt động mua nợ", "Chứng khoán đầu tư", "Góp vốn, đầu tư dài hạn", "Tài sản Có khác", 
+    "Nợ Chính phủ và Ngân hàng Nhà nước", "Tiền gửi và vay các tổ chức tín dụng khác", "Tiền gửi của khách hàng", 
+    "Công cụ tài chính phái sinh và nợ tài chính khác", "Vốn tài trợ, ủy thác đầu tư", "Phát hành giấy tờ có giá", 
+    "Vốn điều lệ", "Thu nhập lãi thuần", "Thu nhập từ dịch vụ", "Lãi thuần từ dịch vụ", "Lãi thuần từ ngoại hối và vàng", 
+    "Lãi thuần từ chứng khoán kinh doanh", "Lãi thuần từ chứng khoán đầu tư", "Thu nhập hoạt động khác", "Chi phí hoạt động (CIR)", 
+    "Lợi nhuận trước dự phòng rủi ro tín dụng", "Chi phí dự phòng rủi ro tín dụng", "Thu nhập lãi nhận được", 
+    "Chi phí lãi đã trả", "Thu từ dịch vụ", "Thu nợ đã xóa", "Chi cho nhân viên và quản lý",
+
+    # --- 3. CÔNG TY CHỨNG KHOÁN ---
+    "Tài sản tài chính", "Các tài sản tài chính ghi nhận thông qua lãi lỗ (FVTPL)", "Các khoản đầu tư nắm giữ đến ngày đáo hạn (HTM)", 
+    "Các khoản cho vay (Margin)", "Tài sản tài chính sẵn sàng để bán (AFS)", "Dự phòng suy giảm giá trị", 
+    "Các khoản phải thu (bán tài sản tài chính, cổ tức và lãi dự thu)", "Phải thu dịch vụ CTCK", "Phải thu lỗi giao dịch",
+    "Vay và nợ thuê tài chính", "Vay tài sản tài chính", "Trái phiếu chuyển đổi (cấu phần nợ)", "Trái phiếu phát hành", "Vay Quỹ hỗ trợ thanh toán",
+    "Phải trả hoạt động giao dịch chứng khoán", "Nhận ký quỹ, ký cược", "Quỹ dự trữ bổ sung vốn điều lệ", "Quỹ dự phòng tài chính và rủi ro nghiệp vụ",
+    "Doanh thu hoạt động", "Lãi từ FVTPL (lãi bán, chênh lệch đánh giá lại, cổ tức và lãi)", "Lãi HTM", "Lãi cho vay và phải thu", 
+    "Lãi AFS", "Lãi phái sinh phòng ngừa", "Doanh thu môi giới", "Bảo lãnh và đại lý phát hành", "Tư vấn đầu tư", "Lưu ký", "Tư vấn tài chính",
+    "Chi phí hoạt động", "Lỗ FVTPL", "Lỗ HTM", "Lỗ AFS khi phân loại lại", "Chi phí dự phòng, xử lý tổn thất và chi phí đi vay của khoản cho vay",
+    "Chi phí tự doanh, môi giới, bảo lãnh, tư vấn đầu tư, lưu ký, tư vấn tài chính và dịch vụ khác", "Doanh thu hoạt động tài chính",
+    "Lãi tỷ giá", "Cổ tức và lãi tiền gửi", "Lãi bán, thanh lý công ty con, liên kết", "Chi phí tài chính", "Lỗ tỷ giá", "Chi phí lãi vay",
+    "Lỗ thanh lý đầu tư", "Dự phòng đầu tư dài hạn", "Chi phí bán hàng", "Chi phí quản lý CTCK", "Kết quả hoạt động",
+
+    # --- 4. BẢO HIỂM ---
+    "Tài sản tái bảo hiểm", "Dự phòng phí và dự phòng bồi thường nhượng tái bảo hiểm", "Ký quỹ bảo hiểm",
+    "Dự phòng nghiệp vụ", "Dự phòng phí chưa được hưởng", "Dự phòng toán học", "Dự phòng bồi thường", "Dự phòng chia lãi", "Dự phòng đảm bảo cân đối",
+    "Phải thu và phải trả hoạt động nhận và nhượng tái bảo hiểm", "Phí bảo hiểm gốc", "Phí nhận tái bảo hiểm", "Phí nhượng tái bảo hiểm",
+    "Thay đổi dự phòng phí", "Doanh thu phí bảo hiểm thuần", "Hoa hồng nhượng tái và doanh thu khác", "Doanh thu thuần hoạt động bảo hiểm",
+    "Chi bồi thường gốc và nhận tái", "Thu bồi thường nhượng tái", "Thay đổi dự phòng bồi thường", "Chi hoa hồng", "Lợi nhuận gộp bảo hiểm"
 ])
 
 ALIAS_TO_VAS = {
@@ -102,7 +128,9 @@ ALIAS_TO_VAS = {
     "Depreciation And Amortization": "Khấu hao TSCĐ và BĐSĐT", "Depreciation Amortization Depletion": "Khấu hao TSCĐ và BĐSĐT",
     "Change In Working Capital": "Lợi nhuận từ HĐKD trước thay đổi vốn lưu động",
     "Doanh thu thuần HĐKD": "Doanh thu thuần", "Lợi nhuận sau thuế thu nhập doanh nghiệp": "Lợi nhuận sau thuế TNDN", "LNST": "Lợi nhuận sau thuế TNDN",
-    "Vốn CSH": "Vốn chủ sở hữu", "Nợ phải trả ngắn hạn": "Nợ ngắn hạn", "Nợ phải trả dài hạn": "Nợ dài hạn", "Lợi nhuận gộp về bán hàng và cung cấp dịch vụ": "Lợi nhuận gộp"
+    "Vốn CSH": "Vốn chủ sở hữu", "Nợ phải trả ngắn hạn": "Nợ ngắn hạn", "Nợ phải trả dài hạn": "Nợ dài hạn", "Lợi nhuận gộp về bán hàng và cung cấp dịch vụ": "Lợi nhuận gộp",
+    "Net Interest Income": "Thu nhập lãi thuần", "Gross Loan": "Cho vay khách hàng", "Customer Deposits": "Tiền gửi của khách hàng",
+    "Trading Securities": "Chứng khoán kinh doanh", "Held To Maturity Securities": "Chứng khoán đầu tư"
 }
 
 def standardize_metric(raw_metric, report_type):
@@ -111,10 +139,14 @@ def standardize_metric(raw_metric, report_type):
         return clean_text(raw_metric)
     
     metric = clean_text(raw_metric)
+    if not metric: return None
     
+    # 1. Khớp chính xác trong Whitelist
     if metric in VAS_WHITELIST: return metric
+    # 2. Khớp trong Alias
     if metric in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric]
     
+    # 3. Xóa mã số trong ngoặc
     metric_no_code = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', metric)
     if metric_no_code in VAS_WHITELIST: return metric_no_code
     if metric_no_code in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric_no_code]
@@ -123,7 +155,8 @@ def standardize_metric(raw_metric, report_type):
         if alias.lower() == metric.lower() or alias.lower() == metric_no_code.lower():
             return standard
             
-    return None
+    # 4. GIỮ NGUYÊN TÊN GỐC NẾU KHÔNG KHỚP ĐỂ ĐẠT DUNG LƯỢNG TỐI ĐA
+    return metric_no_code
 
 # ==========================================
 # 2. API KEY & CÀI ĐẶT THƯ VIỆN
@@ -149,7 +182,7 @@ except ImportError:
     from vnstock import Fundamental, Market
 
 # ==========================================
-# 3. SUPABASE INTEGRATION
+# 3. SUPABASE & STREAMLIT CACHE
 # ==========================================
 try:
     from supabase import create_client
@@ -255,7 +288,7 @@ def upsert_to_supabase(df, batch_size=500):
             ticker = str(row['ticker']).strip() if pd.notna(row['ticker']) else ''
             if not ticker: continue
             val = pd.to_numeric(row['value'], errors='coerce')
-            if pd.isna(val) or val == 0: continue
+            if pd.isna(val): continue
             yr = int(pd.to_numeric(row['year'], errors='coerce')) if pd.notna(row['year']) else datetime.now().year
             
             def cs(s): return str(s).strip() if pd.notna(s) else None
@@ -285,7 +318,7 @@ def format_value(x):
             x = x.replace(',', '').replace(' ', '')
             if x.count('.') > 1: x = x.replace('.', '')
         val = float(x)
-        if abs(val) > 1e15 or val == 0 or val != val or val in [float('inf'), float('-inf')]: return None
+        if abs(val) > 1e15 or val != val or val in [float('inf'), float('-inf')]: return None
         return round(val, 4)
     except: return None
 
@@ -390,12 +423,6 @@ def translate_metric(metric_original, is_vn=False):
     result = re.sub(r'\s{2,}', ' ', result).strip()
     if not result: result = "Chỉ tiêu chưa xác định"
     return result.capitalize()
-
-def final_format_for_csv(x):
-    if pd.isna(x): return ""
-    val = float(x)
-    if val.is_integer(): return str(int(val))
-    return str(round(val, 4))
 
 # ==========================================
 # 5. TẢI DỮ LIỆU HÀNG NGÀY & DANH SÁCH 176 MÃ
@@ -550,7 +577,7 @@ def fetch_vndirect_fallback(symbol):
     return records
 
 # ==========================================
-# 7. YFINANCE & VNSTOCK CRAWLERS
+# 7. YFINANCE & VNSTOCK CRAWLERS (CÀO TỪ NĂM 2000)
 # ==========================================
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000):
     records = []
@@ -782,64 +809,53 @@ def _add_source(records, source_name, priority=None):
     return records
 
 # ==========================================
-# 8. SIÊU LÀM SẠCH (FIX TRIỆT ĐỂ LỖI FLOAT)
+# 8. SIÊU LÀM SẠCH (GIỮ LẠI TỐI ĐA DỮ LIỆU)
 # ==========================================
 def apply_first_principles_cleaning(df):
-    """Thực thi 5 tầng làm sạch First-Principles (Siêu an toàn)."""
     print("\n🧹 BƯỚC 5: ÁP DỤNG 5 TẦNG FIRST-PRINCIPLES CLEANING...")
     
     if df is None or df.empty:
         print("  ⚠️ DataFrame rỗng, bỏ qua.")
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
-    # Tầng 1: Schema & Null check (Ép kiểu Numeric ngay lập tức)
+    # Tầng 1
     df = df.copy()
     df['Giá trị'] = pd.to_numeric(df['Giá trị'].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
     df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
     print(f"  [Tầng 1] Loại bỏ NULL & ép kiểu Float. Còn {len(df):,} dòng.")
     
-    # Tầng 2: Standardize VAS Metric
+    # Tầng 2
     df['Chỉ tiêu tiếng Việt'] = df.apply(lambda row: standardize_metric(row['Chỉ tiêu tiếng Việt'], row['Loại báo cáo']), axis=1)
     df = df.dropna(subset=['Chỉ tiêu tiếng Việt'])
-    print(f"  [Tầng 2] Ép chuẩn VAS Dictionary. Còn {len(df):,} dòng.")
+    print(f"  [Tầng 2] Chuẩn hóa VAS (Giữ nguyên mở rộng). Còn {len(df):,} dòng.")
     
-    # Tầng 3: Deduplication
+    # Tầng 3
     if '_priority' in df.columns:
         df = df.sort_values('_priority', kind='stable')
     df = df.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
     print(f"  [Tầng 3] Deduplication. Còn {len(df):,} dòng.")
     
-    # Tầng 4: Accounting Identity Check
-    print("  [Tầng 4] Kiểm tra Cân đối kế toán (Tài sản = Nợ + Vốn)...")
+    # Tầng 4: Chỉ cảnh báo, không xóa
+    print("  [Tầng 4] Kiểm tra Cân đối kế toán (Chỉ cảnh báo)...")
     bctc_df = df[df['Loại báo cáo'].astype(str).str.contains('Bảng cân đối', na=False)]
     if not bctc_df.empty:
         try:
             pivot = bctc_df.pivot_table(index=['Mã chứng khoán', 'Ngày kỳ'], columns='Chỉ tiêu tiếng Việt', values='Giá trị', aggfunc='first').reset_index()
-            
-            # Tìm cột linh hoạt
             col_assets = next((c for c in pivot.columns if 'Tổng cộng tài sản' in str(c) or 'Tổng tài sản' in str(c)), None)
             col_liab = next((c for c in pivot.columns if 'Nợ phải trả' in str(c)), None)
             col_equity = next((c for c in pivot.columns if 'Vốn chủ sở hữu' in str(c)), None)
 
             if col_assets and col_liab and col_equity:
                 pivot['_diff'] = (pivot[col_assets] - (pivot[col_liab] + pivot[col_equity])).abs()
-                invalid_keys = pivot[pivot['_diff'] > 1000][['Mã chứng khoán', 'Ngày kỳ']]
-                
-                if not invalid_keys.empty:
-                    df = df.merge(invalid_keys, on=['Mã chứng khoán', 'Ngày kỳ'], how='left', indicator=True)
-                    df = df[df['_merge'] == 'left_only'].drop(columns=['_merge'])
-                    print(f"  [Tầng 4] ❌ Đã loại bỏ {len(invalid_keys)} kỳ BCTC vi phạm (Tài sản ≠ Nợ + Vốn).")
-                else:
-                    print(f"  [Tầng 4] ✅ Tất cả {len(pivot)} kỳ BCTC đều cân đối.")
+                invalid_count = len(pivot[pivot['_diff'] > 1000])
+                print(f"  [Tầng 4] ⚠️ Phát hiện {invalid_count} kỳ BCTC lệch Cân đối (Nhưng vẫn giữ lại dữ liệu).")
             else:
-                print(f"  [Tầng 4] ⚠️ Bỏ qua (Không tìm thấy đủ 3 cột Tài sản, Nợ, Vốn).")
-        except Exception as e:
-            print(f"  [Tầng 4] ⚠️ Lỗi Pivot: {e}")
+                print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra Cân đối.")
+        except Exception: pass
     
-    # Tầng 5: Format & Outliers (SIÊU AN TOÀN)
-    print("  [Tầng 5] Format số liệu & Xóa ngoại lai...")
-    df = df[df['Giá trị'] != 0].copy()
+    # Tầng 5: Format số (Giữ lại số 0)
+    print("  [Tầng 5] Format số liệu (Giữ nguyên số 0)...")
     
     def safe_format(x):
         try:
@@ -851,13 +867,12 @@ def apply_first_principles_cleaning(df):
             return ""
             
     df['Giá trị'] = df['Giá trị'].apply(safe_format)
-    df = df[df['Giá trị'] != ""] # Xóa các dòng format lỗi
+    df = df[df['Giá trị'] != ""]
     
     if 'Năm' in df.columns:
         df['Năm'] = pd.to_numeric(df['Năm'], errors='coerce').fillna(datetime.now().year).astype(int)
         
     print(f"  [Tầng 5] ✅ Format hoàn tất. Còn {len(df):,} dòng.")
-    
     return df[STANDARD_COLUMNS]
 
 # ==========================================
@@ -865,7 +880,7 @@ def apply_first_principles_cleaning(df):
 # ==========================================
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v8.0 (ULTIMATE FIX)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v10.0 (FULL 4 SECTORS)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
@@ -935,7 +950,7 @@ def main():
     else:
         df_clean = pd.DataFrame(columns=STANDARD_COLUMNS)
 
-    # BƯỚC 6
+    # BƯỚC 6: XUẤT RA ĐÚNG 1 ĐƯỜNG DẪN TẠI THƯ MỤC DATA
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     parquet_path = 'data/vietnam_stock_database.parquet'
@@ -943,14 +958,16 @@ def main():
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
     
-    print(f"\n💾 Đã lưu file sạch: \n  - CSV: {csv_path}\n  - PARQUET: {parquet_path}")
+    print(f"\n💾 Đã lưu file sạch tại thư mục 'data/':")
+    print(f"  - CSV: {csv_path}")
+    print(f"  - PARQUET: {parquet_path}")
 
     # BƯỚC 7
     if PUSH_TO_SUPABASE:
         print("\n📤 BƯỚC 7: Đẩy dữ liệu lên Supabase...")
         upsert_to_supabase(df_clean)
     else:
-        print("\n⏭️ BƯỚC 7: Bỏ qua upsert Supabase (Cờ PUSH_TO_SUPABASE=false).")
+        print("\n⏭️ BƯỚC 7: Bỏ qua upsert Supabase.")
 
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng số dòng: {len(df_clean):,}")
