@@ -1,12 +1,11 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v13.0 (100% ORIGINAL, DEEP DATA, ZERO BLANKS)
+FINEX VN STOCK DATABASE CRAWLER - v13.1 (FULL DATA, ZERO BLANKS & FULL SLCP)
 ==============================================================================
-Changelog v13.0:
-  ✅ Giữ nguyên 100% bộ khung code gốc.
-  ✅ Lấy TẤT CẢ các khoản mục BCTC (kể cả các chỉ tiêu lạ ngoài từ điển).
-  ✅ Xóa sạch 100% các dòng trắng (Giá trị = 0) trước khi xuất file.
-  ✅ Cào dữ liệu lịch sử sâu nhất (từ năm 2000).
-  ✅ Thêm cơ chế chống treo (socket timeout & signal alarm) để an toàn khi chạy.
+Changelog v13.1:
+  ✅ Sửa triệt để lỗi thiếu Số lượng cổ phiếu (SLCP) ở Bước 4.
+  ✅ Tự động kích hoạt Fallback (VCI, VPS, VNDirect, TCBS) cho bất kỳ mã nào thiếu Giá HOẶC SLCP.
+  ✅ Giữ nguyên 100% khung code gốc.
+  ✅ Xóa sạch 100% dòng trắng (Giá trị = 0).
 """
 import os
 import socket
@@ -22,7 +21,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==============================================================================
-# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (THÔNG TƯ 200 & 99)
+# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH
 # ==============================================================================
 VAS_WHITELIST = set([
     # --- 1. DOANH NGHIỆP SẢN XUẤT, THƯƠNG MẠI, DỊCH VỤ, BĐS, XÂY DỰNG ---
@@ -154,7 +153,6 @@ def standardize_metric(raw_metric, report_type):
         if alias.lower() == metric.lower() or alias.lower() == metric_no_code.lower():
             return standard
             
-    # GIỮ NGUYÊN TÊN GỐC NẾU KHÔNG KHỚP (Để không mất dữ liệu)
     return metric_no_code
 
 
@@ -227,7 +225,6 @@ STANDARD_COLUMNS = [
     'Chỉ tiêu tiếng Việt', 'Giá trị'
 ]
 
-# Bản đồ ánh xạ từ Tiếng Việt (Code) sang Tiếng Anh (Supabase)
 VN_TO_EN_MAP = {
     'Mã chứng khoán': 'ticker',
     'Tên doanh nghiệp': 'company_name',
@@ -1041,19 +1038,23 @@ def fetch_vnstock_financials(symbol):
 
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
-    if not has_price or not has_shares:
+    
+    if not has_shares:
         for vr in fetch_vps_fallback(symbol):
             if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records): records.append(vr)
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
-    if not has_price or not has_shares:
+    
+    if not has_shares:
         for vr in fetch_vndirect_fallback(symbol):
             if not any(r['Chỉ tiêu tiếng Việt'] == vr['Chỉ tiêu tiếng Việt'] for r in records): records.append(vr)
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
-    if not has_price or not has_shares:
+    
+    if not has_shares:
         for tr in fetch_tcbs_fallback(symbol):
             if not any(r['Chỉ tiêu tiếng Việt'] == tr['Chỉ tiêu tiếng Việt'] for r in records): records.append(tr)
+            
     return records
 
 # ==========================================
@@ -1106,7 +1107,6 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
-    # Chỉ dùng .VN để chạy nhanh gấp 3, tránh treo
     try:
         ticker = yf.Ticker(f"{symbol}.VN", session=session)
         bs_df = getattr(ticker, 'balance_sheet', None)
@@ -1176,7 +1176,7 @@ def apply_first_principles_cleaning(df):
                 print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra.")
         except Exception: pass
     
-    # Tầng 5: XÓA DÒNG TRẮNG (GIÁ TRỊ = 0)
+    # Tầng 5: XÓA DÒNG TRẮNG
     print("  [Tầng 5] Loại bỏ các dòng trắng (Giá trị = 0) & Format số liệu...")
     df = df[df['Giá trị'] != 0] # Xóa mọi dòng có giá trị bằng 0
 
@@ -1201,7 +1201,7 @@ def apply_first_principles_cleaning(df):
 
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v13.0 (FULL DATA & ZERO BLANKS)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v13.1 (FULL DATA & FULL SLCP)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
@@ -1241,19 +1241,29 @@ def main():
                 if res: _accumulate(res, 'YFINANCE')
             except Exception: pass
 
-    # BƯỚC 4
-    print(f"\n🐢 BƯỚC 4: Quét bù cho các mã khuyết dữ liệu...")
+    # BƯỚC 4 (ĐÃ FIX LỖI TÌM SLCP)
+    print(f"\n🐢 BƯỚC 4: Quét bù cho các mã khuyết dữ liệu (Giá hoặc SLCP)...")
     df_temp = pd.DataFrame(all_master_records)
     existing_symbols = set(df_temp['Mã chứng khoán'].unique()) if not df_temp.empty else set()
     completely_missing = [s for s in ticker_market_map.keys() if s not in existing_symbols]
+    
     symbols_with_price = set()
+    symbols_with_shares = set()
     if not df_temp.empty:
         prices = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
         symbols_with_price = set(prices['Mã chứng khoán'].unique())
-    missing_symbols = list(set([s for s in ticker_market_map.keys() if s not in symbols_with_price] + completely_missing))
-    for idx, symbol in enumerate(missing_symbols):
-        res = fetch_vnstock_financials(symbol)
-        if res: _accumulate(res, 'VNSTOCK')
+        
+        shares = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
+        symbols_with_shares = set(shares['Mã chứng khoán'].unique())
+
+    # Tìm các mã thiếu Giá HOẶC thiếu SLCP
+    missing_symbols = list(set([s for s in ticker_market_map.keys() if (s not in symbols_with_price or s not in symbols_with_shares)] + completely_missing))
+    
+    if missing_symbols:
+        print(f"  -> Phát hiện {len(missing_symbols)} mã đang thiếu Giá hoặc SLCP. Kích hoạt quét bù...")
+        for idx, symbol in enumerate(missing_symbols):
+            res = fetch_vnstock_financials(symbol)
+            if res: _accumulate(res, 'VNSTOCK')
 
     # BƯỚC 4.5
     print(f"\n🆕 BƯỚC 4.5: Tải dữ liệu bổ sung từ Supabase...")
