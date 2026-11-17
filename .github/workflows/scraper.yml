@@ -1,79 +1,144 @@
+# ============================================================================
+# Financial Data Scraper Pipeline — v17.0 (FIXED & STABLE)
+# ============================================================================
+# ✅ Sửa tất cả cảnh báo Node 20/Ubuntu 26
+# ✅ Tăng timeout từ 12 phút → 90 phút
+# ✅ Bỏ vnstock (đã hỏng API) + thêm cloudscraper (bypass firewall)
+# ✅ SKIP_VNDIRECT=true (vì API bị chặn trên GitHub Actions)
+# ✅ Fail-Fast khi HF upload lỗi (không nuốt lỗi)
+# ✅ Verify data trước khi commit
+# ============================================================================
 name: Financial Data Scraper Pipeline
 
 on:
-  # Cho phép bấm chạy thủ công
   workflow_dispatch:
-  # Chạy tự động lúc 00:00 giờ Việt Nam (17:00 UTC)
   schedule:
-    - cron: '0 17 * * *'
+    - cron: '0 17 * * *'   # 00:00 giờ VN
 
-# 🛡️ CƠ CHẾ CHỐNG TREO: Tự động hủy bản cũ nếu có bản mới push lên
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   run-scraper:
-    runs-on: ubuntu-latest
-    # Tự động kill toàn bộ job nếu chạy quá 25 phút
-    timeout-minutes: 25
-    permissions:
-      contents: write
+    runs-on: ubuntu-24.04          # ✅ Tránh cảnh báo Ubuntu 26
+    timeout-minutes: 90            # ✅ Từ 25 → 90 phút
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5   # ✅ Hỗ trợ Node 24
+        with:
+          fetch-depth: 0            # ✅ Cần cho git push
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6   # ✅ Hỗ trợ Node 24
         with:
           python-version: '3.11'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install --no-cache-dir pandas requests yfinance openpyxl huggingface_hub supabase numpy pyarrow
-          pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages vnstock
-          pip install --no-cache-dir vnfinancialdata
+          pip install --no-cache-dir \
+            pandas requests yfinance openpyxl huggingface_hub \
+            supabase numpy pyarrow vnfinancialdata cloudscraper
 
       # ==========================================
-      # BƯỚC 1: CÀO DỮ LIỆU (main.py V15.0)
+      # KIỂM TRA API TRƯỚC KHI CHẠY
       # ==========================================
-      - name: Run FINEX Enterprise Engine
+      - name: Test VNDirect API (Diagnostic)
+        run: |
+          echo "=== TEST VNDIRECT API ==="
+          python -c "
+          import requests
+          session = requests.Session()
+          session.headers.update({'User-Agent': 'Mozilla/5.0 Chrome/122.0.0.0'})
+          try:
+              url = 'https://api-finfo.vndirect.com.vn/v4/financial_statements?q=code:ACB~reportType:QUARTER~financialStatement:BALANCE_SHEET&size=5'
+              r = session.get(url, timeout=15)
+              print(f'Status: {r.status_code}')
+              print(f'Body preview: {r.text[:200]}')
+              if r.status_code == 200:
+                  print('✅ VNDIRECT API OK - sẽ chạy BCTC Quý')
+              else:
+                  print('⚠️ VNDIRECT API BLOCKED - sẽ chỉ chạy Năm')
+          except Exception as e:
+              print(f'❌ VNDIRECT ERROR: {e}')
+          "
+        continue-on-error: true
+
+      # ==========================================
+      # CHẠY SCRAPER CHÍNH
+      # ==========================================
+      - name: Run FINEX Engine
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
-        # Dùng timeout của Linux để ép dừng sau 12 phút nếu bị treo
+          SKIP_VNDIRECT: "true"      # ✅ Bỏ VNDirect trên GH Actions (bị chặn IP)
+          PUSH_TO_SUPABASE: "false"  # ✅ Supabase xử lý ở bước riêng
         run: |
-          timeout 720 python main.py || echo "⚠️ Đã hết 12 phút, ép dừng để lưu dữ liệu!"
+          # ✅ Timeout 90 phút (5400s)
+          timeout 5400 python main.py || echo "⚠️ Đã hết 90 phút, ép dừng!"
 
       # ==========================================
-      # BƯỚC 2: LƯU FILE LÊN GITHUB (BACKUP)
+      # VERIFY DATA (Kiểm tra trước khi commit)
       # ==========================================
-      - name: Commit and push changes to GitHub (Backup CSV & Parquet)
+      - name: Verify Data Volume
+        run: |
+          echo "=== KIỂM TRA DỮ LIỆU ==="
+          if [ ! -f "data/vietnam_stock_database_tong_hop.csv" ]; then
+            echo "❌ KHÔNG CÓ FILE CSV! main.py chưa chạy xong!"
+            exit 1
+          fi
+          python -c "
+          import pandas as pd, os
+          df = pd.read_csv('data/vietnam_stock_database_tong_hop.csv')
+          print(f'Tổng dòng: {len(df):,}')
+          print(f'Số mã: {df[\"Mã chứng khoán\"].nunique()}')
+          print('Phân bố Loại kỳ:')
+          print(df['Loại kỳ'].value_counts().to_string())
+          pq_size = os.path.getsize('data/vietnam_stock_database.parquet') / 1024 / 1024
+          print(f'Parquet size: {pq_size:.2f} MB')
+          if len(df) < 100000:
+              print(f'❌ CHỈ CÓ {len(df)} DÒNG - QUÁ ÍT!')
+              raise SystemExit(1)
+          print(f'✅ ĐẠT {len(df):,} DÒNG!')
+          "
+
+      # ==========================================
+      # COMMIT LÊN GITHUB
+      # ==========================================
+      - name: Commit and push to GitHub
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git fetch origin main
           git checkout main || git checkout -b main
-          git add data/ || true
-          git diff --staged --quiet || git commit -m "Auto-update FINEX Dataset (Cleaned) [skip ci]"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "⚠️ Không có thay đổi để commit"
+            exit 0
+          fi
+          git commit -m "Auto-update FINEX Dataset $(date +'%Y-%m-%d %H:%M') [skip ci]"
           git push origin main
+          echo "✅ Đã push lên GitHub"
 
       # ==========================================
-      # BƯỚC 3: LƯU FILE VÀO HUGGING FACE SPACE
+      # PUSH LÊN HUGGINGFACE (FAIL-FAST)
       # ==========================================
-      - name: Push Cleaned Dataset to Hugging Face Space Repo
+      - name: Push to HuggingFace
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           python -c "
           from huggingface_hub import HfApi
-          import os
+          import os, sys
           
           api = HfApi()
           space_repo_id = 'trananhquan2001/trananhquan-terminal'
           
-          print(f'Đang upload file Parquet vào Space: {space_repo_id}...')
+          print(f'Upload Parquet vào Space: {space_repo_id}...')
           try:
               api.upload_file(
                   path_or_fileobj='data/vietnam_stock_database.parquet',
@@ -82,15 +147,16 @@ jobs:
                   repo_type='space',
                   token=os.environ['HF_TOKEN']
               )
-              print('✅ Đã đẩy file Parquet thành công!')
+              print('✅ Upload HuggingFace THÀNH CÔNG!')
           except Exception as e:
-              print(f'❌ Lỗi đẩy HuggingFace: {e}')
+              print(f'❌ Upload HF THẤT BẠI: {e}')
+              sys.exit(1)
           "
 
       # ==========================================
-      # BƯỚC 4: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE
+      # ĐỒNG BỘ SUPABASE
       # ==========================================
-      - name: Push Cleaned Data to Supabase Master Table
+      - name: Push to Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -101,51 +167,59 @@ jobs:
           from datetime import datetime
           from supabase import create_client
 
-          print('--- BƯỚC 4: ĐỒNG BỘ DỮ LIỆU SẠCH VÀO SUPABASE ---')
+          print('--- ĐỒNG BỘ SUPABASE ---')
           supabase = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
-          
+
           file_path = 'data/vietnam_stock_database_tong_hop.csv'
           if not os.path.exists(file_path):
-              print('Không tìm thấy file CSV, bỏ qua!')
-              exit(0)
-              
+              print('❌ Không có file CSV'); exit(1)
+
           df = pd.read_csv(file_path)
-          
           rename_map = {
-              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name', 'Tên ngành': 'sector', 
-              'Loại báo cáo': 'report_type', 'Loại kỳ': 'period_type', 'Năm': 'year', 
-              'Ngày kỳ': 'report_date', 'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
+              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name',
+              'Tên ngành': 'sector', 'Loại báo cáo': 'report_type',
+              'Loại kỳ': 'period_type', 'Năm': 'year', 'Ngày kỳ': 'report_date',
+              'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
           }
           df = df.rename(columns=rename_map)
-
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
-          
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df[df['value'].notna()]
           df['year'] = pd.to_numeric(df['year'], errors='coerce').fillna(datetime.now().year).astype(int)
 
           records = []
           for _, row in df.iterrows():
-              def clean_str(s): return str(s).strip() if pd.notna(s) else None
+              def cs(s): return str(s).strip() if pd.notna(s) else None
               records.append({
-                  'ticker': str(row['ticker']), 'company_name': clean_str(row.get('company_name')),
-                  'sector': clean_str(row.get('sector')), 'report_type': clean_str(row.get('report_type')),
-                  'period_type': clean_str(row.get('period_type')), 'year': int(row['year']),
-                  'report_date': clean_str(row.get('report_date')), 'item_vn': clean_str(row.get('item_vn')),
+                  'ticker': str(row['ticker']), 'company_name': cs(row.get('company_name')),
+                  'sector': cs(row.get('sector')), 'report_type': cs(row.get('report_type')),
+                  'period_type': cs(row.get('period_type')), 'year': int(row['year']),
+                  'report_date': cs(row.get('report_date')), 'item_vn': cs(row.get('item_vn')),
                   'value': float(row['value'])
               })
 
-          print(f'Đang đồng bộ {len(records)} bản ghi vào Supabase...')
-          
+          print(f'Đồng bộ {len(records)} bản ghi...')
           for i in range(0, len(records), 500):
               batch = records[i:i + 500]
               supabase.table('finex_stock_master').upsert(
-                  batch, 
+                  batch,
                   on_conflict='ticker,report_type,period_type,report_date,item_vn'
               ).execute()
-              print(f' ✅ Đã đẩy {min(i+500, len(records))}/{len(records)} bản ghi...')
-
-          print('🎉 Đồng bộ Supabase thành công 100%!')
+              print(f'  ✅ {min(i+500, len(records))}/{len(records)}')
+          print('🎉 Supabase DONE!')
           "
+
+      # ==========================================
+      # BÁO CÁO CUỐI
+      # ==========================================
+      - name: Final Report
+        if: always()
+        run: |
+          echo "============================================"
+          echo "  HOÀN TẤT WORKFLOW v17.0"
+          echo "============================================"
+          if [ -f "data/vietnam_stock_database.parquet" ]; then
+            ls -lh data/vietnam_stock_database.parquet
+          fi
