@@ -1,15 +1,13 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v14.0 (FULL HISTORY, 100% BCTC COVERAGE)
+FINEX VN STOCK DATABASE CRAWLER - v14.1 (FULL HISTORY, 100% BCTC COVERAGE)
 ==============================================================================
-Changelog v14.0:
-  ✅ GIỮ NGUYÊN 100% THỨ TỰ ƯU TIÊN NGUỒN: Daily -> vnfinancialdata -> yfinance -> vnstock.
-  ✅ NÂNG CẤP BƯỚC 4: Tự động kiểm tra thiếu BẤT KỲ bảng BCTC nào (Cân đối, KQKD, Lưu chuyển).
-  ✅ Nếu thiếu BCTC hoặc Giá/SLCP -> Kích hoạt đa luồng cào bù bằng vnstock (Full lịch sử Quý/Năm).
-  ✅ Giữ nguyên 100% Từ điển VAS, logic Supabase, và 5 tầng làm sạch dữ liệu.
+Changelog v14.1:
+  ✅ FIX BƯỚC 4: Kiểm tra riêng dữ liệu Quý (q_syms). Nếu thiếu Quý -> Ép chạy vnstock.
+  ✅ Điều này đảm bảo dung lượng dữ liệu tăng gấp đôi (cả Quý và Năm).
 """
 import os
 import socket
-socket.setdefaulttimeout(30)  # Timeout dài cho các API BCTC nặng
+socket.setdefaulttimeout(30)
 
 import time
 import signal
@@ -21,7 +19,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ==============================================================================
-# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (GIỮ NGUYÊN 100%)
+# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (GIỮ NGUYÊN)
 # ==============================================================================
 VAS_WHITELIST = set([
     "Tài sản ngắn hạn", "Tiền và các khoản tương đương tiền", "Tiền", "Các khoản tương đương tiền",
@@ -347,7 +345,7 @@ def upsert_to_supabase(df, batch_size=500):
             if not ticker: continue
             
             val = pd.to_numeric(row['value'], errors='coerce')
-            if pd.isna(val) or val == 0: continue # Bỏ qua giá trị 0
+            if pd.isna(val) or val == 0: continue
             
             yr = pd.to_numeric(row['year'], errors='coerce')
             yr = int(yr) if pd.notna(yr) else datetime.now().year
@@ -759,7 +757,7 @@ def translate_metric(metric_original, is_vn=False):
     return result.capitalize()
 
 # ==========================================
-# 6. FALLBACK APIs (Dùng để bù Giá/SLCP)
+# 6. FALLBACK APIs
 # ==========================================
 session = requests.Session()
 session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'})
@@ -967,7 +965,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 8. VNSTOCK CRAWLERS (Chủ lực cào BCTC Lịch sử)
+# 8. VNSTOCK CRAWLERS
 # ==========================================
 def parse_vnstock_df(symbol, df, statement_type_vn, ky_bao_cao):
     records = []
@@ -997,14 +995,13 @@ def fetch_vnstock_financials(symbol):
     records = []
     try:
         fin = Fundamental(source='VCI')
-        # Cào toàn bộ lịch sử Năm
         try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='year'), 'Bảng cân đối kế toán', 'Năm'))
         except Exception: pass
         try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='year'), 'Báo cáo kết quả kinh doanh', 'Năm'))
         except Exception: pass
         try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='year'), 'Báo cáo lưu chuyển tiền tệ', 'Năm'))
         except Exception: pass
-        # Cào toàn bộ lịch sử Quý (đến Q3/2026)
+        
         try: records.extend(parse_vnstock_df(symbol, fin.balance_sheet(symbol=symbol, period='quarter'), 'Bảng cân đối kế toán', 'Quý'))
         except Exception: pass
         try: records.extend(parse_vnstock_df(symbol, fin.income_statement(symbol=symbol, period='quarter'), 'Báo cáo kết quả kinh doanh', 'Quý'))
@@ -1012,7 +1009,6 @@ def fetch_vnstock_financials(symbol):
         try: records.extend(parse_vnstock_df(symbol, fin.cash_flow(symbol=symbol, period='quarter'), 'Báo cáo lưu chuyển tiền tệ', 'Quý'))
         except Exception: pass
         
-        # Lấy thêm Giá và SLCP realtime
         try:
             market = Market(source='VCI')
             quote_df = market.quote(symbol=symbol)
@@ -1039,7 +1035,6 @@ def fetch_vnstock_financials(symbol):
         except Exception: pass
     except Exception: pass
 
-    # Fallback Giá/SLCP nếu vnstock trả về thiếu
     has_price = any(r['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại' for r in records)
     has_shares = any(r['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành' for r in records)
     
@@ -1144,25 +1139,21 @@ def apply_first_principles_cleaning(df):
     if df is None or df.empty:
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
-    # Tầng 1
     df = df.copy()
     df['Giá trị'] = pd.to_numeric(df['Giá trị'].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
     df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
     print(f"  [Tầng 1] Loại bỏ NULL & ép kiểu Float. Còn {len(df):,} dòng.")
     
-    # Tầng 2
     df['Chỉ tiêu tiếng Việt'] = df.apply(lambda row: standardize_metric(row['Chỉ tiêu tiếng Việt'], row['Loại báo cáo']), axis=1)
     df = df.dropna(subset=['Chỉ tiêu tiếng Việt'])
     print(f"  [Tầng 2] Ép chuẩn VAS Dictionary. Còn {len(df):,} dòng.")
     
-    # Tầng 3
     if '_priority' in df.columns:
         df = df.sort_values('_priority', kind='stable')
     df = df.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
     print(f"  [Tầng 3] Deduplication. Còn {len(df):,} dòng.")
     
-    # Tầng 4
     print("  [Tầng 4] Kiểm tra Cân đối kế toán (Chỉ cảnh báo)...")
     bctc_df = df[df['Loại báo cáo'].astype(str).str.contains('Bảng cân đối', na=False)]
     if not bctc_df.empty:
@@ -1180,9 +1171,8 @@ def apply_first_principles_cleaning(df):
                 print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra.")
         except Exception: pass
     
-    # Tầng 5
     print("  [Tầng 5] Loại bỏ các dòng trắng (Giá trị = 0) & Format số liệu...")
-    df = df[df['Giá trị'] != 0] # Xóa mọi dòng có giá trị bằng 0
+    df = df[df['Giá trị'] != 0]
 
     def safe_format(x):
         try:
@@ -1205,7 +1195,7 @@ def apply_first_principles_cleaning(df):
 
 def main():
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v14.0 (100% BCTC COVERAGE)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v14.1 (100% BCTC COVERAGE)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
@@ -1246,7 +1236,7 @@ def main():
             except Exception: pass
 
     # BƯỚC 4 (VERIFICATION & FALLBACK)
-    print(f"\n🐢 BƯỚC 4: KIỂM TRA THIẾU HỤT (BCTC, Giá, SLCP) & QUÉT BÙ...")
+    print(f"\n🐢 BƯỚC 4: KIỂM TRA THIẾU HỤT (BCTC, Giá, SLCP, Dữ liệu Quý) & QUÉT BÙ...")
     df_temp = pd.DataFrame(all_master_records)
     
     # 1. Kiểm tra có đủ 3 BCTC chưa
@@ -1264,13 +1254,18 @@ def main():
         shares = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
         symbols_with_shares = set(shares['Mã chứng khoán'].unique())
 
-    # 3. Hợp nhất danh sách thiếu
+    # 3. Kiểm tra dữ liệu QUÝ (Điểm mấu chốt để tăng dung lượng)
+    q_syms = set(df_temp[df_temp['Loại kỳ'] == 'Quý']['Mã chứng khoán'].unique()) if not df_temp.empty else set()
+    
+    # 4. Hợp nhất danh sách thiếu
     missing_bctc = [s for s in ticker_market_map.keys() if s not in bs_syms or s not in is_syms or s not in cf_syms]
     missing_price_shares = [s for s in ticker_market_map.keys() if s not in symbols_with_price or s not in symbols_with_shares]
-    missing_symbols = list(set(missing_bctc + missing_price_shares))
+    missing_quarterly = [s for s in ticker_market_map.keys() if s not in q_syms]
+    
+    missing_symbols = list(set(missing_bctc + missing_price_shares + missing_quarterly))
     
     if missing_symbols:
-        print(f"  -> Phát hiện {len(missing_symbols)} mã đang thiếu BCTC hoặc Giá/SLCP. Kích hoạt cào bù (vnstock)...")
+        print(f"  -> Phát hiện {len(missing_symbols)} mã đang thiếu BCTC/Giá/SLCP HOẶC Dữ liệu Quý. Kích hoạt cào bù (vnstock)...")
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {executor.submit(fetch_vnstock_financials, symbol): symbol for symbol in missing_symbols}
             for future in as_completed(futures):
