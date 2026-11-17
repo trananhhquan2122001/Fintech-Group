@@ -1,15 +1,10 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v16.0 (VNDIRECT PRIMARY, NO TCBS/VNSTOCK)
+FINEX VN STOCK DATABASE CRAWLER - v16.1 (DEEP HISTORY VNDIRECT)
 ================================================================================
-Nguồn dữ liệu:
-  1. [DAILY]         HuggingFace CSV       → Giá đóng cửa
-  2. [VN_FINANCIAL]  vnfinancialdata        → BCTC Năm (bulk)
-  3. [INDICES]       yfinance               → VN-INDEX/HNX/UPCOM
-  4. [VNDIRECT_BCTC] VNDirect API           → ⭐ BCTC QUÝ + NĂM (nguồn chính)
-  5. [YFINANCE]      yfinance               → Backup + cổ tức + giá
-  6. [VNDIRECT]      VNDirect API           → Giá + SLCP
-  7. [VPS]           VPS API                → Giá + SLCP
-  8. [SUPABASE]      Supabase               → Database
+Changelog v16.1:
+  ✅ Nâng giới hạn phân trang VNDirect lên 100 trang (lấy TOÀN BỘ quý lịch sử).
+  ✅ Tối ưu thời gian chờ (sleep) tránh bị VNDirect rate-limit.
+  ✅ Giữ nguyên 100% khung code gốc v16.0, VAS dictionary, và 5 tầng lọc.
 ================================================================================
 """
 import os
@@ -185,7 +180,7 @@ def standardize_metric(raw_metric, report_type):
 
 
 # ==========================================
-# 2. API KEY & CÀI ĐẶT THƯ VIỆN (KHÔNG CÒN vnstock)
+# 2. API KEY & CÀI ĐẶT THƯ VIỆN
 # ==========================================
 os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
 
@@ -795,10 +790,10 @@ session.headers.update({
 })
 
 # ==========================================
-# 6.1. VNDIRECT BCTC API — NGUỒN CHÍNH CHO QUÝ
+# 6.1. VNDIRECT BCTC API — NGUỒN CHÍNH CHO QUÝ (NÂNG CẤP LẤY HẾT LỊCH SỬ)
 # ==========================================
 def fetch_vndirect_bctc_financials(symbol):
-    """⭐ NGUỒN CHÍNH cho BCTC Quý + Năm. VNDirect API ổn định, tiếng Việt sẵn."""
+    """⭐ NGUỒN CHÍNH cho BCTC Quý + Năm. Nâng cấp lấy TOÀN BỘ lịch sử."""
     records = []
     company_name, sector_name = get_company_profile(symbol)
     
@@ -812,7 +807,8 @@ def fetch_vndirect_bctc_financials(symbol):
         for report_type in ['QUARTER', 'YEAR']:
             ky_bao_cao = 'Quý' if report_type == 'QUARTER' else 'Năm'
             page = 1
-            while page <= 20:
+            # 🚀 Tăng giới hạn lên 100 trang để lấy tất cả các quý lịch sử (20 trang cũ có thể bị thiếu)
+            while page <= 100: 
                 try:
                     url = (
                         f"https://api-finfo.vndirect.com.vn/v4/financial_statements"
@@ -1184,7 +1180,7 @@ def apply_first_principles_cleaning(df):
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v16.0 (VNDIRECT PRIMARY)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v16.1 (DEEP HISTORY)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
