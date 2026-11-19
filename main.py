@@ -1,12 +1,12 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v17.0 (FULL HISTORY & ZERO BLANKS)
+FINEX VN STOCK DATABASE CRAWLER - v19.0 (EXHAUSTIVE HISTORY & AUDIT)
 ================================================================================
 Changelog v17.0:
   ✅ Cào TẤT CẢ các quý lịch sử từ VNDirect (Fix triệt để lỗi dừng sớm).
   ✅ Bù đầy đủ 100% Giá và Số lượng cổ phiếu (SLCP) cho cả 176 mã.
-  ✅ Xóa sạch 100% các dòng trắng (Giá trị = 0) trước khi lưu file.
+  ✅ Giữ nguyên giá trị 0 và số âm hợp lệ; chỉ loại NULL/NaN/Inf.
   ✅ Tự động xuất file CSV, Parquet và đẩy lên Supabase.
-  ✅ Giữ nguyên 100% cấu trúc khung code gốc v16.0 và Từ điển VAS.
+  ✅ Giữ nguyên danh sách 176 mã, Từ điển VAS, CSV/Parquet/Supabase.
 ================================================================================
 """
 import os
@@ -22,6 +22,22 @@ import numpy as np
 import requests
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+# Cấu hình crawler: giới hạn MAX_PAGES chỉ là cầu chì an toàn, không phải số trang mục tiêu.
+CRAWLER_CONFIG = {
+    "PAGE_SIZE": int(os.getenv("FINEX_PAGE_SIZE", "1000")),
+    "MAX_PAGES": int(os.getenv("FINEX_MAX_PAGES", "10000")),
+    "MAX_RETRIES": int(os.getenv("FINEX_MAX_RETRIES", "5")),
+    "REQUEST_TIMEOUT": int(os.getenv("FINEX_REQUEST_TIMEOUT", "45")),
+    "MIN_YEAR": int(os.getenv("FINEX_MIN_YEAR", "2000")),
+    "WORKERS": int(os.getenv("FINEX_WORKERS", "4")),
+    "REQUEST_PAUSE": float(os.getenv("FINEX_REQUEST_PAUSE", "0.15")),
+}
+CRAWL_ERRORS = []
+CRAWL_COVERAGE = []
+FAILED_PAGES = []
 
 # ==============================================================================
 # 🛡️ BẮT SIGTERM (CHỐNG TREO)
@@ -184,7 +200,8 @@ def standardize_metric(raw_metric, report_type):
 # ==========================================
 # 2. API KEY & CÀI ĐẶT THƯ VIỆN
 # ==========================================
-os.environ["VNSTOCK_API_KEY"] = "vnstock_533590cc17b6737ceb7c9f147471f31f"
+# Không hard-code API key trong mã nguồn. Khai báo VNSTOCK_API_KEY trong Secrets/Environment nếu cần.
+# os.environ["VNSTOCK_API_KEY"] = os.getenv("VNSTOCK_API_KEY", "")
 
 try:
     import vnfinancialdata as vnf
@@ -370,7 +387,7 @@ def upsert_to_supabase(df, batch_size=500):
             if not ticker: continue
             
             val = pd.to_numeric(row['value'], errors='coerce')
-            if pd.isna(val) or val == 0: continue
+            if pd.isna(val) or not np.isfinite(float(val)): continue
             
             yr = pd.to_numeric(row['year'], errors='coerce')
             yr = int(yr) if pd.notna(yr) else datetime.now().year
@@ -791,83 +808,106 @@ session.headers.update({
     'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
 })
 
+# Retry ở tầng HTTP cho lỗi tạm thời; lỗi cuối cùng vẫn được ghi nhận ở crawler.
+_retry_strategy = Retry(total=CRAWLER_CONFIG['MAX_RETRIES'], connect=CRAWLER_CONFIG['MAX_RETRIES'],
+    read=CRAWLER_CONFIG['MAX_RETRIES'], status=CRAWLER_CONFIG['MAX_RETRIES'],
+    backoff_factor=1.0, status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=frozenset(['GET']), raise_on_status=False)
+_adapter = HTTPAdapter(max_retries=_retry_strategy, pool_connections=20, pool_maxsize=20)
+session.mount('https://', _adapter)
+session.mount('http://', _adapter)
+
 # ==========================================
 # 6.1. VNDIRECT BCTC API — LẤY SẠCH LỊCH SỬ
 # ==========================================
 def fetch_vndirect_bctc_financials(symbol):
-    """⭐ NGUỒN CHÍNH cho BCTC Quý + Năm."""
+    """Thu thập độc lập 3 báo cáo x Quý/Năm; phân trang đến hết dữ liệu API."""
     records = []
     company_name, sector_name = get_company_profile(symbol)
-    
     statement_map = {
         'BALANCE_SHEET': 'Bảng cân đối kế toán',
         'INCOME_STATEMENT': 'Báo cáo kết quả kinh doanh',
         'CASH_FLOW': 'Báo cáo lưu chuyển tiền tệ'
     }
-    
     for stmt_code, stmt_vn in statement_map.items():
         for report_type in ['QUARTER', 'YEAR']:
-            ky_bao_cao = 'Quý' if report_type == 'QUARTER' else 'Năm'
-            page = 1
-            max_page = 50 # Giới hạn an toàn
-            
-            while page <= max_page: 
+            period_label = 'Quý' if report_type == 'QUARTER' else 'Năm'
+            page, fetched_items, expected_items, expected_pages = 1, 0, None, None
+            while page <= CRAWLER_CONFIG['MAX_PAGES']:
                 try:
                     url = (
-                        f"https://api-finfo.vndirect.com.vn/v4/financial_statements"
-                        f"?q=code:{symbol}~reportType:{report_type}~financialStatement:{stmt_code}"
-                        f"&size=1000&page={page}"
+                        'https://api-finfo.vndirect.com.vn/v4/financial_statements'
+                        f'?q=code:{symbol}~reportType:{report_type}~financialStatement:{stmt_code}'
+                        f'&size={CRAWLER_CONFIG["PAGE_SIZE"]}&page={page}'
                     )
-                    res = session.get(url, timeout=25)
-                    if res.status_code != 200:
+                    response = session.get(url, timeout=CRAWLER_CONFIG['REQUEST_TIMEOUT'])
+                    response.raise_for_status()
+                    payload = response.json()
+                    items = payload.get('data') or []
+                    if page == 1:
+                        try: expected_pages = int(payload.get('totalPages')) if payload.get('totalPages') is not None else None
+                        except (TypeError, ValueError): expected_pages = None
+                        try: expected_items = int(payload.get('totalItems')) if payload.get('totalItems') is not None else None
+                        except (TypeError, ValueError): expected_items = None
+                    if not items:
                         break
-                    data = res.json()
-                    items = data.get('data', [])
-                    
-                    # Dừng khi API hết dữ liệu
-                    if not items: 
-                        break
-                    
+                    fetched_items += len(items)
                     for item in items:
-                        year_val = item.get('year') or (item.get('reportDate', '')[:4] if item.get('reportDate') else None)
-                        if not year_val: continue
-                        
-                        date_str = item.get('reportDate', '')
-                        if report_type == 'QUARTER' and len(date_str) >= 7:
-                            try:
-                                month = int(date_str[5:7])
-                                quarter = (month - 1) // 3 + 1
-                                date_period = f"{year_val}-Q{quarter}"
-                            except (ValueError, IndexError):
-                                date_period = f"{year_val}-Q?"
-                        else:
-                            date_period = f"{year_val}-12-31"
-                        
-                        val = item.get('numericValue')
-                        if val is None or val == 0: continue
-                        fv = format_value(val)
-                        if fv is None: continue
-                        
-                        metric_vn = clean_text(item.get('itemName', ''))
-                        if not metric_vn:
-                            metric_vn = fix_truncated_text(item.get('itemCode', ''))
-                        if not metric_vn: continue
-                        
+                        date_raw = str(item.get('reportDate') or '')[:10]
+                        year_raw = item.get('year') or (date_raw[:4] if len(date_raw) >= 4 else None)
+                        if not year_raw: continue
+                        try:
+                            year_int = int(str(year_raw)[:4])
+                            if year_int < CRAWLER_CONFIG['MIN_YEAR']: continue
+                        except (TypeError, ValueError): continue
+                        # Ngày kỳ là ngày ISO; không dùng chuỗi YYYY-Qn làm ngày.
+                        if len(date_raw) != 10:
+                            continue
+                        try:
+                            month = int(date_raw[5:7])
+                            quarter = (month - 1) // 3 + 1
+                        except (ValueError, IndexError): continue
+                        value = format_value(item.get('numericValue'))
+                        if value is None: continue
+                        metric = clean_text(item.get('itemName') or item.get('itemCode') or '')
+                        if not metric: continue
+                        # Giữ số 0 và số âm: đây đều có thể là giá trị kế toán hợp lệ.
                         records.append({
                             'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                             'Tên ngành': sector_name, 'Loại báo cáo': stmt_vn,
-                            'Loại kỳ': ky_bao_cao, 'Năm': str(year_val), 'Ngày kỳ': date_period,
-                            'Chỉ tiêu tiếng Việt': metric_vn, 'Giá trị': fv
+                            'Loại kỳ': period_label, 'Năm': year_int, 'Ngày kỳ': date_raw,
+                            'Chỉ tiêu tiếng Việt': metric, 'Giá trị': value,
+                            '_quarter': quarter if report_type == 'QUARTER' else None,
+                            '_source_scope': item.get('reportScope') or item.get('dataType') or None,
+                            '_source_basis': item.get('reportPeriod') or item.get('periodType') or None,
                         })
-                    
-                    total_pages = data.get('totalPages')
-                    if total_pages is not None and page >= int(total_pages):
+                    # Ưu tiên metadata API; nếu không có thì trang rỗng là dấu kết thúc.
+                    if expected_pages is not None and page >= expected_pages:
                         break
-                        
+                    if expected_pages is None:
+                        if expected_items is not None:
+                            if fetched_items >= expected_items:
+                                break
+                        elif len(items) < CRAWLER_CONFIG['PAGE_SIZE']:
+                            break
                     page += 1
-                    time.sleep(0.2)
-                except Exception:
+                    time.sleep(CRAWLER_CONFIG['REQUEST_PAUSE'])
+                except Exception as exc:
+                    err = {'ticker': symbol, 'statement': stmt_code, 'period': period_label, 'page': page, 'error': str(exc)}
+                    CRAWL_ERRORS.append(err)
+                    FAILED_PAGES.append(err.copy())
+                    print(f"  ⚠️ {symbol} {stmt_code} {period_label} trang {page}: {exc}")
                     break
+            if page > CRAWLER_CONFIG['MAX_PAGES']:
+                err = {'ticker': symbol, 'statement': stmt_code, 'period': period_label, 'page': page, 'error': 'MAX_PAGES safety ceiling reached'}
+                CRAWL_ERRORS.append(err); FAILED_PAGES.append(err.copy())
+            CRAWL_COVERAGE.append({
+                'Mã chứng khoán': symbol, 'Loại báo cáo': stmt_vn, 'Loại kỳ': period_label,
+                'Số trang dự kiến': expected_pages, 'Số bản ghi API dự kiến': expected_items,
+                'Số bản ghi API đã đọc': fetched_items,
+                'Số dòng hợp lệ đã lưu': sum(1 for r in records if r['Mã chứng khoán']==symbol and r['Loại báo cáo']==stmt_vn and r['Loại kỳ']==period_label),
+                'Trạng thái': 'OK' if not any(e['ticker']==symbol and e['statement']==stmt_code and e['period']==period_label for e in CRAWL_ERRORS) and (expected_items is None or fetched_items >= expected_items) else 'CHECK'
+            })
     return records
 
 # ==========================================
@@ -941,7 +981,7 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000
             for col in df.columns:
                 date_str = str(col).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
-                if year_val.isdigit() and int(year_val) >= min_year:
+                if year_val.isdigit() and int(year_val) >= max(min_year, CRAWLER_CONFIG['MIN_YEAR']):
                     for row_idx, val in df[col].items():
                         if pd.notna(val):
                             fv = format_value(val)
@@ -965,7 +1005,7 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2000):
             for date_idx, div_val in divs.items():
                 date_str = str(date_idx).split('T')[0].split(' ')[0]
                 year_val = date_str.split('-')[0]
-                if year_val.isdigit() and int(year_val) >= min_year:
+                if year_val.isdigit() and int(year_val) >= max(min_year, CRAWLER_CONFIG['MIN_YEAR']):
                     if pd.notna(div_val):
                         fv = format_value(div_val)
                         if fv is not None:
@@ -1101,16 +1141,17 @@ def process_single_ticker(symbol, category):
     try:
         ticker = yf.Ticker(f"{symbol}.VN", session=session)
         bs_df = getattr(ticker, 'balance_sheet', None)
-        if bs_df is not None and not bs_df.empty:
-            recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm'))
-            recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
-            recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
-            recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
-            recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
-            recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
-            recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-            recs.extend(fetch_historical_dividends(symbol, ticker))
-    except Exception: pass
+        recs.extend(parse_financial_df(symbol, bs_df, 'Balance_Sheet', 'Năm'))
+        recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_balance_sheet', None), 'Balance_Sheet', 'Quý'))
+        recs.extend(parse_financial_df(symbol, getattr(ticker, 'financials', None), 'Income_Statement', 'Năm'))
+        recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_financials', None), 'Income_Statement', 'Quý'))
+        recs.extend(parse_financial_df(symbol, getattr(ticker, 'cashflow', None), 'Cash_Flow', 'Năm'))
+        recs.extend(parse_financial_df(symbol, getattr(ticker, 'quarterly_cashflow', None), 'Cash_Flow', 'Quý'))
+        recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
+        recs.extend(fetch_historical_dividends(symbol, ticker))
+    except Exception as exc:
+        CRAWL_ERRORS.append({'ticker': symbol, 'source': 'YFINANCE', 'error': str(exc)})
+        print(f"  ⚠️ YFINANCE {symbol}: {exc}")
     return recs
 
 # ==========================================
@@ -1140,7 +1181,10 @@ def apply_first_principles_cleaning(df):
     
     if '_priority' in df.columns:
         df = df.sort_values('_priority', kind='stable')
-    df = df.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
+    dedupe_keys = ['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt']
+    for extra in ['_source_scope', '_source_basis']:
+        if extra in df.columns: dedupe_keys.append(extra)
+    df = df.drop_duplicates(subset=dedupe_keys, keep='first')
     print(f"  [Tầng 3] Deduplication. Còn {len(df):,} dòng.")
     
     print("  [Tầng 4] Kiểm tra Cân đối kế toán (Chỉ cảnh báo)...")
@@ -1160,21 +1204,18 @@ def apply_first_principles_cleaning(df):
                 print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra.")
         except Exception: pass
     
-    print("  [Tầng 5] Loại bỏ các dòng trắng (Giá trị = 0) & Format số liệu...")
-    df = df[df['Giá trị'] != 0]
-
+    print("  [Tầng 5] Chuẩn hóa số liệu; giữ nguyên số 0 và số âm hợp lệ...")
     def safe_format(x):
         try:
-            if pd.isna(x): return ""
+            if pd.isna(x): return None
             f = float(x)
-            if f == 0: return ""
+            if not np.isfinite(f): return None
             if f.is_integer(): return str(int(f))
             return str(round(f, 4))
         except (ValueError, TypeError):
-            return ""
-            
+            return None
     df['Giá trị'] = df['Giá trị'].apply(safe_format)
-    df = df[df['Giá trị'] != ""]
+    df = df.dropna(subset=['Giá trị'])
     
     if 'Năm' in df.columns:
         df['Năm'] = pd.to_numeric(df['Năm'], errors='coerce').fillna(datetime.now().year).astype(int)
@@ -1188,7 +1229,7 @@ def apply_first_principles_cleaning(df):
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v17.0 (FULL HISTORY & ZERO BLANKS)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v19.0 (EXHAUSTIVE HISTORY & AUDIT)")
     print("=" * 62)
 
     ticker_market_map = load_176_master_tickers()
@@ -1198,7 +1239,7 @@ def main():
         if not recs: return
         _add_source(recs, source)
         all_master_records.extend(recs)
-        _ALL_RECORDS_GLOBAL = all_master_records
+        _ALL_RECORDS_GLOBAL[:] = all_master_records
 
     def _save_checkpoint(label):
         if not all_master_records: return
@@ -1233,7 +1274,7 @@ def main():
 
     # BƯỚC 3 — VNDIRECT BCTC
     print(f"\n⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=CRAWLER_CONFIG['WORKERS']) as executor:
         futures = {executor.submit(fetch_vndirect_bctc_financials, symbol): symbol for symbol in ticker_market_map.keys()}
         done = 0
         for future in as_completed(futures):
@@ -1241,20 +1282,24 @@ def main():
             try:
                 res = future.result()
                 if res: _accumulate(res, 'VNDIRECT_BCTC')
-            except Exception: pass
+            except Exception as exc:
+                CRAWL_ERRORS.append({'ticker': futures[future], 'source': 'VNDIRECT_BCTC', 'error': str(exc)})
+                print(f"  ⚠️ VNDIRECT {futures[future]}: {exc}")
             if done % 25 == 0:
                 _save_checkpoint(f"VNDIRECT_{done}/{len(ticker_market_map)}")
     _save_checkpoint("sau_VNDIRECT_BCTC")
 
     # BƯỚC 4 — Yfinance backup
     print(f"\n🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=CRAWLER_CONFIG['WORKERS']) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
             try:
                 res = future.result()
                 if res: _accumulate(res, 'YFINANCE')
-            except Exception: pass
+            except Exception as exc:
+                CRAWL_ERRORS.append({'ticker': futures[future], 'source': 'YFINANCE', 'error': str(exc)})
+                print(f"  ⚠️ YFINANCE {futures[future]}: {exc}")
     _save_checkpoint("sau_YFINANCE")
 
     # BƯỚC 5
@@ -1274,7 +1319,7 @@ def main():
         missing_price_shares = [s for s in ticker_market_map.keys() if s not in symbols_with_price or s not in symbols_with_shares]
         if missing_price_shares:
             print(f"  🎯 {len(missing_price_shares)} mã thiếu Giá/SLCP. Cào bù VNDirect + VPS...")
-            with ThreadPoolExecutor(max_workers=5) as executor:
+            with ThreadPoolExecutor(max_workers=CRAWLER_CONFIG['WORKERS']) as executor:
                 futures = {}
                 for s in missing_price_shares:
                     futures[executor.submit(fetch_vndirect_fallback, s)] = s
@@ -1283,7 +1328,9 @@ def main():
                     try:
                         res = future.result()
                         if res: _accumulate(res, 'VNDIRECT')
-                    except Exception: pass
+                    except Exception as exc:
+                        CRAWL_ERRORS.append({'ticker': futures[future], 'source': 'PRICE_SHARES_FALLBACK', 'error': str(exc)})
+                        print(f"  ⚠️ Fallback {futures[future]}: {exc}")
 
     df_check = pd.DataFrame(all_master_records)
     if not df_check.empty:
@@ -1306,13 +1353,22 @@ def main():
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     parquet_path = 'data/vietnam_stock_database.parquet'
 
-    for f in ['data/_checkpoint.csv', 'data/_emergency_backup.csv', 'data/_emergency_backup.parquet']:
-        if os.path.exists(f):
-            try: os.remove(f)
-            except: pass
-
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
+
+    # Báo cáo kiểm toán độ phủ và lỗi: không tuyên bố đủ dữ liệu nếu API thiếu/trả lỗi.
+    if CRAWL_COVERAGE:
+        pd.DataFrame(CRAWL_COVERAGE).to_csv('data/bao_cao_do_phu_bctc.csv', index=False, encoding='utf-8-sig')
+    if CRAWL_ERRORS:
+        pd.DataFrame(CRAWL_ERRORS).to_csv('data/bao_cao_loi_api.csv', index=False, encoding='utf-8-sig')
+    if FAILED_PAGES:
+        pd.DataFrame(FAILED_PAGES).to_csv('data/bao_cao_trang_loi_can_chay_lai.csv', index=False, encoding='utf-8-sig')
+    if not df_clean.empty:
+        financial = df_clean[df_clean['Loại báo cáo'].isin(['Bảng cân đối kế toán','Báo cáo kết quả kinh doanh','Báo cáo lưu chuyển tiền tệ'])]
+        if not financial.empty:
+            (financial.groupby(['Mã chứng khoán','Loại báo cáo','Loại kỳ'])
+             .agg(So_ky=('Ngày kỳ','nunique'), So_chi_tieu=('Chỉ tiêu tiếng Việt','nunique'), So_dong=('Giá trị','size'))
+             .reset_index().to_csv('data/bao_cao_tong_hop_do_phu.csv', index=False, encoding='utf-8-sig'))
     print(f"\n💾 ĐÃ LƯU FILE:")
     print(f"   → CSV:     {csv_path}")
     print(f"   → PARQUET: {parquet_path} ({os.path.getsize(parquet_path)/1024/1024:.2f} MB)")
@@ -1325,10 +1381,16 @@ def main():
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng: {len(df_clean):,} dòng")
     if not df_clean.empty:
-        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/176")
+        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/{len(ticker_market_map)}")
         for k, v in df_clean['Loại kỳ'].value_counts().items():
             print(f"     • {k}: {v:,}")
     print("=" * 62)
 
 if __name__ == "__main__":
     main()
+
+
+# LƯU Ý VẬN HÀNH v19.0:
+# - API chỉ cung cấp dữ liệu nào thì crawler chỉ lưu dữ liệu đó; xem báo cáo độ phủ/lỗi.
+# - Không tự tạo số liệu thiếu, không suy diễn Q4 từ năm hoặc quý độc lập từ số lũy kế.
+# - Giá trị 0 và số âm được giữ lại; NULL/NaN/Inf bị loại.
