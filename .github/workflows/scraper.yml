@@ -1,10 +1,9 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.3 (yfinance + vnfinancialdata)
+# Financial Data Scraper Pipeline — v19.5 (Clean Null & Zero + Safe Git Push)
 # ============================================================================
 # ✅ Ưu tiên yfinance + vnfinancialdata (đã loại bỏ vnstock)
-# ✅ Python 3.12 + cache pip chuẩn
-# ✅ Validation schema + null ratio + số mã tối thiểu (khớp danh mục ~176 mã)
-# ✅ Git auto-commit an toàn
+# ✅ Lọc sạch dòng trống & Giá trị == 0 trước khi verify/commit/sync
+# ✅ Xóa _checkpoint.csv, gỡ commit lỗi >100MB, giữ CSV ~85MB
 # ✅ Supabase batch vectorized
 # ============================================================================
 name: Financial Data Scraper Pipeline
@@ -106,6 +105,49 @@ jobs:
           echo "✅ FINEX Engine finished."
 
       # ==========================================
+      # 2b. Làm sạch dữ liệu (bỏ dòng trống & giá trị 0)
+      # ==========================================
+      - name: Clean Data (Remove Null & Zero Values)
+        run: |
+          set -e
+          python -c "
+          import os
+          import pandas as pd
+
+          csv_path = 'data/vietnam_stock_database_tong_hop.csv'
+          pq_path  = 'data/vietnam_stock_database.parquet'
+
+          if not os.path.exists(csv_path):
+              raise FileNotFoundError(f'Không tìm thấy {csv_path}')
+
+          df = pd.read_csv(csv_path, low_memory=False)
+          before_rows = len(df)
+
+          # Loại bỏ dòng hoàn toàn trống
+          df = df.dropna(how='all')
+
+          if 'Giá trị' in df.columns:
+              val_num = pd.to_numeric(df['Giá trị'], errors='coerce')
+              # Chỉ giữ các dòng có Giá trị hợp lệ và khác 0
+              df = df[val_num.notna() & (val_num != 0)].copy()
+
+          # Loại bỏ dòng trống ở các cột định danh chính nếu có
+          for col in ['Mã chứng khoán', 'Chỉ tiêu tiếng Việt']:
+              if col in df.columns:
+                  s = df[col].astype(str).str.strip()
+                  df = df[(s != '') & (s.str.upper() != 'NAN') & (s.str.upper() != 'NONE')]
+
+          after_rows = len(df)
+          df.to_csv(csv_path, index=False)
+          if os.path.exists(pq_path):
+              df.to_parquet(pq_path, index=False)
+
+          csv_mb = os.path.getsize(csv_path) / 1024 / 1024
+          print(f'🧹 Đã làm sạch dữ liệu: {before_rows:,} -> {after_rows:,} dòng (loại {before_rows - after_rows:,} dòng trống/số 0)')
+          print(f'📄 Dung lượng CSV sau lọc: {csv_mb:.2f} MB')
+          "
+
+      # ==========================================
       # 3. Verify chất lượng dữ liệu
       # ==========================================
       - name: Verify Data Quality
@@ -126,7 +168,7 @@ jobs:
           total = len(df)
           tickers = df['Mã chứng khoán'].nunique() if 'Mã chứng khoán' in df.columns else 0
 
-          print(f'📊 Tổng dòng: {total:,} | Số mã: {tickers}')
+          print(f'📊 Tổng dòng sạch: {total:,} | Số mã: {tickers}')
 
           required = ['Mã chứng khoán', 'Loại kỳ', 'Năm', 'Chỉ tiêu tiếng Việt', 'Giá trị']
           missing = [c for c in required if c not in df.columns]
@@ -134,30 +176,49 @@ jobs:
               print(f'❌ Thiếu cột bắt buộc: {missing}')
               sys.exit(1)
 
-          null_ratio = df['Giá trị'].isna().mean()
-          if null_ratio > 0.25:
-              print(f'❌ Tỷ lệ null quá cao: {null_ratio:.1%}')
+          val_num = pd.to_numeric(df['Giá trị'], errors='coerce')
+          null_count = int(val_num.isna().sum())
+          zero_count = int((val_num == 0).sum())
+          print(f'🔍 Kiểm tra sạch: null={null_count} | zero={zero_count}')
+
+          if null_count > 0 or zero_count > 0:
+              print('❌ Vẫn còn dòng trống hoặc giá trị bằng 0')
               sys.exit(1)
 
           if total < 80000 or tickers < 160:
               print(f'❌ Dữ liệu quá ít (dòng={total}, mã={tickers})')
               sys.exit(1)
 
+          csv_mb = os.path.getsize(csv_path) / 1024 / 1024
+          print(f'📄 CSV: {csv_mb:.1f} MB')
+          if csv_mb >= 99.0:
+              print('❌ File CSV vượt ngưỡng an toàn 99 MB của GitHub')
+              sys.exit(1)
+
           if os.path.exists(pq_path):
               size_mb = os.path.getsize(pq_path) / 1024 / 1024
               print(f'💾 Parquet: {size_mb:.1f} MB')
 
-          print('✅ DỮ LIỆU ĐẠT CHUẨN CHẤT LƯỢNG')
+          print('✅ DỮ LIỆU SẠCH & ĐẠT CHUẨN CHẤT LƯỢNG')
           "
 
       # ==========================================
-      # 4. Commit lên GitHub
+      # 4. Dọn file tạm/vượt ngưỡng & Commit lên GitHub
       # ==========================================
+      - name: Clean checkpoint & unpushable commit
+        run: |
+          set -e
+          if git log -1 --pretty=%s | grep -q "Auto-update FINEX Dataset"; then
+            git reset --soft HEAD~1
+            git reset HEAD 2>/dev/null || true
+          fi
+          rm -f data/_checkpoint.csv
+
       - name: Commit & Push Dataset
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Auto-update FINEX Dataset $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
-          file_pattern: "data/*.csv data/*.parquet"
+          file_pattern: "data/vietnam_stock_database_tong_hop.csv data/vietnam_stock_database.parquet data/bao_cao_*.csv"
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
           commit_options: "--no-verify"
@@ -227,6 +288,7 @@ jobs:
           df = df[df['ticker'] != 'NAN']
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
           df = df.dropna(subset=['value'])
+          df = df[df['value'] != 0]
           df['year'] = pd.to_numeric(df.get('year'), errors='coerce').fillna(datetime.now().year).astype(int)
 
           for col in ['company_name', 'sector', 'report_type', 'period_type', 'report_date', 'item_vn']:
@@ -260,6 +322,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.3 (yfinance + vnfinancialdata)"
+          echo "  FINEX Pipeline v19.5 (Clean Data + Git Push)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
