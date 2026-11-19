@@ -1,9 +1,9 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.5 (Clean Null & Zero + Safe Git Push)
+# Financial Data Scraper Pipeline — v19.6 (Chuẩn số không .0 + 2 đường dẫn Git)
 # ============================================================================
-# ✅ Ưu tiên yfinance + vnfinancialdata (đã loại bỏ vnstock)
-# ✅ Lọc sạch dòng trống & Giá trị == 0 trước khi verify/commit/sync
-# ✅ Xóa _checkpoint.csv, gỡ commit lỗi >100MB, giữ CSV ~85MB
+# ✅ Ép số cột Giá trị chuẩn (bỏ .0 thừa ở số nguyên, tự điền Năm từ Ngày kỳ)
+# ✅ Chỉ giữ & commit 2 đường dẫn data/*.csv và data/*.parquet (xóa _checkpoint.csv)
+# ✅ Kiểm tra & làm sạch cột trống trong file báo cáo độ phủ
 # ✅ Supabase batch vectorized
 # ============================================================================
 name: Financial Data Scraper Pipeline
@@ -68,7 +68,6 @@ jobs:
           import httpx
           print('=== DIAGNOSTIC SOURCES ===')
           
-          # 1. Test yfinance (ưu tiên)
           try:
               ticker = yf.Ticker('VNM.VN')
               hist = ticker.history(period='5d')
@@ -76,7 +75,6 @@ jobs:
           except Exception as e:
               print(f'⚠️ yfinance error: {e}')
           
-          # 2. Test VNDirect
           try:
               r = httpx.get('https://api-finfo.vndirect.com.vn/v4/stocks?q=code:ACB', timeout=12)
               print(f'VNDirect status: {r.status_code}')
@@ -93,7 +91,7 @@ jobs:
         env:
           SKIP_VNDIRECT: "true"
           PUSH_TO_SUPABASE: "false"
-          USE_YFINANCE: "true"          # Bật ưu tiên yfinance
+          USE_YFINANCE: "true"
           PYTHONUNBUFFERED: "1"
         run: |
           set -e
@@ -105,13 +103,14 @@ jobs:
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 2b. Làm sạch dữ liệu (bỏ dòng trống & giá trị 0)
+      # 2b. Làm sạch dữ liệu, ép số chuẩn & kiểm tra cột trống
       # ==========================================
-      - name: Clean Data (Remove Null & Zero Values)
+      - name: Clean Data & Format Numbers
         run: |
           set -e
           python -c "
           import os
+          import numpy as np
           import pandas as pd
 
           csv_path = 'data/vietnam_stock_database_tong_hop.csv'
@@ -123,15 +122,38 @@ jobs:
           df = pd.read_csv(csv_path, low_memory=False)
           before_rows = len(df)
 
-          # Loại bỏ dòng hoàn toàn trống
+          # Bỏ dòng hoàn toàn trống
           df = df.dropna(how='all')
 
+          # Ép cột Giá trị về số, bỏ dòng trống hoặc bằng 0
           if 'Giá trị' in df.columns:
               val_num = pd.to_numeric(df['Giá trị'], errors='coerce')
-              # Chỉ giữ các dòng có Giá trị hợp lệ và khác 0
-              df = df[val_num.notna() & (val_num != 0)].copy()
+              mask = val_num.notna() & (val_num != 0) & np.isfinite(val_num)
+              df = df[mask].copy()
+              val_clean = val_num[mask]
 
-          # Loại bỏ dòng trống ở các cột định danh chính nếu có
+              # Nếu tất cả là số nguyên (hoặc gần nguyên < 1e-9) -> ép về int64 để không còn .0
+              if np.all(np.isclose(val_clean, np.round(val_clean), atol=1e-9)):
+                  df['Giá trị'] = np.round(val_clean).astype('int64')
+              else:
+                  # Định dạng số gọn: số nguyên bỏ .0, số thập phân bỏ số 0 thừa ở cuối
+                  def fmt_num(x):
+                      if np.isclose(x, round(x), atol=1e-9):
+                          return str(int(round(x)))
+                      return f'{x:.6f}'.rstrip('0').rstrip('.')
+                  df['Giá trị'] = [fmt_num(v) for v in val_clean]
+
+          # Tự điền Năm từ Ngày kỳ nếu cột Năm đang bị trống
+          if 'Năm' in df.columns and 'Ngày kỳ' in df.columns:
+              yr_num = pd.to_numeric(df['Năm'], errors='coerce')
+              dt_parsed = pd.to_datetime(df['Ngày kỳ'], errors='coerce')
+              missing_yr = yr_num.isna() & dt_parsed.notna()
+              if missing_yr.any():
+                  df.loc[missing_yr, 'Năm'] = dt_parsed.loc[missing_yr].dt.year.astype('int64')
+              yr_final = pd.to_numeric(df['Năm'], errors='coerce')
+              df.loc[yr_final.notna(), 'Năm'] = yr_final.loc[yr_final.notna()].astype('int64')
+
+          # Lọc bỏ mã hoặc chỉ tiêu trống
           for col in ['Mã chứng khoán', 'Chỉ tiêu tiếng Việt']:
               if col in df.columns:
                   s = df[col].astype(str).str.strip()
@@ -142,9 +164,27 @@ jobs:
           if os.path.exists(pq_path):
               df.to_parquet(pq_path, index=False)
 
+          # Kiểm tra nguyên nhân các cột trống trong file báo cáo độ phủ (nếu có)
+          cov_path = 'data/bao_cao_do_phu_bctc.csv'
+          if os.path.exists(cov_path):
+              cov_df = pd.read_csv(cov_path, low_memory=False)
+              num_cols = [
+                  'Số trang dự kiến',
+                  'Số bản ghi API dự kiến',
+                  'Số bản ghi API đã đọc',
+                  'Số dòng hợp lệ đã lưu'
+              ]
+              existing_num_cols = [c for c in num_cols if c in cov_df.columns]
+              if existing_num_cols:
+                  na_counts = cov_df[existing_num_cols].isna().sum().to_dict()
+                  print(f'🔎 Thống kê cột trống trong {cov_path}: {na_counts}')
+                  # Ép các cột số báo cáo về int (mặc định 0 nếu bị trống)
+                  for c in existing_num_cols:
+                      cov_df[c] = pd.to_numeric(cov_df[c], errors='coerce').fillna(0).astype('int64')
+                  cov_df.to_csv(cov_path, index=False)
+
           csv_mb = os.path.getsize(csv_path) / 1024 / 1024
-          print(f'🧹 Đã làm sạch dữ liệu: {before_rows:,} -> {after_rows:,} dòng (loại {before_rows - after_rows:,} dòng trống/số 0)')
-          print(f'📄 Dung lượng CSV sau lọc: {csv_mb:.2f} MB')
+          print(f'🧹 Làm sạch: {before_rows:,} -> {after_rows:,} dòng | CSV: {csv_mb:.2f} MB')
           "
 
       # ==========================================
@@ -203,22 +243,24 @@ jobs:
           "
 
       # ==========================================
-      # 4. Dọn file tạm/vượt ngưỡng & Commit lên GitHub
+      # 4. Chuẩn bị đúng 2 đường dẫn lưu GitHub & Commit
       # ==========================================
-      - name: Clean checkpoint & unpushable commit
+      - name: Prepare Git paths & clean bad commit
         run: |
           set -e
           if git log -1 --pretty=%s | grep -q "Auto-update FINEX Dataset"; then
             git reset --soft HEAD~1
             git reset HEAD 2>/dev/null || true
           fi
-          rm -f data/_checkpoint.csv
+          # Xóa file tạm và các file báo cáo phụ để GitHub chỉ lưu đúng 2 đường dẫn data/*.csv và data/*.parquet
+          rm -f data/_checkpoint.csv data/bao_cao_*.csv
+          echo "COMMIT_TS=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_ENV"
 
       - name: Commit & Push Dataset
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto-update FINEX Dataset $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]"
-          file_pattern: "data/vietnam_stock_database_tong_hop.csv data/vietnam_stock_database.parquet data/bao_cao_*.csv"
+          commit_message: "Auto-update FINEX Dataset ${{ env.COMMIT_TS }} [skip ci]"
+          file_pattern: "data/*.csv data/*.parquet"
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
           commit_options: "--no-verify"
@@ -322,6 +364,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.5 (Clean Data + Git Push)"
+          echo "  FINEX Pipeline v19.6 (Chuẩn số + 2 đường dẫn)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
