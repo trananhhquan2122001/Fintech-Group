@@ -1,10 +1,10 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.6 (Chuẩn số không .0 + 2 đường dẫn Git)
+# Financial Data Scraper Pipeline — v19.8 (Nâng cấp Quý đa nguồn + Chuẩn số)
 # ============================================================================
-# ✅ Ép số cột Giá trị chuẩn (bỏ .0 thừa ở số nguyên, tự điền Năm từ Ngày kỳ)
-# ✅ Chỉ giữ & commit 2 đường dẫn data/*.csv và data/*.parquet (xóa _checkpoint.csv)
-# ✅ Kiểm tra & làm sạch cột trống trong file báo cáo độ phủ
-# ✅ Supabase batch vectorized
+# ✅ Nâng cấp dò & bổ sung dữ liệu Quý (nhận diện Quý/Q1..Q4, thử yfinance + vnfinancialdata)
+# ✅ Ép số cột Giá trị chuẩn (không .0 thừa, tự điền Năm từ Ngày kỳ)
+# ✅ Loại bỏ dòng trống & Giá trị == 0; chặn _checkpoint.csv; chỉ giữ 2 đường dẫn Git
+# ✅ Đồng bộ HuggingFace Space & Supabase batch vectorized
 # ============================================================================
 name: Financial Data Scraper Pipeline
 
@@ -40,7 +40,7 @@ jobs:
             requirements.txt
             **/requirements*.txt
 
-      - name: Install Dependencies (ưu tiên yfinance)
+      - name: Install Dependencies (ưu tiên yfinance + vnfinancialdata)
         run: |
           set -e
           python -m pip install --upgrade pip
@@ -59,29 +59,33 @@ jobs:
             "cloudscraper>=1.2.71"
 
       # ==========================================
-      # 1. Diagnostic các nguồn (có yfinance)
+      # 1. Diagnostic các nguồn (yfinance + vnfinancialdata)
       # ==========================================
-      - name: Diagnostic Sources (yfinance first)
+      - name: Diagnostic Sources (yfinance + vnfinancialdata)
         run: |
           python -c "
           import yfinance as yf
+          import vnfinancialdata as vnfd
           import httpx
+
           print('=== DIAGNOSTIC SOURCES ===')
-          
           try:
-              ticker = yf.Ticker('VNM.VN')
-              hist = ticker.history(period='5d')
-              print(f'✅ yfinance OK - VNM.VN rows: {len(hist)}')
+              t = yf.Ticker('FPT.VN')
+              hist = t.history(period='5d')
+              q_is = t.quarterly_income_stmt
+              q_cells = 0 if q_is is None or q_is.empty else q_is.size
+              print(f'✅ yfinance OK - FPT.VN hist={len(hist)} | quarterly_income_stmt cells={q_cells}')
           except Exception as e:
               print(f'⚠️ yfinance error: {e}')
-          
+
+          vnfd_funcs = [m for m in dir(vnfd) if not m.startswith('_')]
+          print(f'✅ vnfinancialdata attributes ({len(vnfd_funcs)}): {vnfd_funcs[:20]}')
+
           try:
               r = httpx.get('https://api-finfo.vndirect.com.vn/v4/stocks?q=code:ACB', timeout=12)
               print(f'VNDirect status: {r.status_code}')
           except Exception as e:
               print(f'VNDirect error: {e}')
-          
-          print('vnfinancialdata + yfinance đã cài đặt')
           "
 
       # ==========================================
@@ -95,7 +99,7 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -e
-          echo "🚀 Starting FINEX Engine (ưu tiên yfinance)..."
+          echo "🚀 Starting FINEX Engine..."
           timeout 4800 python main.py || {
             echo "⚠️ Engine timeout hoặc lỗi. Kiểm tra log."
             exit 1
@@ -103,7 +107,134 @@ jobs:
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 2b. Làm sạch dữ liệu, ép số chuẩn & kiểm tra cột trống
+      # 2b. Nâng cấp thu thập & bổ sung dữ liệu Quý đa nguồn
+      # ==========================================
+      - name: Enhance & Backfill Quarterly Data
+        run: |
+          set -e
+          python -c "
+          import os, inspect
+          import pandas as pd
+          import numpy as np
+          import yfinance as yf
+          import vnfinancialdata as vnfd
+
+          csv_path = 'data/vietnam_stock_database_tong_hop.csv'
+          if not os.path.exists(csv_path):
+              raise FileNotFoundError(f'Không tìm thấy {csv_path}')
+
+          df = pd.read_csv(csv_path, low_memory=False)
+          period_col = 'Loại kỳ' if 'Loại kỳ' in df.columns else None
+
+          def is_quarterly_series(s):
+              txt = s.astype(str).str.strip()
+              return txt.str.contains('Quý|Quy', case=False, na=False) | txt.str.match(r'^Q[1-4]$', case=False, na=False)
+
+          q_existing = int(is_quarterly_series(df[period_col]).sum()) if period_col else 0
+          print(f'📊 Phân bố Loại kỳ trước nâng cấp Quý: {df[period_col].value_counts(dropna=False).to_dict() if period_col else {}}')
+          print(f'📌 Số dòng Quý hiện có: {q_existing:,}')
+
+          tickers = sorted(df['Mã chứng khoán'].dropna().astype(str).str.strip().str.upper().unique().tolist()) if 'Mã chứng khoán' in df.columns else []
+          meta_map = {}
+          for tk in tickers:
+              sub = df[df['Mã chứng khoán'].astype(str).str.upper() == tk]
+              comp = sub['Tên doanh nghiệp'].dropna().iloc[0] if 'Tên doanh nghiệp' in df.columns and not sub['Tên doanh nghiệp'].dropna().empty else ''
+              sec  = sub['Tên ngành'].dropna().iloc[0] if 'Tên ngành' in df.columns and not sub['Tên ngành'].dropna().empty else ''
+              meta_map[tk] = (comp, sec)
+
+          added_rows = []
+
+          # Nguồn 1: Thử dò các hàm trong vnfinancialdata có hỗ trợ tham số kỳ quý
+          for name in dir(vnfd):
+              if name.startswith('_'):
+                  continue
+              obj = getattr(vnfd, name, None)
+              if not callable(obj):
+                  continue
+              try:
+                  sig = inspect.signature(obj)
+                  params = list(sig.parameters.keys())
+              except Exception:
+                  continue
+              q_param = next((p for p in params if any(k in p.lower() for k in ['quarter', 'period', 'freq', 'term', 'type'])), None)
+              if not q_param:
+                  continue
+              # Thử gọi thăm dò với 1 mã mẫu để xem có trả DataFrame quý không
+              sample_tk = tickers[0] if tickers else 'FPT'
+              for q_val in ['quarter', 'Q', 'quarterly', 'quy']:
+                  try:
+                      kwargs = {q_param: q_val}
+                      # Truyền mã nếu hàm có tham số symbol/ticker/stock
+                      tk_param = next((p for p in params if any(k in p.lower() for k in ['symbol', 'ticker', 'stock', 'code'])), None)
+                      if tk_param:
+                          kwargs[tk_param] = sample_tk
+                      res = obj(**kwargs)
+                      if isinstance(res, pd.DataFrame) and not res.empty:
+                          print(f'🔎 Phát hiện hàm có tiềm năng Quý từ vnfinancialdata: {name}({q_param}={q_val!r}) -> shape={res.shape}')
+                          break
+                  except Exception:
+                      continue
+
+          # Nguồn 2: Bổ sung dữ liệu Quý từ yfinance (quarterly_*) cho các mã .VN nếu còn thiếu Quý
+          if q_existing == 0 and tickers:
+              print('⚠️ Dữ liệu Quý đang trống -> Bắt đầu bổ sung từ yfinance (quarterly_*)...')
+              stmt_specs = [
+                  ('quarterly_balance_sheet', 'Bảng cân đối kế toán'),
+                  ('quarterly_income_stmt', 'Báo cáo kết quả kinh doanh'),
+                  ('quarterly_cashflow', 'Báo cáo lưu chuyển tiền tệ'),
+              ]
+              yf_q_tickers = 0
+              for tk in tickers:
+                  comp, sec = meta_map.get(tk, ('', ''))
+                  tk_has_q = False
+                  try:
+                      yf_tk = yf.Ticker(f'{tk}.VN')
+                      for attr, rep_name in stmt_specs:
+                          tbl = getattr(yf_tk, attr, None)
+                          if tbl is None or getattr(tbl, 'empty', True):
+                              continue
+                          for col_dt in tbl.columns:
+                              dt_obj = pd.to_datetime(col_dt, errors='coerce')
+                              if pd.isna(dt_obj):
+                                  continue
+                              q_num = (dt_obj.month - 1) // 3 + 1
+                              period_label = f'Quý {q_num}'
+                              rep_date_str = dt_obj.strftime('%Y-%m-%d')
+                              yr_val = int(dt_obj.year)
+
+                              series = tbl[col_dt].dropna()
+                              for item_label, val in series.items():
+                                  v_num = pd.to_numeric(val, errors='coerce')
+                                  if pd.isna(v_num) or not np.isfinite(float(v_num)) or float(v_num) == 0.0:
+                                      continue
+                                  row = {c: '' for c in df.columns}
+                                  if 'Mã chứng khoán' in row: row['Mã chứng khoán'] = tk
+                                  if 'Tên doanh nghiệp' in row: row['Tên doanh nghiệp'] = comp
+                                  if 'Tên ngành' in row: row['Tên ngành'] = sec
+                                  if 'Loại báo cáo' in row: row['Loại báo cáo'] = rep_name
+                                  if 'Loại kỳ' in row: row['Loại kỳ'] = period_label
+                                  if 'Năm' in row: row['Năm'] = yr_val
+                                  if 'Ngày kỳ' in row: row['Ngày kỳ'] = rep_date_str
+                                  if 'Chỉ tiêu tiếng Việt' in row: row['Chỉ tiêu tiếng Việt'] = str(item_label).strip()
+                                  if 'Giá trị' in row: row['Giá trị'] = float(v_num)
+                                  added_rows.append(row)
+                                  tk_has_q = True
+                  except Exception:
+                      continue
+                  if tk_has_q:
+                      yf_q_tickers += 1
+
+              if added_rows:
+                  df_q = pd.DataFrame(added_rows)
+                  df = pd.concat([df, df_q], ignore_index=True)
+                  df.to_csv(csv_path, index=False)
+                  print(f'✅ Đã thêm {len(added_rows):,} dòng Quý từ yfinance cho {yf_q_tickers}/{len(tickers)} mã.')
+              else:
+                  print('ℹ️ Không lấy thêm được dòng Quý nào từ yfinance cho danh sách mã .VN hiện tại.')
+          "
+
+      # ==========================================
+      # 2c. Làm sạch dữ liệu, ép số chuẩn & tự điền Năm
       # ==========================================
       - name: Clean Data & Format Numbers
         run: |
@@ -122,28 +253,23 @@ jobs:
           df = pd.read_csv(csv_path, low_memory=False)
           before_rows = len(df)
 
-          # Bỏ dòng hoàn toàn trống
           df = df.dropna(how='all')
 
-          # Ép cột Giá trị về số, bỏ dòng trống hoặc bằng 0
           if 'Giá trị' in df.columns:
               val_num = pd.to_numeric(df['Giá trị'], errors='coerce')
               mask = val_num.notna() & (val_num != 0) & np.isfinite(val_num)
               df = df[mask].copy()
               val_clean = val_num[mask]
 
-              # Nếu tất cả là số nguyên (hoặc gần nguyên < 1e-9) -> ép về int64 để không còn .0
               if np.all(np.isclose(val_clean, np.round(val_clean), atol=1e-9)):
                   df['Giá trị'] = np.round(val_clean).astype('int64')
               else:
-                  # Định dạng số gọn: số nguyên bỏ .0, số thập phân bỏ số 0 thừa ở cuối
                   def fmt_num(x):
                       if np.isclose(x, round(x), atol=1e-9):
                           return str(int(round(x)))
                       return f'{x:.6f}'.rstrip('0').rstrip('.')
                   df['Giá trị'] = [fmt_num(v) for v in val_clean]
 
-          # Tự điền Năm từ Ngày kỳ nếu cột Năm đang bị trống
           if 'Năm' in df.columns and 'Ngày kỳ' in df.columns:
               yr_num = pd.to_numeric(df['Năm'], errors='coerce')
               dt_parsed = pd.to_datetime(df['Ngày kỳ'], errors='coerce')
@@ -153,7 +279,6 @@ jobs:
               yr_final = pd.to_numeric(df['Năm'], errors='coerce')
               df.loc[yr_final.notna(), 'Năm'] = yr_final.loc[yr_final.notna()].astype('int64')
 
-          # Lọc bỏ mã hoặc chỉ tiêu trống
           for col in ['Mã chứng khoán', 'Chỉ tiêu tiếng Việt']:
               if col in df.columns:
                   s = df[col].astype(str).str.strip()
@@ -163,25 +288,6 @@ jobs:
           df.to_csv(csv_path, index=False)
           if os.path.exists(pq_path):
               df.to_parquet(pq_path, index=False)
-
-          # Kiểm tra nguyên nhân các cột trống trong file báo cáo độ phủ (nếu có)
-          cov_path = 'data/bao_cao_do_phu_bctc.csv'
-          if os.path.exists(cov_path):
-              cov_df = pd.read_csv(cov_path, low_memory=False)
-              num_cols = [
-                  'Số trang dự kiến',
-                  'Số bản ghi API dự kiến',
-                  'Số bản ghi API đã đọc',
-                  'Số dòng hợp lệ đã lưu'
-              ]
-              existing_num_cols = [c for c in num_cols if c in cov_df.columns]
-              if existing_num_cols:
-                  na_counts = cov_df[existing_num_cols].isna().sum().to_dict()
-                  print(f'🔎 Thống kê cột trống trong {cov_path}: {na_counts}')
-                  # Ép các cột số báo cáo về int (mặc định 0 nếu bị trống)
-                  for c in existing_num_cols:
-                      cov_df[c] = pd.to_numeric(cov_df[c], errors='coerce').fillna(0).astype('int64')
-                  cov_df.to_csv(cov_path, index=False)
 
           csv_mb = os.path.getsize(csv_path) / 1024 / 1024
           print(f'🧹 Làm sạch: {before_rows:,} -> {after_rows:,} dòng | CSV: {csv_mb:.2f} MB')
@@ -252,7 +358,6 @@ jobs:
             git reset --soft HEAD~1
             git reset HEAD 2>/dev/null || true
           fi
-          # Xóa file tạm và các file báo cáo phụ để GitHub chỉ lưu đúng 2 đường dẫn data/*.csv và data/*.parquet
           rm -f data/_checkpoint.csv data/bao_cao_*.csv
           echo "COMMIT_TS=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_ENV"
 
@@ -364,6 +469,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.6 (Chuẩn số + 2 đường dẫn)"
+          echo "  FINEX Pipeline v19.8 (Nâng cấp Quý + Chuẩn số)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
