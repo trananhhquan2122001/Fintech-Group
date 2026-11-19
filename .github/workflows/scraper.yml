@@ -1,7 +1,7 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.1 (yfinance Priority)
+# Financial Data Scraper Pipeline — v19.2 (yfinance + vnfinancialdata)
 # ============================================================================
-# ✅ Ưu tiên yfinance + vnstock + vnfinancialdata
+# ✅ Ưu tiên yfinance + vnfinancialdata (đã loại bỏ vnstock)
 # ✅ Python 3.12 + cache pip chuẩn
 # ✅ Validation schema + null ratio + số mã tối thiểu
 # ✅ Git auto-commit an toàn
@@ -54,7 +54,6 @@ jobs:
             "tenacity>=8.3" \
             "huggingface_hub>=0.24" \
             "supabase>=2.5" \
-            "vnstock>=3.2" \
             "vnfinancialdata>=0.1.2" \
             "openpyxl>=3.1" \
             "tqdm>=4.66" \
@@ -85,7 +84,7 @@ jobs:
           except Exception as e:
               print(f'VNDirect error: {e}')
           
-          print('vnstock + vnfinancialdata + yfinance đã cài đặt')
+          print('vnfinancialdata + yfinance đã cài đặt')
           "
 
       # ==========================================
@@ -93,7 +92,6 @@ jobs:
       # ==========================================
       - name: Run FINEX Engine
         env:
-          VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
           SKIP_VNDIRECT: "true"
           PUSH_TO_SUPABASE: "false"
           USE_YFINANCE: "true"          # Bật ưu tiên yfinance
@@ -262,6 +260,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.1 (yfinance Priority)"
+          echo "  FINEX Pipeline v19.2 (yfinance + vnfinancialdata)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
