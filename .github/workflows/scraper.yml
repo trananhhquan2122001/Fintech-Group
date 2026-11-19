@@ -1,9 +1,9 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.9 (Bổ sung Quý trực tiếp cho 176 mã)
+# Financial Data Scraper Pipeline — v20.0 (Tăng tốc đa luồng + Chống kẹt)
 # ============================================================================
-# ✅ Truyền HF_TOKEN cho engine để tránh rate-limit HuggingFace Hub
-# ✅ Lấy thẳng BCTC Quý (quarterly_*) qua yfinance cho toàn bộ 176 mã (không phụ thuộc VNDirect lỗi 500)
-# ✅ Ép số chuẩn (không .0 thừa, tự điền Năm từ Ngày kỳ)
+# ✅ Đa luồng (ThreadPoolExecutor) khi quét Quý qua yfinance -> tăng tốc rõ rệt
+# ✅ Khử trùng lặp không dùng iterrows() + ép số chuẩn (không .0 thừa, tự điền Năm)
+# ✅ Chống kẹt thời gian: giới hạn chạy engine hợp lý, không ngâm 1-2 tiếng
 # ✅ Loại bỏ dòng trống & Giá trị == 0; xóa _checkpoint.csv; chỉ commit 2 đường dẫn Git
 # ✅ Đồng bộ HuggingFace Space & Supabase batch vectorized
 # ============================================================================
@@ -24,13 +24,13 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -60,31 +60,30 @@ jobs:
             "cloudscraper>=1.2.71"
 
       # ==========================================
-      # 1. Diagnostic các nguồn
+      # 1. Diagnostic nhanh các nguồn
       # ==========================================
       - name: Diagnostic Sources
         run: |
           python -c "
           import yfinance as yf
-          import httpx
+          from concurrent.futures import ThreadPoolExecutor
 
-          print('=== DIAGNOSTIC SOURCES ===')
-          for sym in ['FPT.VN', 'ACB.VN', 'VNM.VN']:
+          def check_sym(sym):
               try:
                   t = yf.Ticker(sym)
                   q_is = t.quarterly_income_stmt
-                  q_bs = t.quarterly_balance_sheet
-                  q_cf = t.quarterly_cashflow
                   c_is = 0 if q_is is None or q_is.empty else q_is.size
-                  c_bs = 0 if q_bs is None or q_bs.empty else q_bs.size
-                  c_cf = 0 if q_cf is None or q_cf.empty else q_cf.size
-                  print(f'✅ {sym} -> Q_IS={c_is}, Q_BS={c_bs}, Q_CF={c_cf}')
+                  return f'✅ {sym}: Q_IS={c_is}'
               except Exception as e:
-                  print(f'⚠️ {sym} error: {e}')
+                  return f'⚠️ {sym}: {type(e).__name__}'
+
+          with ThreadPoolExecutor(max_workers=3) as ex:
+              for line in ex.map(check_sym, ['FPT.VN', 'ACB.VN', 'VNM.VN']):
+                  print(line)
           "
 
       # ==========================================
-      # 2. Chạy FINEX Engine
+      # 2. Chạy FINEX Engine (giới hạn 30 phút để chống kẹt)
       # ==========================================
       - name: Run FINEX Engine
         env:
@@ -95,25 +94,28 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: |
           set -e
-          echo "🚀 Starting FINEX Engine..."
-          timeout 4800 python main.py || {
-            echo "⚠️ Engine timeout hoặc lỗi. Kiểm tra log."
+          echo "🚀 Starting FINEX Engine (max 1800s)..."
+          timeout 1800 python main.py || {
+            code=$?
+            echo "⚠️ Engine dừng với mã thoát: $code"
             exit 1
           }
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 2b. Kéo dữ liệu Quý trực tiếp cho 176 mã (bù cho VNDirect HTTP 500 / Timeout)
+      # 2b. Quét dữ liệu Quý đa luồng cho danh sách mã
       # ==========================================
-      - name: Fetch Quarterly Statements for All 176 Tickers
+      - name: Fetch Quarterly Statements (Multi-threaded)
         run: |
           set -e
           python -c "
-          import os, glob
+          import os, glob, time
+          from concurrent.futures import ThreadPoolExecutor, as_completed
           import pandas as pd
           import numpy as np
           import yfinance as yf
 
+          t0 = time.time()
           csv_path = 'data/vietnam_stock_database_tong_hop.csv'
           if not os.path.exists(csv_path):
               raise FileNotFoundError(f'Không tìm thấy {csv_path}')
@@ -121,7 +123,6 @@ jobs:
           df = pd.read_csv(csv_path, low_memory=False)
           cols = list(df.columns)
 
-          # Thu thập danh sách mã từ dữ liệu hiện có và các file danh sách mã nếu có
           ticker_set = set()
           if 'Mã chứng khoán' in df.columns:
               ticker_set.update(
@@ -148,7 +149,7 @@ jobs:
                       pass
 
           tickers = sorted(ticker_set)
-          print(f'🎯 Tổng số mã mục tiêu để quét Quý: {len(tickers)}')
+          print(f'🎯 Quét Quý đa luồng cho {len(tickers)} mã...')
 
           meta_map = {}
           if 'Mã chứng khoán' in df.columns:
@@ -163,11 +164,9 @@ jobs:
               ('quarterly_cashflow', 'Báo cáo lưu chuyển tiền tệ'),
           ]
 
-          q_rows = []
-          matched_tickers = 0
-          for idx, tk in enumerate(tickers, 1):
+          def fetch_one_ticker(tk):
               comp, sec = meta_map.get(tk, ('', ''))
-              has_any = False
+              rows = []
               try:
                   yf_tk = yf.Ticker(f'{tk}.VN')
                   for attr, rep_name in stmt_specs:
@@ -198,35 +197,39 @@ jobs:
                               if 'Ngày kỳ' in row: row['Ngày kỳ'] = rep_date_str
                               if 'Chỉ tiêu tiếng Việt' in row: row['Chỉ tiêu tiếng Việt'] = str(item_label).strip()
                               if 'Giá trị' in row: row['Giá trị'] = float(v_num)
-                              q_rows.append(row)
-                              has_any = True
+                              rows.append(row)
               except Exception:
-                  continue
+                  pass
+              return tk, rows
 
-              if has_any:
-                  matched_tickers += 1
-              if idx % 30 == 0 or idx == len(tickers):
-                  print(f'  ⏳ Tiến độ quét Quý: {idx}/{len(tickers)} mã | Có dữ liệu Quý: {matched_tickers} mã | Tổng dòng Quý: {len(q_rows):,}')
+          q_rows = []
+          matched = 0
+          done = 0
+          with ThreadPoolExecutor(max_workers=8) as pool:
+              futures = [pool.submit(fetch_one_ticker, tk) for tk in tickers]
+              for fut in as_completed(futures):
+                  done += 1
+                  _, r_list = fut.result()
+                  if r_list:
+                      matched += 1
+                      q_rows.extend(r_list)
+                  if done % 40 == 0 or done == len(tickers):
+                      print(f'  ⚡ {done}/{len(tickers)} mã | Có Quý: {matched} mã | Dòng Quý: {len(q_rows):,} ({time.time()-t0:.1f}s)')
 
           if q_rows:
               df_q = pd.DataFrame(q_rows)[cols]
-              # Loại bỏ trùng lặp nếu đã có sẵn cùng (Mã, Loại báo cáo, Loại kỳ, Ngày kỳ, Chỉ tiêu)
               dedup_cols = [c for c in ['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'] if c in df.columns]
               if dedup_cols:
                   existing_keys = set(zip(*(df[c].astype(str).str.strip() for c in dedup_cols)))
-                  keep_mask = [
-                      tuple(str(r[c]).strip() for c in dedup_cols) not in existing_keys
-                      for _, r in df_q.iterrows()
-                  ]
+                  q_keys = list(zip(*(df_q[c].astype(str).str.strip() for c in dedup_cols)))
+                  keep_mask = [k not in existing_keys for k in q_keys]
                   df_q = df_q[keep_mask]
               if len(df_q) > 0:
                   df = pd.concat([df, df_q], ignore_index=True)
                   df.to_csv(csv_path, index=False)
-                  print(f'✅ Đã gộp thêm {len(df_q):,} dòng Quý mới vào {csv_path}')
-              else:
-                  print('ℹ️ Không có dòng Quý mới phát sinh thêm.')
+                  print(f'✅ Gộp thêm {len(df_q):,} dòng Quý mới trong {time.time()-t0:.1f}s')
           else:
-              print('⚠️ Nguồn yfinance hiện không trả dòng Quý nào cho danh sách mã .VN.')
+              print(f'ℹ️ Không có dòng Quý mới từ yfinance ({time.time()-t0:.1f}s)')
           "
 
       # ==========================================
@@ -248,7 +251,6 @@ jobs:
 
           df = pd.read_csv(csv_path, low_memory=False)
           before_rows = len(df)
-
           df = df.dropna(how='all')
 
           if 'Giá trị' in df.columns:
@@ -282,8 +284,7 @@ jobs:
 
           after_rows = len(df)
           df.to_csv(csv_path, index=False)
-          if os.path.exists(pq_path):
-              df.to_parquet(pq_path, index=False)
+          df.to_parquet(pq_path, index=False)
 
           csv_mb = os.path.getsize(csv_path) / 1024 / 1024
           print(f'🧹 Làm sạch: {before_rows:,} -> {after_rows:,} dòng | CSV: {csv_mb:.2f} MB')
@@ -309,7 +310,6 @@ jobs:
           df = pd.read_csv(csv_path, low_memory=False)
           total = len(df)
           tickers = df['Mã chứng khoán'].nunique() if 'Mã chứng khoán' in df.columns else 0
-
           print(f'📊 Tổng dòng sạch: {total:,} | Số mã: {tickers}')
 
           required = ['Mã chứng khoán', 'Loại kỳ', 'Năm', 'Chỉ tiêu tiếng Việt', 'Giá trị']
@@ -338,8 +338,7 @@ jobs:
               sys.exit(1)
 
           if os.path.exists(pq_path):
-              size_mb = os.path.getsize(pq_path) / 1024 / 1024
-              print(f'💾 Parquet: {size_mb:.1f} MB')
+              print(f'💾 Parquet: {os.path.getsize(pq_path)/1024/1024:.1f} MB')
 
           print('✅ DỮ LIỆU SẠCH & ĐẠT CHUẨN CHẤT LƯỢNG')
           "
@@ -465,6 +464,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.9 (Quét Quý 176 mã + Chuẩn số)"
+          echo "  FINEX Pipeline v20.0 (Đa luồng + Chống kẹt)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
