@@ -1,9 +1,9 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.2 (yfinance + vnfinancialdata)
+# Financial Data Scraper Pipeline — v19.3 (yfinance + vnfinancialdata)
 # ============================================================================
 # ✅ Ưu tiên yfinance + vnfinancialdata (đã loại bỏ vnstock)
 # ✅ Python 3.12 + cache pip chuẩn
-# ✅ Validation schema + null ratio + số mã tối thiểu
+# ✅ Validation schema + null ratio + số mã tối thiểu (khớp danh mục ~176 mã)
 # ✅ Git auto-commit an toàn
 # ✅ Supabase batch vectorized
 # ============================================================================
@@ -139,7 +139,7 @@ jobs:
               print(f'❌ Tỷ lệ null quá cao: {null_ratio:.1%}')
               sys.exit(1)
 
-          if total < 80000 or tickers < 400:
+          if total < 80000 or tickers < 160:
               print(f'❌ Dữ liệu quá ít (dòng={total}, mã={tickers})')
               sys.exit(1)
 
@@ -260,6 +260,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.2 (yfinance + vnfinancialdata)"
+          echo "  FINEX Pipeline v19.3 (yfinance + vnfinancialdata)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
