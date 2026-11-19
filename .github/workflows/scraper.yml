@@ -1,9 +1,9 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v20.0 (Tăng tốc đa luồng + Chống kẹt)
+# Financial Data Scraper Pipeline — v20.1 (Bỏ VNDirect BCTC lỗi + Đa luồng)
 # ============================================================================
-# ✅ Đa luồng (ThreadPoolExecutor) khi quét Quý qua yfinance -> tăng tốc rõ rệt
-# ✅ Khử trùng lặp không dùng iterrows() + ép số chuẩn (không .0 thừa, tự điền Năm)
-# ✅ Chống kẹt thời gian: giới hạn chạy engine hợp lý, không ngâm 1-2 tiếng
+# ✅ Bỏ qua hoàn toàn nhánh VNDirect BCTC (HTTP 500 / Timeout / ConnectionError)
+# ✅ Đa luồng (ThreadPoolExecutor) quét Quý qua yfinance -> chạy nhanh, chống kẹt
+# ✅ Khử trùng lặp nhanh + Ép số chuẩn (không .0 thừa, tự điền Năm từ Ngày kỳ)
 # ✅ Loại bỏ dòng trống & Giá trị == 0; xóa _checkpoint.csv; chỉ commit 2 đường dẫn Git
 # ✅ Đồng bộ HuggingFace Space & Supabase batch vectorized
 # ============================================================================
@@ -24,7 +24,7 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 35
 
     steps:
       - name: Checkout repository
@@ -60,7 +60,7 @@ jobs:
             "cloudscraper>=1.2.71"
 
       # ==========================================
-      # 1. Diagnostic nhanh các nguồn
+      # 1. Diagnostic nhanh các nguồn hoạt động
       # ==========================================
       - name: Diagnostic Sources
         run: |
@@ -83,19 +83,22 @@ jobs:
           "
 
       # ==========================================
-      # 2. Chạy FINEX Engine (giới hạn 30 phút để chống kẹt)
+      # 2. Chạy FINEX Engine (tắt hẳn VNDirect / VNDIRECT_BCTC)
       # ==========================================
       - name: Run FINEX Engine
         env:
           SKIP_VNDIRECT: "true"
+          SKIP_VNDIRECT_BCTC: "true"
+          DISABLE_VNDIRECT: "true"
+          RUN_VNDIRECT_BCTC: "false"
           PUSH_TO_SUPABASE: "false"
           USE_YFINANCE: "true"
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           PYTHONUNBUFFERED: "1"
         run: |
           set -e
-          echo "🚀 Starting FINEX Engine (max 1800s)..."
-          timeout 1800 python main.py || {
+          echo "🚀 Starting FINEX Engine (skip VNDirect BCTC)..."
+          timeout 1200 python main.py || {
             code=$?
             echo "⚠️ Engine dừng với mã thoát: $code"
             exit 1
@@ -464,6 +467,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v20.0 (Đa luồng + Chống kẹt)"
+          echo "  FINEX Pipeline v20.1 (Bỏ VNDirect BCTC + Nhanh)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
