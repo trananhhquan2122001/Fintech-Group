@@ -1,12 +1,26 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v17.1 (GIỮ KHUNG 100% — NÂNG CẤP CÀO QUÝ)
+FINEX VN STOCK DATABASE CRAWLER - v17.2 (GIỮ KHUNG 100% — BỎ VNDIRECT/VNSTOCK, QUÝ ĐA LUỒNG YFINANCE)
 ================================================================================
+Changelog v17.2 (nâng cấp tại chỗ trên khung v17.1):
+  ✅ Xoá hoàn toàn đoạn tự `pip install vnstock` (hết lỗi No matching distribution).
+  ✅ Nhánh VNDirect (BCTC + fallback giá/SLCP qua api-finfo) bị vô hiệu hoá mặc định:
+     đọc biến môi trường SKIP_VNDIRECT (mặc định "true"). Chỉ chạy khi SKIP_VNDIRECT=false,
+     và khi chạy thì chỉ 1 lần thử/request, timeout ngắn (không retry 4 lần).
+  ✅ BƯỚC 2 [INDICES]: bỏ ^UPCOM (hết cảnh báo "No data found, symbol may be delisted").
+  ✅ BƯỚC 5: bù BCTC QUÝ bằng yfinance đa luồng (ThreadPoolExecutor, 8 luồng):
+     quarterly_balance_sheet / quarterly_income_stmt / quarterly_cashflow,
+     timeout ngắn, mã nào lỗi thì bỏ qua ngay, không retry.
+     (vnfinancialdata chỉ có kỳ NĂM nên không dùng cho quý.)
+  ✅ Chuẩn hoá đầu ra: bỏ NaN/None/chuỗi rỗng/giá trị 0; số nguyên ép int64 (không đuôi .0),
+     số thập phân bỏ số 0 thừa; tự điền 'Năm' từ 'Ngày kỳ' nếu thiếu.
+  ✅ Dọn sạch file tạm (_checkpoint.csv, _emergency_backup.*, bao_cao_*.csv) trước khi kết thúc.
+  ✅ Sửa lỗi cú pháp ngầm trong format_value: .replace(' ') -> .replace(' ', '').
+
 Changelog v17.1 (nâng cấp tại chỗ trên khung v17.0):
   ✅ Giữ nguyên 100% khung 11 mục, tên hàm, BƯỚC 0->8 và toàn bộ Từ điển VAS.
   ✅ VNDirect: retry + đổi domain, sort ổn định, phân trang chống lặp,
      fallback cắt theo năm -> hết "dừng sớm", cào ĐỦ quý toàn bộ lịch sử.
   ✅ Nhãn quý 'YYYY-Qn' thống nhất mọi nguồn -> dedup chéo nguồn đúng.
-  ✅ Bù quý bằng vnstock ngay trong BƯỚC 5 (mã < 20 kỳ quý).
   ✅ Sửa ngưỡng 1e15 làm mất Tổng tài sản ngân hàng; lọc 0 trước dedup.
   ✅ Sửa lỗi Yahoo chỉ cào quý khi có BCTC năm; sửa global emergency-save.
   ✅ Thêm data/_coverage_report.csv soi số kỳ quý từng mã.
@@ -14,8 +28,9 @@ Changelog v17.1 (nâng cấp tại chỗ trên khung v17.0):
 """
 import os
 import socket
-socket.setdefaulttimeout(30)
+socket.setdefaulttimeout(15)   # 🆕 v17.2: timeout ngắn (30 -> 15) để mã lỗi bị bỏ qua nhanh
 
+import glob               # 🆕 v17.2
 import signal
 import sys
 import time
@@ -208,16 +223,8 @@ except ImportError:
     os.system("pip install yfinance --quiet")
     import yfinance as yf
 
-# 🆕 v17.1: vnstock — nguồn bù QUÝ (cùng phong cách import như trên)
-try:
-    import vnstock as vns
-except ImportError:
-    print("⚙️ Đang cài đặt thư viện vnstock...")
-    os.system("pip install vnstock --quiet")
-    try:
-        import vnstock as vns
-    except ImportError:
-        vns = None
+# 🆕 v17.2: ĐÃ XOÁ khối tự động `pip install vnstock` (gây lỗi No matching distribution found for vnstock).
+#           Nguồn bù QUÝ nay là yfinance đa luồng (xem mục 9.5).
 
 # ==========================================
 # 🆕 1.5 SUPABASE INTEGRATION (GIỮ NGUYÊN 100%)
@@ -258,6 +265,9 @@ SUPABASE_PRIORITY = os.environ.get("SUPABASE_PRIORITY", "low").lower()
 PUSH_TO_SUPABASE = os.environ.get("PUSH_TO_SUPABASE", "false").lower() == "true"
 SUPABASE_ON_CONFLICT = os.environ.get("SUPABASE_ON_CONFLICT", "ticker,report_type,period_type,report_date,item_vn")
 
+# 🆕 v17.2: CÔNG TẮC TẮT NHÁNH VNDIRECT (BCTC + fallback giá/SLCP qua api-finfo). Mặc định = TẮT.
+SKIP_VNDIRECT = os.environ.get("SKIP_VNDIRECT", "true").strip().lower() in ("1", "true", "yes", "y")
+
 STANDARD_COLUMNS = [
     'Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành',
     'Loại báo cáo', 'Loại kỳ', 'Năm', 'Ngày kỳ',
@@ -279,7 +289,7 @@ EN_TO_VN_MAP = {v: k for k, v in VN_TO_EN_MAP.items()}
 
 PRIORITY_MAP = {
     'SUPABASE_HIGH': 0, 'DAILY': 1, 'VNDIRECT_BCTC': 2, 'VN_FINANCIAL': 2,
-    'INDICES': 2, 'VNSTOCK': 3, 'YFINANCE': 3, 'VNDIRECT': 3, 'VPS': 3, 'SUPABASE': 4,   # 🆕 thêm VNSTOCK
+    'INDICES': 2, 'YF_QUARTER': 3, 'YFINANCE': 3, 'VNDIRECT': 3, 'VPS': 3, 'SUPABASE': 4,   # 🆕 v17.2: VNSTOCK -> YF_QUARTER
 }
 
 _supabase_client = None
@@ -695,7 +705,7 @@ def format_value(x):
     if pd.isna(x): return None
     try:
         if isinstance(x, str):
-            x = x.replace(',', '').replace(' ')
+            x = x.replace(',', '').replace(' ', '')   # 🆕 v17.2: sửa .replace(' ') thiếu đối số (luôn lỗi -> trả None)
             if x.count('.') > 1: x = x.replace('.', '')
         val = float(x)
         if abs(val) > 1e18: return None   # 🆕 v17.1: 1e15 -> 1e18 (cứu Tổng tài sản ngân hàng ~2e15 VND)
@@ -808,12 +818,13 @@ session.headers.update({
     'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
 })
 
-# 🆕 v17.1 ===== ENGINE HTTP MỚI CHO VNDIRECT (thread-safe + retry + đổi domain) =====
+# 🆕 v17.1 ===== ENGINE HTTP CHO VNDIRECT (thread-safe) — 🆕 v17.2: CHỈ CHẠY KHI SKIP_VNDIRECT=false =====
 VND_HOSTS = ["https://finfo-api.vndirect.com.vn", "https://api-finfo.vndirect.com.vn"]
 VND_PAGE_SIZE = 1000
 VND_MAX_PAGES = 60
 VND_MIN_YEAR = 2000
 VND_REQ_INTERVAL = 0.15   # giãn cách request toàn cục (giây), chống 429
+VND_TIMEOUT = 8           # 🆕 v17.2: timeout ngắn (25 -> 8)
 
 _thread_local = threading.local()
 def get_session():
@@ -835,16 +846,17 @@ def _throttle():
 
 _vnd_host_idx = 0
 _vnd_lock = threading.Lock()
-def vnd_get(path, params, max_retries=4, label=""):
-    """GET VNDirect: retry backoff, tự xoay vòng 2 domain khi lỗi mạng/429/5xx."""
+def vnd_get(path, params, max_retries=1, label=""):
+    """GET VNDirect. 🆕 v17.2: mặc định 1 lần thử (KHÔNG retry 4 lần), lỗi là bỏ qua ngay."""
     global _vnd_host_idx
+    if SKIP_VNDIRECT: return None
     last_err = None
     for attempt in range(max_retries):
         with _vnd_lock:
             host = VND_HOSTS[_vnd_host_idx]
         _throttle()
         try:
-            r = get_session().get(host + path, params=params, timeout=25)
+            r = get_session().get(host + path, params=params, timeout=VND_TIMEOUT)
             if r.status_code == 200:
                 return r.json()
             if r.status_code in (400, 404, 422):   # lỗi truy vấn -> retry vô ích
@@ -854,12 +866,13 @@ def vnd_get(path, params, max_retries=4, label=""):
             last_err = type(e).__name__
         with _vnd_lock:
             _vnd_host_idx = (_vnd_host_idx + 1) % len(VND_HOSTS)
+        if attempt == max_retries - 1: break
         time.sleep(min(2 ** attempt, 8) + random.uniform(0, 0.5))
-    print(f"  ⚠️ [VND] {label}: bỏ cuộc sau {max_retries} lần ({last_err})")
+    print(f"  ⚠️ [VND] {label}: bỏ qua sau {max_retries} lần thử ({last_err})")
     return None
 
 # ==========================================
-# 6.1. VNDIRECT BCTC API — LẤY SẠCH LỊCH SỬ (🆕 VIẾT LẠI TOÀN BỘ)
+# 6.1. VNDIRECT BCTC API — 🆕 v17.2: VÔ HIỆU HOÁ MẶC ĐỊNH (SKIP_VNDIRECT=true)
 # ==========================================
 def _item_key(it):
     return it.get('id') or (it.get('reportDate'), it.get('itemCode'),
@@ -937,7 +950,8 @@ def _fetch_vnd_statement(symbol, stmt_code, report_type):
     return out
 
 def fetch_vndirect_bctc_financials(symbol):
-    """⭐ NGUỒN CHÍNH cho BCTC Quý + Năm — toàn bộ lịch sử, không dừng sớm."""
+    """⭐ (v17.2: TẮT MẶC ĐỊNH) Nguồn BCTC Quý + Năm từ VNDirect. Chỉ chạy khi SKIP_VNDIRECT=false."""
+    if SKIP_VNDIRECT: return []
     records = []
     company_name, sector_name = get_company_profile(symbol)
     statement_map = {
@@ -965,9 +979,10 @@ def fetch_vndirect_bctc_financials(symbol):
     return records
 
 # ==========================================
-# 6.2. FALLBACK Giá + SLCP (GIỮ NGUYÊN 100%)
+# 6.2. FALLBACK Giá + SLCP (GIỮ NGUYÊN; 🆕 v17.2: nhánh VNDirect bị chặn bởi SKIP_VNDIRECT)
 # ==========================================
 def fetch_vndirect_fallback(symbol):
+    if SKIP_VNDIRECT: return []   # 🆕 v17.2: không gọi api-finfo.vndirect.com.vn nữa
     records = []
     company_name, sector_name = get_company_profile(symbol)
     current_year = str(datetime.now().year)
@@ -1123,7 +1138,8 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     return records
 
 def fetch_market_indices():
-    indices = {"VN-INDEX": "^VNINDEX", "HNX-INDEX": "^HNX", "UPCOM-INDEX": "^UPCOM"}
+    # 🆕 v17.2: BỎ "UPCOM-INDEX": "^UPCOM" (Yahoo không có dữ liệu -> cảnh báo "symbol may be delisted")
+    indices = {"VN-INDEX": "^VNINDEX", "HNX-INDEX": "^HNX"}
     market_records = []
     current_year = str(datetime.now().year)
     today_str = datetime.today().strftime('%Y-%m-%d')
@@ -1219,79 +1235,62 @@ def process_single_ticker(symbol, category):
     return recs
 
 # ==========================================
-# 9.5. 🆕 VNSTOCK — BÙ QUÝ (KHỐI THÊM MỚI, gọi trong BƯỚC 5 sẵn có)
+# 9.5. 🆕 v17.2 — BÙ BCTC QUÝ BẰNG YFINANCE ĐA LUỒNG (thay khối vnstock đã xoá)
+#      Không retry; mã lỗi/chậm bị bỏ qua ngay; vnfinancialdata chỉ có kỳ NĂM nên không dùng cho quý.
 # ==========================================
-_Q_COL     = re.compile(r'^\s*(\d{4})\s*[-/ ]\s*Q([1-4])\s*$', re.I)
-_Q_COL_ALT = re.compile(r'^\s*Q([1-4])\s*[-/]\s*(\d{4})\s*$', re.I)
+QUARTER_WORKERS = 8            # số luồng
+QUARTER_TICKER_BUDGET = 20     # giây tối đa / mã (quá hạn là bỏ các báo cáo còn lại của mã đó)
+QUARTER_TOTAL_BUDGET = 600     # giây tối đa cho cả đợt bù quý
+QUARTER_MIN_PERIODS = 4        # mã có < 4 kỳ quý khác nhau thì bị coi là thiếu quý
 
-def _col_to_period(col):
-    s = str(col).strip()
-    m = _Q_COL.match(s)
-    if m: return m.group(1), f"{m.group(1)}-Q{m.group(2)}"
-    m = _Q_COL_ALT.match(s)
-    if m: return m.group(2), f"{m.group(2)}-Q{m.group(1)}"
-    return None, None
-
-def parse_vnstock_df(symbol, df, stmt_vn):
-    """Nhận cả 2 bố cục: long (period/name/value) và wide (cột là kỳ 'YYYY-Qn')."""
+def fetch_yf_quarter_single(symbol):
+    """1 mã: quarterly_balance_sheet / quarterly_income_stmt / quarterly_cashflow. Lỗi -> bỏ qua ngay."""
     recs = []
-    if df is None or df.empty: return recs
-    company_name, sector_name = get_company_profile(symbol)
-    low = {str(c).lower(): c for c in df.columns}
-
-    def _add(metric, val, year, period):
-        fv = format_value(val)
-        mv = clean_text(metric)
-        if fv is None or fv == 0 or not mv or not period: return
-        recs.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name,
-                     'Loại báo cáo': stmt_vn, 'Loại kỳ': 'Quý', 'Năm': year, 'Ngày kỳ': period,
-                     'Chỉ tiêu tiếng Việt': mv, 'Giá trị': fv})
-
-    pcol = low.get('period') or low.get('report_period')
-    vcol = low.get('value') or low.get('item_value')
-    ncol = low.get('name') or low.get('item_name')
-    if pcol and vcol and ncol:                                   # LONG (vnstock thế hệ 6)
-        for p, n, v in zip(df[pcol], df[ncol], df[vcol]):
-            year, period = _col_to_period(p)
-            _add(n, v, year, period)
+    t0 = time.monotonic()
+    try:
+        ticker = yf.Ticker(f"{symbol}.VN")   # không truyền session: tương thích mọi phiên bản yfinance
+    except Exception:
         return recs
-
-    if isinstance(df.index, pd.RangeIndex):                      # WIDE (VCI thế hệ 3-5)
-        mcol = next((low[c] for c in ('chỉ tiêu', 'item', 'name', 'metric', 'index') if c in low), None)
-        if mcol is None: return recs
-        df = df.set_index(mcol)
-    for col in df.columns:
-        year, period = _col_to_period(col)
-        if not period: continue
-        for metric, val in df[col].items():
-            _add(metric, val, year, period)
-    return recs
-
-def fetch_vnstock_quarter(symbol):
-    if vns is None: return []
-    recs = []
-    for method, stmt_vn in (('balance_sheet', 'Bảng cân đối kế toán'),
-                            ('income_statement', 'Báo cáo kết quả kinh doanh'),
-                            ('cash_flow', 'Báo cáo lưu chuyển tiền tệ')):
-        df = None
-        try:   # thế hệ 6: Fundamental + nguồn fhsc, bảng dọc
-            F = getattr(vns, 'Fundamental', None)
-            if F is not None:
-                df = getattr(F().equity(symbol), method)(period='quarter', lang='vi',
-                                                         format='long', source='fhsc')
-        except Exception:
-            df = None
-        if df is None or getattr(df, 'empty', True):
-            try:   # thế hệ 3-5: Finance VCI, bảng ngang
-                Fin = getattr(vns, 'Finance', None)
-                if Fin is not None:
-                    df = getattr(Fin(symbol=symbol, source='VCI', period='quarter', get_all=True), method)()
-            except Exception:
-                df = None
+    for attr, raw in (('quarterly_balance_sheet', 'Balance_Sheet'),
+                      ('quarterly_income_stmt', 'Income_Statement'),
+                      ('quarterly_cashflow', 'Cash_Flow')):
+        if time.monotonic() - t0 > QUARTER_TICKER_BUDGET:
+            break
         try:
-            recs.extend(parse_vnstock_df(symbol, df, stmt_vn))
-        except Exception: pass
+            df = getattr(ticker, attr, None)
+        except Exception:
+            break   # lỗi mạng / mã lỗi -> bỏ qua mã này ngay, không thử lại
+        try:
+            recs.extend(parse_financial_df(symbol, df, raw, 'Quý'))
+        except Exception:
+            pass
     return recs
+
+def fetch_quarter_multithread(symbols):
+    """Chạy ThreadPoolExecutor(max_workers=8). Trả về list bản ghi quý của tất cả mã."""
+    all_recs = []
+    if not symbols: return all_recs
+    total = len(symbols)
+    done = 0
+    executor = ThreadPoolExecutor(max_workers=QUARTER_WORKERS)
+    futures = {executor.submit(fetch_yf_quarter_single, s): s for s in symbols}
+    try:
+        for future in as_completed(futures, timeout=QUARTER_TOTAL_BUDGET):
+            done += 1
+            sym = futures[future]
+            try:
+                res = future.result()
+                if res:
+                    all_recs.extend(res)
+                    if done % 20 == 0 or done == total:
+                        print(f"  ✓ [{done}/{total}] {sym}: +{len(res):,} dòng quý")
+            except Exception:
+                pass   # lỗi mã nào bỏ qua mã đó
+    except Exception as e:
+        print(f"  ⚠️ Hết ngân sách thời gian bù quý ({type(e).__name__}) — dùng phần đã cào được ({done}/{total}).")
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+    return all_recs
 
 # ==========================================
 # 10. CLEANING & SOURCE TRACKING (🆕 nâng cấp tại chỗ, giữ khung 5 tầng)
@@ -1313,6 +1312,10 @@ def apply_first_principles_cleaning(df):
     df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
     df = df[df['Giá trị'] != 0]   # 🆕 v17.1: lọc 0 TRƯỚC dedup (tránh số 0 đè số thật)
     df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
+    # 🆕 v17.2: loại dòng trống / chuỗi rỗng / 'NAN' / 'NONE'
+    df = df[~df['Mã chứng khoán'].isin(['', 'NAN', 'NONE', 'NULL'])]
+    df = df[df['Chỉ tiêu tiếng Việt'].astype(str).str.strip().ne('')]
+    df = df[~df['Chỉ tiêu tiếng Việt'].astype(str).str.strip().str.lower().isin(['nan', 'none', 'null'])]
     print(f"  [Tầng 1] Loại bỏ NULL/0 & ép kiểu Float. Còn {len(df):,} dòng.")
     
     df['Chỉ tiêu tiếng Việt'] = df.apply(lambda row: standardize_metric(row['Chỉ tiêu tiếng Việt'], row['Loại báo cáo']), axis=1)
@@ -1351,21 +1354,27 @@ def apply_first_principles_cleaning(df):
     print("  [Tầng 5] Loại bỏ các dòng trắng (Giá trị = 0) & Format số liệu...")
     df = df[df['Giá trị'] != 0]
 
-    def safe_format(x):
-        try:
-            if pd.isna(x): return ""
-            f = float(x)
-            if f == 0: return ""
-            if f.is_integer(): return str(int(f))
-            return str(round(f, 4))
-        except (ValueError, TypeError):
-            return ""
-            
-    df['Giá trị'] = df['Giá trị'].apply(safe_format)
-    df = df[df['Giá trị'] != ""]
-    
+    # 🆕 v17.2: ép kiểu số chuẩn — số nguyên -> int64 (không đuôi .0), số thập phân bỏ số 0 thừa ở cuối
+    vals = pd.to_numeric(df['Giá trị'], errors='coerce').round(4)
+    keep = vals.notna() & np.isfinite(vals) & (vals != 0)
+    df = df.loc[keep].copy()
+    vals = vals.loc[keep]
+    if df.empty:
+        return pd.DataFrame(columns=STANDARD_COLUMNS)
+    is_int = vals.eq(vals.round(0))
+    fmt = pd.Series('', index=df.index, dtype=object)
+    if is_int.any():
+        fmt.loc[is_int] = vals.loc[is_int].astype('int64').astype(str)
+    if (~is_int).any():
+        fmt.loc[~is_int] = vals.loc[~is_int].map(lambda f: format(f, '.4f').rstrip('0').rstrip('.'))
+    df['Giá trị'] = fmt
+    df = df[df['Giá trị'].astype(str).str.strip().ne('')]
+
+    # 🆕 v17.2: tự điền 'Năm' từ 'Ngày kỳ' nếu thiếu (còn thiếu nữa mới dùng năm hiện tại)
     if 'Năm' in df.columns:
-        df['Năm'] = pd.to_numeric(df['Năm'], errors='coerce').fillna(datetime.now().year).astype(int)
+        nam = pd.to_numeric(df['Năm'], errors='coerce')
+        nam_tu_ngay = pd.to_numeric(df['Ngày kỳ'].astype(str).str.extract(r'(\d{4})')[0], errors='coerce')
+        df['Năm'] = nam.fillna(nam_tu_ngay).fillna(datetime.now().year).astype(int)
         
     print(f"  [Tầng 5] ✅ Đã xóa dòng trắng. Còn {len(df):,} dòng.")
     return df[STANDARD_COLUMNS]
@@ -1383,20 +1392,38 @@ def export_coverage_report(df, tickers):
     rep['so_dong_nam'] = g.get('Năm', pd.Series(dtype=int)).reindex(rep.index).fillna(0).astype(int)
     rep = rep.sort_values('so_ky_quy').reset_index()
     rep.to_csv('data/_coverage_report.csv', index=False, encoding='utf-8-sig')
-    weak = rep[rep['so_ky_quy'] < 20]
-    print(f"  📋 Coverage: {len(rep) - len(weak)}/{len(rep)} mã có ≥ 20 kỳ quý.")
+    weak = rep[rep['so_ky_quy'] < QUARTER_MIN_PERIODS]   # 🆕 v17.2: ngưỡng 20 -> QUARTER_MIN_PERIODS (yfinance chỉ có vài quý)
+    print(f"  📋 Coverage: {len(rep) - len(weak)}/{len(rep)} mã có ≥ {QUARTER_MIN_PERIODS} kỳ quý.")
     if not weak.empty:
         print("  ⚠️ Mã thiếu quý:", ", ".join(f"{r.ticker}({r.so_ky_quy})" for r in weak.itertuples()))
     return rep
 
+# 🆕 v17.2: dọn sạch file tạm
+def _cleanup_temp_files():
+    targets = ['data/_checkpoint.csv', 'data/_emergency_backup.csv', 'data/_emergency_backup.parquet',
+               '_checkpoint.csv']
+    for pattern in ('data/bao_cao_*.csv', 'bao_cao_*.csv', 'du_lieu/bao_cao_*.csv'):
+        targets.extend(glob.glob(pattern))
+    removed = 0
+    for f in targets:
+        if os.path.exists(f):
+            try:
+                os.remove(f)
+                removed += 1
+            except Exception:
+                pass
+    if removed:
+        print(f"  🧽 Đã dọn {removed} file tạm.")
+
 # ==========================================
-# 11. MAIN (GIỮ NGUYÊN KHUNG BƯỚC 0->8, chỉ vá 3 điểm 🆕)
+# 11. MAIN (GIỮ NGUYÊN KHUNG BƯỚC 0->8, chỉ vá các điểm 🆕)
 # ==========================================
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v17.1 (GIỮ KHUNG — FULL QUÝ)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v17.2 (GIỮ KHUNG — QUÝ YFINANCE ĐA LUỒNG)")
     print("=" * 62)
+    print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT}")
 
     ticker_market_map = load_176_master_tickers()
     all_master_records = []
@@ -1439,28 +1466,31 @@ def main():
     index_recs = fetch_market_indices()
     if index_recs: _accumulate(index_recs, 'INDICES')
 
-    # BƯỚC 3 — VNDIRECT BCTC
-    print(f"\n⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        futures = {executor.submit(fetch_vndirect_bctc_financials, symbol): symbol for symbol in ticker_market_map.keys()}
-        done = 0
-        for future in as_completed(futures):
-            done += 1
-            sym = futures[future]
-            try:
-                res = future.result()
-                if res:
-                    _accumulate(res, 'VNDIRECT_BCTC')
-                    # 🆕 v17.1: log độ phủ quý từng mã để phát hiện dừng sớm
-                    nq = len({r['Ngày kỳ'] for r in res if r['Loại kỳ'] == 'Quý'})
-                    print(f"  ✓ [{done}/{len(ticker_market_map)}] {sym}: {nq} kỳ Quý | {len(res):,} dòng")
-                else:
-                    print(f"  ✗ [{done}/{len(ticker_market_map)}] {sym}: 0 dòng")
-            except Exception as e:
-                print(f"  ✗ {sym}: {type(e).__name__}: {e}")
-            if done % 25 == 0:
-                _save_checkpoint(f"VNDIRECT_{done}/{len(ticker_market_map)}")
-    _save_checkpoint("sau_VNDIRECT_BCTC")
+    # BƯỚC 3 — VNDIRECT BCTC (🆕 v17.2: mặc định BỎ QUA)
+    if SKIP_VNDIRECT:
+        print("\n⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
+    else:
+        print(f"\n⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(fetch_vndirect_bctc_financials, symbol): symbol for symbol in ticker_market_map.keys()}
+            done = 0
+            for future in as_completed(futures):
+                done += 1
+                sym = futures[future]
+                try:
+                    res = future.result()
+                    if res:
+                        _accumulate(res, 'VNDIRECT_BCTC')
+                        # 🆕 v17.1: log độ phủ quý từng mã để phát hiện dừng sớm
+                        nq = len({r['Ngày kỳ'] for r in res if r['Loại kỳ'] == 'Quý'})
+                        print(f"  ✓ [{done}/{len(ticker_market_map)}] {sym}: {nq} kỳ Quý | {len(res):,} dòng")
+                    else:
+                        print(f"  ✗ [{done}/{len(ticker_market_map)}] {sym}: 0 dòng")
+                except Exception as e:
+                    print(f"  ✗ {sym}: {type(e).__name__}: {e}")
+                if done % 25 == 0:
+                    _save_checkpoint(f"VNDIRECT_{done}/{len(ticker_market_map)}")
+        _save_checkpoint("sau_VNDIRECT_BCTC")
 
     # BƯỚC 4 — Yfinance backup
     print(f"\n🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
@@ -1478,24 +1508,20 @@ def main():
     df_temp = pd.DataFrame(all_master_records)
 
     if not df_temp.empty:
-        q_counts = df_temp[df_temp['Loại kỳ'] == 'Quý'].groupby('Mã chứng khoán').size()
-        q_syms = set(q_counts[q_counts >= 20].index)
-        print(f"  📊 Đã có {len(q_syms)}/{len(ticker_market_map)} mã có ≥ 20 kỳ Quý.")
+        # 🆕 v17.2: đếm số KỲ QUÝ khác nhau mỗi mã (yfinance chỉ có vài quý nên ngưỡng 20 dòng không còn hợp lý)
+        q_periods = df_temp[df_temp['Loại kỳ'] == 'Quý'].groupby('Mã chứng khoán')['Ngày kỳ'].nunique()
+        q_syms = set(q_periods[q_periods >= QUARTER_MIN_PERIODS].index)
+        print(f"  📊 Đã có {len(q_syms)}/{len(ticker_market_map)} mã có ≥ {QUARTER_MIN_PERIODS} kỳ Quý.")
 
-        # 🆕 v17.1: dùng chính q_syms ở trên -> bù QUÝ bằng vnstock cho mã thiếu
+        # 🆕 v17.2: bù QUÝ bằng yfinance đa luồng (8 luồng, timeout ngắn, không retry)
         missing_q = [s for s in ticker_market_map.keys() if s not in q_syms]
-        if missing_q and vns is not None:
-            print(f"  🩹 {len(missing_q)} mã thiếu Quý. Bù bằng vnstock...")
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                futures = {executor.submit(fetch_vnstock_quarter, s): s for s in missing_q}
-                for future in as_completed(futures):
-                    try:
-                        res = future.result()
-                        if res:
-                            _accumulate(res, 'VNSTOCK')
-                            print(f"  ✓ {futures[future]}: +{len(res):,} dòng quý")
-                    except Exception: pass
-            _save_checkpoint("sau_VNSTOCK_BU_QUY")
+        if missing_q:
+            print(f"  🩹 {len(missing_q)} mã thiếu Quý. Bù bằng yfinance đa luồng ({QUARTER_WORKERS} luồng)...")
+            q_recs = fetch_quarter_multithread(missing_q)
+            if q_recs:
+                _accumulate(q_recs, 'YF_QUARTER')
+                print(f"  ✅ Bù quý xong: +{len(q_recs):,} dòng.")
+            _save_checkpoint("sau_YF_QUARTER_BU_QUY")
 
         prices = df_temp[(df_temp['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại') & (pd.to_numeric(df_temp['Giá trị'], errors='coerce') > 0)]
         symbols_with_price = set(prices['Mã chứng khoán'].unique()) if not prices.empty else set()
@@ -1537,10 +1563,7 @@ def main():
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     parquet_path = 'data/vietnam_stock_database.parquet'
 
-    for f in ['data/_checkpoint.csv', 'data/_emergency_backup.csv', 'data/_emergency_backup.parquet']:
-        if os.path.exists(f):
-            try: os.remove(f)
-            except: pass
+    _cleanup_temp_files()   # 🆕 v17.2: dọn _checkpoint.csv, _emergency_backup.*, bao_cao_*.csv
 
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
@@ -1556,6 +1579,8 @@ def main():
     if PUSH_TO_SUPABASE:
         print("\n📤 BƯỚC 8: Đẩy Supabase...")
         upsert_to_supabase(df_clean)
+
+    _cleanup_temp_files()   # 🆕 v17.2: dọn lần cuối trước khi kết thúc
 
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng: {len(df_clean):,} dòng")
