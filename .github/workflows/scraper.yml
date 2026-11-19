@@ -1,12 +1,11 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v19.0 (2026 Optimized)
+# Financial Data Scraper Pipeline — v19.1 (yfinance Priority)
 # ============================================================================
+# ✅ Ưu tiên yfinance + vnstock + vnfinancialdata
 # ✅ Python 3.12 + cache pip chuẩn
-# ✅ Thư viện mới: vnstock + vnfinancialdata + httpx
 # ✅ Validation schema + null ratio + số mã tối thiểu
 # ✅ Git auto-commit an toàn
-# ✅ Supabase batch vectorized (không dùng iterrows)
-# ✅ HuggingFace upload fail-fast
+# ✅ Supabase batch vectorized
 # ============================================================================
 name: Financial Data Scraper Pipeline
 
@@ -37,16 +36,17 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'                    # Cache chuẩn của setup-python
+          cache: 'pip'
           cache-dependency-path: |
             requirements.txt
             **/requirements*.txt
 
-      - name: Install Dependencies
+      - name: Install Dependencies (ưu tiên yfinance)
         run: |
           set -e
           python -m pip install --upgrade pip
           pip install --no-cache-dir \
+            "yfinance>=0.2.40" \
             "pandas>=2.2" \
             "numpy>=1.26" \
             "pyarrow>=16" \
@@ -57,45 +57,58 @@ jobs:
             "vnstock>=3.2" \
             "vnfinancialdata>=0.1.2" \
             "openpyxl>=3.1" \
-            "tqdm>=4.66"
+            "tqdm>=4.66" \
+            "cloudscraper>=1.2.71"
 
       # ==========================================
-      # 1. Diagnostic nhanh các nguồn
+      # 1. Diagnostic các nguồn (có yfinance)
       # ==========================================
-      - name: Diagnostic Sources
+      - name: Diagnostic Sources (yfinance first)
         run: |
           python -c "
-          import httpx, sys
-          print('=== DIAGNOSTIC ===')
+          import yfinance as yf
+          import httpx
+          print('=== DIAGNOSTIC SOURCES ===')
+          
+          # 1. Test yfinance (ưu tiên)
+          try:
+              ticker = yf.Ticker('VNM.VN')
+              hist = ticker.history(period='5d')
+              print(f'✅ yfinance OK - VNM.VN rows: {len(hist)}')
+          except Exception as e:
+              print(f'⚠️ yfinance error: {e}')
+          
+          # 2. Test VNDirect
           try:
               r = httpx.get('https://api-finfo.vndirect.com.vn/v4/stocks?q=code:ACB', timeout=12)
-              print(f'VNDirect: {r.status_code}')
+              print(f'VNDirect status: {r.status_code}')
           except Exception as e:
               print(f'VNDirect error: {e}')
-          print('vnstock + vnfinancialdata installed OK')
+          
+          print('vnstock + vnfinancialdata + yfinance đã cài đặt')
           "
 
       # ==========================================
-      # 2. Chạy engine chính
+      # 2. Chạy FINEX Engine
       # ==========================================
       - name: Run FINEX Engine
         env:
           VNSTOCK_API_KEY: ${{ secrets.VNSTOCK_API_KEY }}
           SKIP_VNDIRECT: "true"
           PUSH_TO_SUPABASE: "false"
+          USE_YFINANCE: "true"          # Bật ưu tiên yfinance
           PYTHONUNBUFFERED: "1"
         run: |
           set -e
-          echo "🚀 Starting FINEX Engine..."
-          # timeout 80 phút (để còn buffer)
+          echo "🚀 Starting FINEX Engine (ưu tiên yfinance)..."
           timeout 4800 python main.py || {
-            echo "⚠️ Engine timeout hoặc lỗi. Kiểm tra log phía trên."
+            echo "⚠️ Engine timeout hoặc lỗi. Kiểm tra log."
             exit 1
           }
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 3. Verify chất lượng dữ liệu (nâng cao)
+      # 3. Verify chất lượng dữ liệu
       # ==========================================
       - name: Verify Data Quality
         run: |
@@ -150,7 +163,6 @@ jobs:
           commit_user_name: github-actions[bot]
           commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
           commit_options: "--no-verify"
-          skip_dirty_check: false
 
       # ==========================================
       # 5. Upload HuggingFace
@@ -162,7 +174,7 @@ jobs:
           set -e
           python -c "
           from huggingface_hub import HfApi
-          import os, sys
+          import os
 
           api = HfApi(token=os.environ['HF_TOKEN'])
           file_path = 'data/vietnam_stock_database.parquet'
@@ -180,7 +192,7 @@ jobs:
           "
 
       # ==========================================
-      # 6. Đồng bộ Supabase (vectorized + batch)
+      # 6. Đồng bộ Supabase (vectorized)
       # ==========================================
       - name: Sync to Supabase
         env:
@@ -199,7 +211,6 @@ jobs:
 
           df = pd.read_csv('data/vietnam_stock_database_tong_hop.csv', low_memory=False)
 
-          # Rename chuẩn
           col_map = {
               'Mã chứng khoán': 'ticker',
               'Tên doanh nghiệp': 'company_name',
@@ -213,7 +224,6 @@ jobs:
           }
           df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
 
-          # Làm sạch vectorized
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
@@ -252,6 +262,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v19.0 — HOÀN TẤT"
+          echo "  FINEX Pipeline v19.1 (yfinance Priority)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
