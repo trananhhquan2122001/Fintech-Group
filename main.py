@@ -1,5 +1,5 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v20.0 (TRIỆT ĐỂ TIẾNG ANH: CỔNG DỊCH DUY NHẤT 5 TẦNG CHẶN)
+FINEX VN STOCK DATABASE CRAWLER - v19.0 (TRIỆT ĐỂ TIẾNG ANH: CỔNG DỊCH DUY NHẤT 5 TẦNG CHẶN)
 ================================================================================
 Changelog v19.0 (vá triệt để trên khung gốc, giữ nguyên 11 mục + BƯỚC 0->8):
   ✅ FIX GỐC "đầu file tiếng Việt, cuối file toàn tiếng Anh":
@@ -50,7 +50,17 @@ from requests.adapters import HTTPAdapter
 _ALL_RECORDS_GLOBAL = []
 
 def _emergency_save(signum, frame):
-    print(f"\n⚠️ SIGTERM ({signum})! Không ghi file phụ; chỉ giữ 2 file đầu ra chính.")
+    print(f"\n⚠️ SIGTERM ({signum})! Lưu khẩn cấp...")
+    try:
+        if _ALL_RECORDS_GLOBAL:
+            df = pd.DataFrame(_ALL_RECORDS_GLOBAL)
+            os.makedirs('data', exist_ok=True)
+            df.to_csv('data/_emergency_backup.csv', index=False, encoding='utf-8-sig')
+            df.to_parquet('data/_emergency_backup.parquet', engine='pyarrow', index=False)
+            q = len(df[df.get('Loại kỳ') == 'Quý']) if 'Loại kỳ' in df.columns else 0
+            print(f"  ✅ Đã lưu {len(df):,} dòng (Quý: {q:,})!")
+    except Exception as e:
+        print(f"  ❌ Lưu khẩn cấp lỗi: {e}")
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, _emergency_save)
@@ -421,49 +431,6 @@ def force_vietnamese_label(metric, report_type):
         std = t
     return std
 
-def normalize_period_vietnamese(value):
-    """Chuẩn hóa nhãn kỳ tiếng Anh/biến thể quý về tiếng Việt; không giữ nhãn lạ."""
-    if value is None:
-        return None
-    try:
-        if pd.isna(value): return None
-    except (TypeError, ValueError): pass
-    s = clean_text(value).strip()
-    low = s.lower().replace('_', ' ').replace('-', ' ')
-    low = re.sub(r'\s+', ' ', low)
-    mappings = {
-        'quarter': 'Quý', 'quarterly': 'Quý', 'q': 'Quý',
-        'year': 'Năm', 'annual': 'Năm', 'annually': 'Năm', 'yearly': 'Năm',
-        'ttm': '12 tháng gần nhất', 'trailing twelve months': '12 tháng gần nhất',
-        'real time': 'Real-time', 'realtime': 'Real-time', 'daily': 'Ngày',
-        'month': 'Tháng', 'monthly': 'Tháng', 'half year': '6 tháng',
-        'semi annual': '6 tháng', 'semiannual': '6 tháng'
-    }
-    if low in mappings: return mappings[low]
-    if re.search(r'(?<!\d)(?:q[1-4]|[1-4]q|quarter\s*[1-4]|quý\s*[1-4])(?!\d)', low) or re.search(r'\d{4}\s*q[1-4]', low):
-        return 'Quý'
-    if re.fullmatch(r'\d{4}', low): return 'Năm'
-    if _looks_english(s): return None
-    return s if s else None
-
-def normalize_report_vietnamese(value):
-    if value is None: return None
-    try:
-        if pd.isna(value): return None
-    except (TypeError, ValueError): pass
-    s = clean_text(value).strip()
-    low = s.lower()
-    report_map = {
-        'balance sheet': 'Bảng cân đối kế toán', 'balance_sheet': 'Bảng cân đối kế toán',
-        'financial position': 'Bảng cân đối kế toán',
-        'income statement': 'Báo cáo kết quả hoạt động kinh doanh', 'income_stmt': 'Báo cáo kết quả hoạt động kinh doanh',
-        'financials': 'Báo cáo kết quả hoạt động kinh doanh',
-        'cash flow': 'Báo cáo lưu chuyển tiền tệ', 'cash_flow': 'Báo cáo lưu chuyển tiền tệ',
-        'cashflow': 'Báo cáo lưu chuyển tiền tệ', 'cash flow statement': 'Báo cáo lưu chuyển tiền tệ',
-        'market indices': 'Chỉ số thị trường', 'indices': 'Chỉ số thị trường'
-    }
-    return report_map.get(low, TRANSLATION_MAP.get(s, s))
-
 def sweep_labels(df, label_col='Chỉ tiêu tiếng Việt', type_col='Loại báo cáo'):
     """🆕 v19.0: quét lại TOÀN BỘ dataframe, đổi nhãn Anh -> Việt, bỏ nhãn không dịch được."""
     if df is None or df.empty:
@@ -471,13 +438,7 @@ def sweep_labels(df, label_col='Chỉ tiêu tiếng Việt', type_col='Loại b�
     before = len(df)
     df = df.copy()
     df[label_col] = [force_vietnamese_label(m, rt) for m, rt in zip(df[label_col], df[type_col])]
-    if 'Loại kỳ' in df.columns:
-        df['Loại kỳ'] = df['Loại kỳ'].map(normalize_period_vietnamese)
-    if 'Loại báo cáo' in df.columns:
-        df['Loại báo cáo'] = df['Loại báo cáo'].map(normalize_report_vietnamese)
     df = df.dropna(subset=[label_col])
-    if 'Loại kỳ' in df.columns:
-        df = df.dropna(subset=['Loại kỳ'])
     df = df[df[label_col].astype(str).str.strip().ne('')]
     return df, before - len(df)
 
@@ -1984,9 +1945,6 @@ def apply_first_principles_cleaning(df):
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
     df = df.copy()
-    df['Loại kỳ'] = df['Loại kỳ'].map(normalize_period_vietnamese)
-    df['Loại báo cáo'] = df['Loại báo cáo'].map(normalize_report_vietnamese)
-    df = df.dropna(subset=['Loại kỳ', 'Loại báo cáo'])
     df['Giá trị'] = pd.to_numeric(df['Giá trị'].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
     df = df[df['Giá trị'] != 0]
@@ -2063,7 +2021,7 @@ def export_coverage_report(df, tickers):
     rep['so_dong_quy'] = g.get('Quý', pd.Series(dtype=int)).reindex(rep.index).fillna(0).astype(int)
     rep['so_dong_nam'] = g.get('Năm', pd.Series(dtype=int)).reindex(rep.index).fillna(0).astype(int)
     rep = rep.sort_values('so_ky_quy').reset_index()
-    # Coverage chỉ hiển thị trên log; không ghi file phụ.
+    rep.to_csv('data/_coverage_report.csv', index=False, encoding='utf-8-sig')
     weak = rep[rep['so_ky_quy'] < QUARTER_MIN_PERIODS]
     print(f"  📋 Coverage: {len(rep) - len(weak)}/{len(rep)} mã có ≥ {QUARTER_MIN_PERIODS} kỳ quý.")
     if not weak.empty:
@@ -2092,7 +2050,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v20.0 (TRIỆT ĐỂ TIẾNG ANH TOÀN FILE)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v19.0 (TRIỆT ĐỂ TIẾNG ANH TOÀN FILE)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE_SUPABASE_BAD = {PURGE_SUPABASE_BAD}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
@@ -2120,8 +2078,15 @@ def main():
         _ALL_RECORDS_GLOBAL = all_master_records
 
     def _save_checkpoint(label):
-        # Không tạo file checkpoint ngoài 2 file đích theo yêu cầu.
-        print(f"  ℹ️ [CKPT:{label}] bỏ ghi file phụ.")
+        if not all_master_records: return
+        try:
+            os.makedirs('data', exist_ok=True)
+            df_tmp = pd.DataFrame(all_master_records)
+            df_tmp.to_csv('data/_checkpoint.csv', index=False, encoding='utf-8-sig')
+            q = len(df_tmp[df_tmp['Loại kỳ'] == 'Quý']) if 'Loại kỳ' in df_tmp.columns else 0
+            print(f"  💾 [CKPT:{label}] {len(df_tmp):,} dòng (Quý: {q:,})")
+        except Exception as e:
+            print(f"  ⚠️ CKPT fail: {e}")
 
     # BƯỚC 0
     print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày [DAILY]...")
@@ -2240,29 +2205,19 @@ def main():
 
     # BƯỚC 7
     os.makedirs('data', exist_ok=True)
-    csv_path = os.path.join('data', 'vietnam_stock_database_tong_hop.csv')
-    parquet_path = os.path.join('data', 'vietnam_stock_database.parquet')
+    csv_path = 'data/vietnam_stock_database_tong_hop.csv'
+    parquet_path = 'data/vietnam_stock_database.parquet'
 
     _cleanup_temp_files()
 
-    # Chốt cuối: chỉ dữ liệu chuẩn, tiếng Việt ở nhãn kỳ/báo cáo, đúng schema.
-    df_clean = df_clean[STANDARD_COLUMNS].copy()
-    df_clean['Loại kỳ'] = df_clean['Loại kỳ'].map(normalize_period_vietnamese)
-    df_clean['Loại báo cáo'] = df_clean['Loại báo cáo'].map(normalize_report_vietnamese)
-    df_clean = df_clean.dropna(subset=['Loại kỳ', 'Loại báo cáo', 'Chỉ tiêu tiếng Việt'])
-    df_clean = df_clean[df_clean['Chỉ tiêu tiếng Việt'].map(lambda x: not _looks_english(str(x)))]
-    df_clean = df_clean[df_clean['Loại kỳ'].astype(str).str.strip().ne('')]
-    df_clean = df_clean.drop_duplicates(
-        subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'],
-        keep='first'
-    )
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
     print(f"\n💾 ĐÃ LƯU FILE:")
     print(f"   → CSV:     {csv_path}")
     print(f"   → PARQUET: {parquet_path} ({os.path.getsize(parquet_path)/1024/1024:.2f} MB)")
 
-    # Không ghi coverage/report hay bất kỳ file phụ nào; chỉ 2 file database bên dưới.
+    if not df_clean.empty:
+        export_coverage_report(df_clean, set(ticker_market_map.keys()))
 
     # BƯỚC 8
     if PUSH_TO_SUPABASE:
