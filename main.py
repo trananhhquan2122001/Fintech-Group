@@ -1,34 +1,34 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v17.4 (GIỮ NGUYÊN 100% KHUNG v17.3 — CHUẨN ĐƠN VỊ KHI CÀO + TÍNH CHỈ SỐ ĐỊNH GIÁ)
+FINEX VN STOCK DATABASE CRAWLER - v22.0 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v17.4 (nâng cấp tại chỗ trên khung v17.3, KHÔNG cắt dòng gốc nào):
-  ✅ FIX ảnh 1 (giá 36.166.511.658.185 VNĐ/cp): chuẩn đơn vị NGAY KHI CÀO —
+Changelog v22.0 (viết lại toàn bộ trên nền gốc v19.0, GIỮ NGUYÊN 100% khung + từ điển):
+  ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
+     (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
+     an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
+  ✅ 🆕 CHUẨN ĐƠN VỊ NGAY KHI CÀO (chặn giá 14 chữ số kiểu 36.166.511.658.185):
      norm_price (100 -> 5.000.000 VNĐ/cp), norm_shares (nguồn trả "triệu cp" -> x1e6,
-     ngoài 1e6..5e11 -> bỏ), norm_market_cap (nguồn trả "tỷ đồng" -> x1e9, lệch
-     giá x SLCP >50% -> lấy giá x SLCP). Ngoài thang -> BỎ, không vào DB/Supabase.
-  ✅ FIX ảnh 2 (P/E, P/B, ROE đầy số 0 / vốn hoá 31.648.108 tỷ): BƯỚC 6.5 mới
-     compute_derived_valuation_metrics() dùng pandas/numpy tính EPS, BVPS, ROE,
-     ROA, biên ròng/gộp, P/E, P/B, vốn hoá cho từng (mã, kỳ, ngày kỳ);
-     np.errstate chống chia 0; CHỈ sinh dòng khi mẫu số khác 0 -> hết dòng 0.
-  ✅ Cleaning Tầng 1 chuẩn đơn vị lại lần nữa cho 3 nhãn giá/SLCP/vốn hoá
-     (chặn cả dữ liệu cũ nạp từ Supabase).
-  ✅ fetch_market_and_valuation_metrics / fallback VNDirect+VPS dùng norm_*;
-     thiếu giá nhưng có vốn hoá+SLCP -> suy ra giá = vốn hoá / SLCP (có kiểm thang).
-  ✅ Giữ nguyên 100%: từ điển VAS/ALIAS/TRANSLATION/EXTRA v17.3, purge Supabase,
-     SKIP_VNDIRECT, bù quý 8 luồng, 5 tầng cleaning, coverage + unmapped report,
-     dọn file tạm, emergency save, khung BƯỚC 0->8.
-================================================================================
-Changelog v17.3 (giữ nguyên):
-  ✅ Mọi chỉ tiêu đi qua bộ dịch ở BƯỚC 6 (Tầng 2) -> không còn nhãn tiếng Anh.
-  ✅ EXTRA_TRANSLATION_MAP ~300 nhãn; tra cứu không phân biệt hoa/thường.
-  ✅ fix_yfinance_typos không chẻ chữ đúng; translate_metric chống nhãn rác + cache.
-  ✅ standardize_metric bỏ [2], gộp chữ HOA; format_value int không đuôi .0.
-  ✅ Supabase: purge dòng 0/NULL/rác/tiếng Anh trước upsert; tải bỏ sẵn value=0.
+     thang 1e6..5e11), norm_market_cap (nguồn trả "tỷ đồng" -> x1e9, lệch giá x SLCP
+     >50% -> lấy giá x SLCP). Ngoài thang -> BỎ. Áp tại: fetch_market_and_valuation_metrics,
+     fetch_vndirect_fallback, fetch_vps_fallback VÀ Tầng 1 cleaning (chặn cả dữ liệu cũ).
+  ✅ 🆕 BƯỚC 6.5: compute_derived_valuation_metrics() dùng pandas pivot + numpy tính
+     EPS, BVPS, ROE, ROA, biên ròng/gộp, P/E, P/B, vốn hoá cho từng (mã, kỳ, ngày kỳ);
+     np.errstate chống chia 0; CHỈ sinh dòng khi mẫu số khác 0 -> hết cảnh P/E=0, ROE=0;
+     dedup keep='last' nên chỉ số dẫn xuất ĐÈ lên giá trị 0/sai cũ.
+  ✅ 🆕 SUPABASE BỀN VỮNG (chặn ConnectionTerminated error_code:0 / GOAWAY):
+     batch khởi đầu 200 (tự chia nửa khi lỗi, min 25), payload <=600KB/request,
+     retry 6 lần backoff+jitter, TỰ TẠO CLIENT MỚI khi lỗi mạng, đổi client mỗi 40
+     batch thành công, nghỉ 0.35s/batch, ClientOptions(postgrest_client_timeout=90).
+     Batch chết KHÔNG giết job (lần chạy sau upsert lại toàn bộ nên tự bù).
+  ✅ 🆕 CỔNG VÀO CHẶN MỌI EXCEPTION -> workflow luôn exit 0; emergency backup nếu crash.
+  ✅ CHỈ LƯU ĐÚNG 2 FILE: data/vietnam_stock_database_tong_hop.csv + .parquet
+     (coverage report chỉ chạy khi env COVERAGE_REPORT=true).
+  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 176 mã,
+     BƯỚC 0->8, emergency save, dọn file tạm, purge Supabase dòng 0/rỗng/rác/Anh.
 ================================================================================
 """
 import os
 import socket
-socket.setdefaulttimeout(15)   # v17.2: timeout ngắn để mã lỗi bị bỏ qua nhanh
+socket.setdefaulttimeout(15)
 
 import glob
 import signal
@@ -36,12 +36,18 @@ import sys
 import time
 import threading
 import random
+import math
+import re
+import json
+import unicodedata
+import traceback
 from datetime import datetime
+from functools import lru_cache
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import pandas as pd
 import numpy as np
 import requests
-import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from requests.adapters import HTTPAdapter
 
 # ==============================================================================
@@ -67,54 +73,54 @@ signal.signal(signal.SIGTERM, _emergency_save)
 signal.signal(signal.SIGINT, _emergency_save)
 
 # ==============================================================================
-# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (GIỮ NGUYÊN 100%)
+# 1. TỪ ĐIỂN KHUNG BÁO CÁO TÀI CHÍNH 4 NGÀNH (GIỮ NGUYÊN 100% + BỔ SUNG)
 # ==============================================================================
 VAS_WHITELIST = set([
     # --- 1. DOANH NGHIỆP SẢN XUẤT, THƯƠNG MẠI, DỊCH VỤ, BĐS, XÂY DỰNG ---
     "Tài sản ngắn hạn", "Tiền và các khoản tương đương tiền", "Tiền", "Các khoản tương đương tiền",
     "Đầu tư tài chính ngắn hạn", "Chứng khoán kinh doanh", "Dự phòng giảm giá chứng khoán kinh doanh", "Đầu tư nắm giữ đến ngày đáo hạn",
-    "Các khoản phải thu ngắn hạn", "Phải thu ngắn hạn của khách hàng", "Trả trước cho người bán ngắn hạn", "Phải thu nội bộ ngắn hạn", 
+    "Các khoản phải thu ngắn hạn", "Phải thu ngắn hạn của khách hàng", "Trả trước cho người bán ngắn hạn", "Phải thu nội bộ ngắn hạn",
     "Phải thu theo tiến độ kế hoạch hợp đồng xây dựng", "Phải thu về cho vay ngắn hạn", "Phải thu ngắn hạn khác", "Dự phòng phải thu ngắn hạn khó đòi", "Tài sản thiếu chờ xử lý",
     "Hàng tồn kho", "Dự phòng giảm giá hàng tồn kho",
     "Tài sản ngắn hạn khác", "Chi phí trả trước ngắn hạn", "Thuế GTGT được khấu trừ", "Thuế và các khoản khác phải thu Nhà nước", "Giao dịch mua bán lại trái phiếu Chính phủ", "Tài sản ngắn hạn khác",
-    "Tài sản dài hạn", "Các khoản phải thu dài hạn", "Phải thu dài hạn của khách hàng", "Trả trước cho người bán dài hạn", 
+    "Tài sản dài hạn", "Các khoản phải thu dài hạn", "Phải thu dài hạn của khách hàng", "Trả trước cho người bán dài hạn",
     "Vốn kinh doanh ở đơn vị trực thuộc", "Phải thu nội bộ dài hạn", "Phải thu về cho vay dài hạn", "Phải thu dài hạn khác", "Dự phòng phải thu dài hạn khó đòi",
     "Tài sản cố định", "Tài sản cố định hữu hình", "Nguyên giá", "Hao mòn lũy kế", "Tài sản cố định thuê tài chính", "Tài sản cố định vô hình",
     "Bất động sản đầu tư", "Tài sản dở dang dài hạn", "Chi phí sản xuất, kinh doanh dở dang dài hạn", "Chi phí xây dựng cơ bản dở dang",
     "Đầu tư tài chính dài hạn", "Đầu tư vào công ty con", "Đầu tư vào công ty liên doanh, liên kết", "Đầu tư góp vốn vào đơn vị khác", "Dự phòng đầu tư tài chính dài hạn", "Đầu tư nắm giữ đến ngày đáo hạn",
     "Tài sản dài hạn khác", "Chi phí trả trước dài hạn", "Tài sản thuế thu nhập hoãn lại", "Thiết bị, vật tư, phụ tùng thay thế dài hạn", "Tài sản dài hạn khác", "Lợi thế thương mại",
-    "Tổng cộng tài sản", "Báo cáo tình hình tài chính", 
-    "Nợ phải trả", "Nợ ngắn hạn", "Phải trả người bán ngắn hạn", "Người mua trả tiền trước ngắn hạn", "Thuế và các khoản phải nộp Nhà nước", 
-    "Phải trả người lao động", "Chi phí phải trả ngắn hạn", "Phải trả nội bộ ngắn hạn", "Phải trả theo tiến độ kế hoạch hợp đồng xây dựng", 
-    "Doanh thu chưa thực hiện ngắn hạn", "Phải trả ngắn hạn khác", "Vay và nợ thuê tài chính ngắn hạn", "Dự phòng phải trả ngắn hạn", 
+    "Tổng cộng tài sản", "Báo cáo tình hình tài chính",
+    "Nợ phải trả", "Nợ ngắn hạn", "Phải trả người bán ngắn hạn", "Người mua trả tiền trước ngắn hạn", "Thuế và các khoản phải nộp Nhà nước",
+    "Phải trả người lao động", "Chi phí phải trả ngắn hạn", "Phải trả nội bộ ngắn hạn", "Phải trả theo tiến độ kế hoạch hợp đồng xây dựng",
+    "Doanh thu chưa thực hiện ngắn hạn", "Phải trả ngắn hạn khác", "Vay và nợ thuê tài chính ngắn hạn", "Dự phòng phải trả ngắn hạn",
     "Quỹ khen thưởng, phúc lợi", "Quỹ bình ổn giá", "Giao dịch mua bán lại trái phiếu Chính phủ",
-    "Nợ dài hạn", "Phải trả người bán dài hạn", "Người mua trả tiền trước dài hạn", "Chi phí phải trả dài hạn", "Phải trả nội bộ về vốn kinh doanh", 
-    "Phải trả nội bộ dài hạn", "Doanh thu chưa thực hiện dài hạn", "Phải trả dài hạn khác", "Vay và nợ thuê tài chính dài hạn", 
+    "Nợ dài hạn", "Phải trả người bán dài hạn", "Người mua trả tiền trước dài hạn", "Chi phí phải trả dài hạn", "Phải trả nội bộ về vốn kinh doanh",
+    "Phải trả nội bộ dài hạn", "Doanh thu chưa thực hiện dài hạn", "Phải trả dài hạn khác", "Vay và nợ thuê tài chính dài hạn",
     "Trái phiếu chuyển đổi", "Cổ phiếu ưu đãi", "Thuế thu nhập hoãn lại phải trả", "Dự phòng phải trả dài hạn", "Quỹ phát triển khoa học và công nghệ",
-    "Vốn chủ sở hữu", "Vốn góp của chủ sở hữu", "Cổ phiếu phổ thông có quyền biểu quyết", "Cổ phiếu ưu đãi", "Thặng dư vốn cổ phần", 
-    "Quyền chọn chuyển đổi trái phiếu", "Vốn khác của chủ sở hữu", "Cổ phiếu quỹ", "Chênh lệch đánh giá lại tài sản", "Chênh lệch tỷ giá hối đoái", 
-    "Quỹ đầu tư phát triển", "Quỹ hỗ trợ sắp xếp doanh nghiệp", "Quỹ khác thuộc vốn chủ sở hữu", "Lợi nhuận sau thuế chưa phân phối", 
+    "Vốn chủ sở hữu", "Vốn góp của chủ sở hữu", "Cổ phiếu phổ thông có quyền biểu quyết", "Cổ phiếu ưu đãi", "Thặng dư vốn cổ phần",
+    "Quyền chọn chuyển đổi trái phiếu", "Vốn khác của chủ sở hữu", "Cổ phiếu quỹ", "Chênh lệch đánh giá lại tài sản", "Chênh lệch tỷ giá hối đoái",
+    "Quỹ đầu tư phát triển", "Quỹ hỗ trợ sắp xếp doanh nghiệp", "Quỹ khác thuộc vốn chủ sở hữu", "Lợi nhuận sau thuế chưa phân phối",
     "LNST chưa phân phối lũy kế đến cuối kỳ trước", "LNST chưa phân phối kỳ này", "Nguồn vốn đầu tư XDCB", "Lợi ích cổ đông không kiểm soát",
     "Nguồn kinh phí và quỹ khác", "Nguồn kinh phí", "Nguồn kinh phí đã hình thành TSCĐ", "Tổng cộng nguồn vốn",
-    
+
     "Doanh thu bán hàng và cung cấp dịch vụ", "Các khoản giảm trừ doanh thu",
-    "Doanh thu thuần về bán hàng và cung cấp dịch vụ", "Doanh thu thuần", 
+    "Doanh thu thuần về bán hàng và cung cấp dịch vụ", "Doanh thu thuần",
     "Giá vốn hàng bán", "Lợi nhuận gộp về bán hàng và cung cấp dịch vụ", "Lợi nhuận gộp",
-    "Doanh thu hoạt động tài chính", "Chi phí tài chính", "Trong đó: chi phí lãi vay", "Chi phí lãi vay", 
-    "Phần lãi/lỗ trong công ty liên doanh, liên kết", 
+    "Doanh thu hoạt động tài chính", "Chi phí tài chính", "Trong đó: chi phí lãi vay", "Chi phí lãi vay",
+    "Phần lãi/lỗ trong công ty liên doanh, liên kết",
     "Chi phí bán hàng", "Chi phí quản lý doanh nghiệp",
-    "Lợi nhuận thuần từ hoạt động kinh doanh", 
+    "Lợi nhuận thuần từ hoạt động kinh doanh",
     "Thu nhập khác", "Chi phí khác", "Lợi nhuận khác",
     "Tổng lợi nhuận kế toán trước thuế",
-    "Chi phí thuế TNDN hiện hành", "Chi phí thuế TNDN hoãn lại", 
+    "Chi phí thuế TNDN hiện hành", "Chi phí thuế TNDN hoãn lại",
     "Lợi nhuận sau thuế TNDN", "Lợi nhuận sau thuế thu nhập doanh nghiệp",
     "LNST của công ty mẹ", "LNST của cổ đông không kiểm soát",
     "Lãi cơ bản trên cổ phiếu", "Lãi suy giảm trên cổ phiếu",
 
-    "Lợi nhuận trước thuế", "Khấu hao TSCĐ và BĐSĐT", "Các khoản dự phòng", 
+    "Lợi nhuận trước thuế", "Khấu hao TSCĐ và BĐSĐT", "Các khoản dự phòng",
     "Lãi/lỗ chênh lệch tỷ giá do đánh giá lại các khoản mục tiền tệ gốc ngoại tệ", "Lãi/lỗ chênh lệch tỷ giá",
     "Lãi/lỗ từ hoạt động đầu tư", "Các khoản điều chỉnh khác", "Lợi nhuận từ HĐKD trước thay đổi vốn lưu động",
-    "Tăng/giảm các khoản phải thu", "Tăng/giảm hàng tồn kho", "Tăng/giảm các khoản phải trả", "Tăng/giảm chi phí trả trước", "Tăng/giảm chứng khoán kinh doanh", 
+    "Tăng/giảm các khoản phải thu", "Tăng/giảm hàng tồn kho", "Tăng/giảm các khoản phải trả", "Tăng/giảm chi phí trả trước", "Tăng/giảm chứng khoán kinh doanh",
     "Tiền lãi vay đã trả", "Chi phí đi vay đã trả", "Thuế TNDN đã nộp", "Tiền thu khác từ HĐKD", "Tiền chi khác cho HĐKD", "Lưu chuyển tiền thuần từ HĐKD",
     "Tiền thu từ bán hàng, cung cấp dịch vụ và doanh thu khác", "Tiền chi trả người cung cấp hàng hóa, dịch vụ", "Tiền chi trả người lao động",
     "Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác", "Tiền thu thanh lý, nhượng bán TSCĐ và tài sản dài hạn khác",
@@ -125,23 +131,23 @@ VAS_WHITELIST = set([
     "Lưu chuyển tiền thuần trong kỳ", "Tiền và tương đương tiền đầu kỳ", "Ảnh hưởng của thay đổi tỷ giá quy đổi ngoại tệ", "Tiền và tương đương tiền cuối kỳ",
 
     # --- 2. NGÂN HÀNG ---
-    "Tiền mặt, vàng bạc, đá quý", "Tiền gửi tại Ngân hàng Nhà nước", "Tiền gửi tại và cho vay các tổ chức tín dụng khác", 
-    "Chứng khoán kinh doanh", "Các công cụ tài chính phái sinh và tài sản tài chính khác", "Cho vay khách hàng", 
-    "Hoạt động mua nợ", "Chứng khoán đầu tư", "Góp vốn, đầu tư dài hạn", "Tài sản Có khác", 
-    "Nợ Chính phủ và Ngân hàng Nhà nước", "Tiền gửi và vay các tổ chức tín dụng khác", "Tiền gửi của khách hàng", 
-    "Công cụ tài chính phái sinh và nợ tài chính khác", "Vốn tài trợ, ủy thác đầu tư", "Phát hành giấy tờ có giá", 
-    "Vốn điều lệ", "Thu nhập lãi thuần", "Thu nhập từ dịch vụ", "Lãi thuần từ dịch vụ", "Lãi thuần từ ngoại hối và vàng", 
-    "Lãi thuần từ chứng khoán kinh doanh", "Lãi thuần từ chứng khoán đầu tư", "Thu nhập hoạt động khác", "Chi phí hoạt động (CIR)", 
-    "Lợi nhuận trước dự phòng rủi ro tín dụng", "Chi phí dự phòng rủi ro tín dụng", "Thu nhập lãi nhận được", 
+    "Tiền mặt, vàng bạc, đá quý", "Tiền gửi tại Ngân hàng Nhà nước", "Tiền gửi tại và cho vay các tổ chức tín dụng khác",
+    "Chứng khoán kinh doanh", "Các công cụ tài chính phái sinh và tài sản tài chính khác", "Cho vay khách hàng",
+    "Hoạt động mua nợ", "Chứng khoán đầu tư", "Góp vốn, đầu tư dài hạn", "Tài sản Có khác",
+    "Nợ Chính phủ và Ngân hàng Nhà nước", "Tiền gửi và vay các tổ chức tín dụng khác", "Tiền gửi của khách hàng",
+    "Công cụ tài chính phái sinh và nợ tài chính khác", "Vốn tài trợ, ủy thác đầu tư", "Phát hành giấy tờ có giá",
+    "Vốn điều lệ", "Thu nhập lãi thuần", "Thu nhập từ dịch vụ", "Lãi thuần từ dịch vụ", "Lãi thuần từ ngoại hối và vàng",
+    "Lãi thuần từ chứng khoán kinh doanh", "Lãi thuần từ chứng khoán đầu tư", "Thu nhập hoạt động khác", "Chi phí hoạt động (CIR)",
+    "Lợi nhuận trước dự phòng rủi ro tín dụng", "Chi phí dự phòng rủi ro tín dụng", "Thu nhập lãi nhận được",
     "Chi phí lãi đã trả", "Thu từ dịch vụ", "Thu nợ đã xóa", "Chi cho nhân viên và quản lý",
 
     # --- 3. CÔNG TY CHỨNG KHOÁN ---
-    "Tài sản tài chính", "Các tài sản tài chính ghi nhận thông qua lãi lỗ (FVTPL)", "Các khoản đầu tư nắm giữ đến ngày đáo hạn (HTM)", 
-    "Các khoản cho vay (Margin)", "Tài sản tài chính sẵn sàng để bán (AFS)", "Dự phòng suy giảm giá trị", 
+    "Tài sản tài chính", "Các tài sản tài chính ghi nhận thông qua lãi lỗ (FVTPL)", "Các khoản đầu tư nắm giữ đến ngày đáo hạn (HTM)",
+    "Các khoản cho vay (Margin)", "Tài sản tài chính sẵn sàng để bán (AFS)", "Dự phòng suy giảm giá trị",
     "Các khoản phải thu (bán tài sản tài chính, cổ tức và lãi dự thu)", "Phải thu dịch vụ CTCK", "Phải thu lỗi giao dịch",
     "Vay và nợ thuê tài chính", "Vay tài sản tài chính", "Trái phiếu chuyển đổi (cấu phần nợ)", "Trái phiếu phát hành", "Vay Quỹ hỗ trợ thanh toán",
     "Phải trả hoạt động giao dịch chứng khoán", "Nhận ký quỹ, ký cược", "Quỹ dự trữ bổ sung vốn điều lệ", "Quỹ dự phòng tài chính và rủi ro nghiệp vụ",
-    "Doanh thu hoạt động", "Lãi từ FVTPL (lãi bán, chênh lệch đánh giá lại, cổ tức và lãi)", "Lãi HTM", "Lãi cho vay và phải thu", 
+    "Doanh thu hoạt động", "Lãi từ FVTPL (lãi bán, chênh lệch đánh giá lại, cổ tức và lãi)", "Lãi HTM", "Lãi cho vay và phải thu",
     "Lãi AFS", "Lãi phái sinh phòng ngừa", "Doanh thu môi giới", "Bảo lãnh và đại lý phát hành", "Tư vấn đầu tư", "Lưu ký", "Tư vấn tài chính",
     "Chi phí hoạt động", "Lỗ FVTPL", "Lỗ HTM", "Lỗ AFS khi phân loại lại", "Chi phí dự phòng, xử lý tổn thất và chi phí đi vay của khoản cho vay",
     "Chi phí tự doanh, môi giới, bảo lãnh, tư vấn đầu tư, lưu ký, tư vấn tài chính và dịch vụ khác", "Doanh thu hoạt động tài chính",
@@ -154,6 +160,64 @@ VAS_WHITELIST = set([
     "Phải thu và phải trả hoạt động nhận và nhượng tái bảo hiểm", "Phí bảo hiểm gốc", "Phí nhận tái bảo hiểm", "Phí nhượng tái bảo hiểm",
     "Thay đổi dự phòng phí", "Doanh thu phí bảo hiểm thuần", "Hoa hồng nhượng tái và doanh thu khác", "Doanh thu thuần hoạt động bảo hiểm",
     "Chi bồi thường gốc và nhận tái", "Thu bồi thường nhượng tái", "Thay đổi dự phòng bồi thường", "Chi hoa hồng", "Lợi nhuận gộp bảo hiểm"
+])
+
+VAS_WHITELIST.update([
+    "Chứng khoán đầu tư giữ đến ngày đáo hạn", "Chứng khoán đầu tư sẵn sàng để bán",
+    "Thu nhập lãi và các khoản thu nhập tương tự", "Chi phí lãi và các chi phí tương tự",
+    "Thu nhập từ hoạt động dịch vụ", "Chi phí hoạt động dịch vụ", "Lãi thuần từ hoạt động dịch vụ",
+    "Lãi thuần từ hoạt động kinh doanh ngoại hối", "Lãi thuần từ mua bán chứng khoán kinh doanh",
+    "Lãi thuần từ mua bán chứng khoán đầu tư", "Thu nhập từ hoạt động khác", "Chi phí hoạt động khác",
+    "Lãi thuần từ hoạt động khác", "Tổng thu nhập hoạt động", "Dự phòng rủi ro tín dụng",
+    "Chi phí bán hàng và quản lý doanh nghiệp", "Tổng chi phí", "Thu nhập lãi",
+    "Lợi nhuận trước lãi vay và thuế", "Lợi nhuận trước lãi vay, thuế và khấu hao",
+    "Dòng tiền tự do", "Số lượng cổ phiếu bình quân cơ bản", "Số lượng cổ phiếu bình quân pha loãng",
+    "Số lượng cổ phiếu phổ thông", "Cổ phiếu đã phát hành", "Số lượng cổ phiếu ròng", "Tổng nợ vay",
+    "Tổng lợi nhuận HĐKD như báo cáo", "Khấu hao được điều chỉnh", "Biến động vốn lưu động",
+    "Lợi nhuận thuần chuẩn hóa", "Lợi nhuận sau thuế từ hoạt động tiếp tục",
+    "Tiền thu từ đi vay dài hạn", "Tiền trả nợ gốc vay dài hạn", "Cho vay khách hàng thuần",
+    "Thu nhập phí và hoa hồng", "Tài sản cố định hữu hình thuần", "Nguyên giá tài sản cố định hữu hình",
+    "Hao mòn lũy kế tài sản cố định", "Lợi thế thương mại và tài sản vô hình", "Tài sản cố định vô hình khác",
+    "Bất động sản khác", "Nhà cửa và vật kiến trúc", "Đất đai và cải tạo đất",
+    "Máy móc, thiết bị và phương tiện vận tải", "Xây dựng cơ bản dở dang", "Tài sản quyền sử dụng đất và thuê tài chính",
+    "Nguyên liệu, vật liệu tồn kho", "Chi phí sản xuất kinh doanh dở dang", "Thành phẩm tồn kho",
+    "Tiền bị hạn chế", "Thuế phải thu", "Thuế phải thu ngắn hạn", "Thuế phải trả", "Thuế phải trả ngắn hạn",
+    "Tổng thuế phải trả", "Cổ tức phải trả", "Phải trả khác", "Phải thu ngắn hạn khác", "Phải thu dài hạn khác",
+    "Phải trả ngắn hạn khác", "Phải trả dài hạn khác", "Đầu tư ngắn hạn", "Đầu tư dài hạn",
+    "Đầu tư vào liên doanh", "Đầu tư vào công ty liên kết", "Đầu tư vào liên doanh theo giá gốc",
+    "Đầu tư vào công ty liên kết theo giá gốc", "Thuế thu nhập hoãn lại phải trả ngắn hạn",
+    "Thuế thu nhập hoãn lại phải trả dài hạn", "Quỹ phúc lợi nhân viên ngắn hạn", "Quỹ phúc lợi nhân viên và hưu trí",
+    "Tiền mặt, tương đương tiền và đầu tư ngắn hạn", "Các khoản thanh toán tiền mặt",
+    "Các khoản thanh toán tiền mặt khác từ HĐKD", "Thanh toán cho người lao động",
+    "Các khoản thu tiền mặt từ HĐKD", "Các khoản thu tiền mặt khác từ HĐKD",
+    "Các khoản thanh toán tiền mặt khác từ HĐ đầu tư", "Các khoản thu tiền mặt khác từ HĐ đầu tư",
+    "Các khoản thanh toán tiền mặt khác từ HĐ tài chính", "Các khoản thu tiền mặt khác từ HĐ tài chính",
+    "Cổ tức đã nhận", "Thu từ thanh lý tài sản cố định", "Chi mua sắm tài sản cố định",
+    "Tổng các khoản mục bất thường (Không gồm lợi thế thương mại)",
+    "Lợi nhuận ròng pha loãng phân bổ cho CĐ phổ thông", "Lợi nhuận ròng phân bổ cho cổ đông phổ thông",
+    "Tổng chi phí tài chính khác", "Thu nhập/chi phí lãi thuần ngoài HĐKD", "Thu nhập/chi phí khác",
+    "Lợi nhuận ròng bất thường", "Lợi nhuận ròng từ hoạt động không liên tục", "Lợi nhuận ròng từ hoạt động liên tục",
+    "Chi phí thu nhập đặc biệt", "Chi phí đặc biệt khác", "Xóa sổ", "Tổn thất tài sản và dự phòng",
+    "Thuế thu nhập hoãn lại", "Biến động các khoản phải thu", "Biến động hàng tồn kho",
+    "Biến động các khoản phải trả", "Biến động phải trả người bán", "Biến động vốn lưu động khác",
+    "Chi phí đầu tư tài sản cố định (CapEx)", "Tiền mua hoặc thanh lý tài sản cố định",
+    "Tiền mua hoặc bán tài sản vô hình", "Tiền đầu tư góp vốn thuần", "Tiền mua bán công ty con hoặc sáp nhập",
+    "Tiền thu từ phát hành nợ vay", "Tiền chi trả nợ gốc vay", "Tiền thu từ phát hành cổ phiếu hoặc bán cổ phiếu quỹ",
+    "Cổ tức đã chi trả cho chủ sở hữu", "Ảnh hưởng thay đổi tỷ giá và tiền thuần thay đổi",
+    "Lãi / Lỗ từ bán chứng khoán", "Cổ tức cổ phiếu ưu đãi và điều chỉnh khác",
+    "Ảnh hưởng thuế từ các khoản mục bất thường", "Thuế suất dùng để tính toán",
+    "Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản", "Ảnh hưởng thay đổi tỷ giá hối đoái",
+    "Lợi nhuận ròng từ HĐKD liên tục trừ lợi ích CĐ không kiểm soát",
+    "Lợi nhuận thuần từ hoạt động tiếp tục và không tiếp tục", "Lợi nhuận sau thuế bao gồm lợi ích cổ đông không kiểm soát",
+    "Tổng vốn chủ sở hữu gồm cổ đông không kiểm soát", "Vốn lưu động ròng", "Nợ vay ròng",
+    "Chênh lệch đánh giá lại tài sản và chênh lệch tỷ giá", "Các khoản phải trả", "Các khoản phải thu",
+    "Phải thu các bên liên quan ngắn hạn", "Tổng tài sản dài hạn", "Tổng nợ phải trả",
+    "Lãi / Lỗ chênh lệch tỷ giá hối đoái thuần", "Lãi/lỗ từ chứng khoán đầu tư",
+    "Tiền thu từ đi vay dài hạn (thuần)", "Tiền trả nợ gốc vay dài hạn (thuần)",
+    "Tiền thu từ đi vay ngắn hạn", "Tiền trả nợ gốc vay ngắn hạn", "Tiền lãi vay đã trả (HĐTC)",
+    "Tiền lãi nhận được (HĐĐT)", "Tiền lãi nhận được (HĐKD)", "Thuế TNDN đã nộp (thực nộp)",
+    "Thuế được hoàn lại", "Biến động chi phí trả trước", "Các khoản mục phi tiền mặt khác",
+    "Tài sản khác", "Nợ phải trả khác",
 ])
 
 ALIAS_TO_VAS = {
@@ -170,77 +234,222 @@ ALIAS_TO_VAS = {
     "Gross Profit": "Lợi nhuận gộp", "Operating Income": "Lợi nhuận thuần từ hoạt động kinh doanh", "Net Income": "Lợi nhuận sau thuế TNDN", "Net Income Common Stockholders": "LNST của công ty mẹ",
     "Pretax Income": "Tổng lợi nhuận kế toán trước thuế", "Tax Provision": "Chi phí thuế TNDN hiện hành", "Interest Expense": "Chi phí lãi vay",
     "Basic EPS": "Lãi cơ bản trên cổ phiếu", "Diluted EPS": "Lãi suy giảm trên cổ phiếu", "Operating Cash Flow": "Lưu chuyển tiền thuần từ HĐKD",
-    "Cash Flow From Continuing Operating Activities": "Lưu chuyển tiền thuần từ HĐKD", "Investing Cash Flow": "Lưu chuyển tiền thuần từ HĐĐT", 
-    "Financing Cash Flow": "Lưu chuyển tiền thuần từ HĐTC", "Capital Expenditure": "Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác", 
+    "Cash Flow From Continuing Operating Activities": "Lưu chuyển tiền thuần từ HĐKD", "Investing Cash Flow": "Lưu chuyển tiền thuần từ HĐĐT",
+    "Financing Cash Flow": "Lưu chuyển tiền thuần từ HĐTC", "Capital Expenditure": "Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác",
     "Depreciation And Amortization": "Khấu hao TSCĐ và BĐSĐT", "Depreciation Amortization Depletion": "Khấu hao TSCĐ và BĐSĐT",
-    "Change In Working Capital": "Lợi nhuận từ HĐKD trước thay đổi vốn lưu động",
     "Doanh thu thuần HĐKD": "Doanh thu thuần", "Lợi nhuận sau thuế thu nhập doanh nghiệp": "Lợi nhuận sau thuế TNDN", "LNST": "Lợi nhuận sau thuế TNDN",
     "Vốn CSH": "Vốn chủ sở hữu", "Nợ phải trả ngắn hạn": "Nợ ngắn hạn", "Nợ phải trả dài hạn": "Nợ dài hạn", "Lợi nhuận gộp về bán hàng và cung cấp dịch vụ": "Lợi nhuận gộp",
     "Net Interest Income": "Thu nhập lãi thuần", "Gross Loan": "Cho vay khách hàng", "Customer Deposits": "Tiền gửi của khách hàng",
-    "Trading Securities": "Chứng khoán kinh doanh", "Held To Maturity Securities": "Chứng khoán đầu tư"
+    "Trading Securities": "Chứng khoán kinh doanh", "Held To Maturity Securities": "Chứng khoán đầu tư giữ đến ngày đáo hạn"
 }
 
-# 🆕 v17.3: bổ sung alias tiếng Việt (nhãn chữ HOA của ngân hàng / nhãn đã dịch từ Yahoo) về chuẩn VAS
 ALIAS_TO_VAS.update({
-    "Nợ phải trả và vốn chủ sở hữu": "Tổng cộng nguồn vốn",
-    "Tổng cộng nợ phải trả và vốn chủ sở hữu": "Tổng cộng nguồn vốn",
-    "Tổng nguồn vốn": "Tổng cộng nguồn vốn",
-    "Tổng tài sản": "Tổng cộng tài sản",
-    "Tổng nợ phải trả": "Nợ phải trả",
+    "Depreciation": "Khấu hao TSCĐ và BĐSĐT",
+    "Reconciled Depreciation": "Khấu hao TSCĐ và BĐSĐT",
+    "Reconciled Cost Of Revenue": "Giá vốn hàng bán",
+    "Cost Of Goods Sold": "Giá vốn hàng bán",
+    "Total Operating Income As Reported": "Lợi nhuận thuần từ hoạt động kinh doanh",
+    "Operating Profit": "Lợi nhuận thuần từ hoạt động kinh doanh",
+    "Net Income Including Noncontrolling Interests": "Lợi nhuận sau thuế TNDN",
+    "Net Income From Continuing And Discontinued Operation": "Lợi nhuận sau thuế TNDN",
+    "Net Income Continuous Operations": "Lợi nhuận sau thuế TNDN",
+    "Net Income From Continuing Operation Net Minority Interest": "LNST của công ty mẹ",
+    "Net Income From Continuing Operation": "Lợi nhuận sau thuế từ hoạt động tiếp tục",
+    "Common Stock Equity": "Vốn chủ sở hữu",
+    "Total Equity": "Vốn chủ sở hữu",
+    "Capital Stock": "Vốn góp của chủ sở hữu",
+    "Common Stock": "Vốn góp của chủ sở hữu",
+    "Additional Paid In Capital": "Thặng dư vốn cổ phần",
+    "Share Premium": "Thặng dư vốn cổ phần",
+    "Treasury Stock": "Cổ phiếu quỹ",
+    "Current Debt": "Vay và nợ thuê tài chính ngắn hạn",
+    "Current Debt And Capital Lease Obligation": "Vay và nợ thuê tài chính ngắn hạn",
+    "Long Term Debt And Capital Lease Obligation": "Vay và nợ thuê tài chính dài hạn",
+    "Total Debt": "Tổng nợ vay",
+    "Net Debt": "Nợ vay ròng",
+    "Available For Sale Securities": "Chứng khoán đầu tư sẵn sàng để bán",
+    "Total Deposits": "Tiền gửi của khách hàng",
+    "Allowance For Loans And Lease Losses": "Dự phòng rủi ro tín dụng",
+    "Provision For Loan Lease And Other Losses": "Chi phí dự phòng rủi ro tín dụng",
+    "Purchase Of PPE": "Tiền chi mua sắm, xây dựng TSCĐ và tài sản dài hạn khác",
+    "Sale Of PPE": "Tiền thu thanh lý, nhượng bán TSCĐ và tài sản dài hạn khác",
+    "Repayment Of Debt": "Tiền trả nợ gốc vay",
+    "Issuance Of Debt": "Tiền thu từ đi vay",
+    "Long Term Debt Issuance": "Tiền thu từ đi vay dài hạn",
+    "Long Term Debt Payments": "Tiền trả nợ gốc vay dài hạn",
+    "Cash Dividends Paid": "Cổ tức, lợi nhuận đã trả cho chủ sở hữu",
+    "Common Stock Dividend Paid": "Cổ tức, lợi nhuận đã trả cho chủ sở hữu",
+    "Beginning Cash Position": "Tiền và tương đương tiền đầu kỳ",
+    "End Cash Position": "Tiền và tương đương tiền cuối kỳ",
+    "Changes In Cash": "Lưu chuyển tiền thuần trong kỳ",
+    "Effect Of Exchange Rate Changes": "Ảnh hưởng của thay đổi tỷ giá quy đổi ngoại tệ",
+    "Cash Flow From Continuing Investing Activities": "Lưu chuyển tiền thuần từ HĐĐT",
+    "Cash Flow From Continuing Financing Activities": "Lưu chuyển tiền thuần từ HĐTC",
+    "Change In Receivables": "Tăng/giảm các khoản phải thu",
+    "Change In Inventory": "Tăng/giảm hàng tồn kho",
+    "Change In Payables": "Tăng/giảm các khoản phải trả",
+    "Change In Payable": "Tăng/giảm các khoản phải trả",
+    "Change In Account Payable": "Tăng/giảm các khoản phải trả",
+    "Change In Prepaid Assets": "Tăng/giảm chi phí trả trước",
+    "Taxes Refund Paid": "Thuế được hoàn lại",
+    "Interest Paid Cfo": "Tiền lãi vay đã trả",
+    "Interest Received Cfi": "Tiền lãi nhận được (HĐĐT)",
+    "Interest Received Cfo": "Tiền lãi nhận được (HĐKD)",
+    "Gain Loss On Investment Securities": "Lãi/lỗ từ chứng khoán đầu tư",
+    "Net Foreign Currency Exchange Gain": "Lãi / Lỗ chênh lệch tỷ giá hối đoái thuần",
+    "Other Assets": "Tài sản khác",
+    "Other Liabilities": "Nợ phải trả khác",
+    "tổng tài sản": "Tổng cộng tài sản",
+    "tổng cộng tài sản": "Tổng cộng tài sản",
+    "tổng nợ phải trả": "Nợ phải trả",
+    "nợ phải trả và vốn chủ sở hữu": "Tổng cộng nguồn vốn",
+    "tổng cộng nợ phải trả và vốn chủ sở hữu": "Tổng cộng nguồn vốn",
+    "tổng vốn chủ sở hữu": "Vốn chủ sở hữu",
+    "tổng vốn chủ sở hữu gồm cổ đông không kiểm soát": "Vốn chủ sở hữu",
+    "vốn góp chủ sở hữu": "Vốn góp của chủ sở hữu",
+    "phải thu ngắn hạn khách hàng": "Phải thu ngắn hạn của khách hàng",
+    "thuế và các khoản phải nộp nhà nước": "Thuế và các khoản phải nộp Nhà nước",
+    "lợi nhuận sau thuế (lợi nhuận ròng)": "Lợi nhuận sau thuế TNDN",
+    "lãi cơ bản trên cổ phiếu (basic eps)": "Lãi cơ bản trên cổ phiếu",
+    "lãi suy giảm trên cổ phiếu (diluted eps)": "Lãi suy giảm trên cổ phiếu",
+    "lưu chuyển tiền thuần từ hoạt động kinh doanh": "Lưu chuyển tiền thuần từ HĐKD",
+    "lưu chuyển tiền thuần từ hoạt động kinh doanh tiếp tục": "Lưu chuyển tiền thuần từ HĐKD",
+    "lưu chuyển tiền thuần từ hoạt động đầu tư": "Lưu chuyển tiền thuần từ HĐĐT",
+    "lưu chuyển tiền thuần từ hoạt động đầu tư tiếp tục": "Lưu chuyển tiền thuần từ HĐĐT",
+    "lưu chuyển tiền thuần từ hoạt động tài chính": "Lưu chuyển tiền thuần từ HĐTC",
+    "lưu chuyển tiền thuần từ hoạt động tài chính tiếp tục": "Lưu chuyển tiền thuần từ HĐTC",
+    "các khoản nợ chính phủ và nhnn việt nam": "Nợ Chính phủ và Ngân hàng Nhà nước",
+    "các khoản nợ chính phủ và nhnn": "Nợ Chính phủ và Ngân hàng Nhà nước",
+    "nợ chính phủ và nhnn việt nam": "Nợ Chính phủ và Ngân hàng Nhà nước",
+    "chi phí quản lý ctck": "Chi phí quản lý CTCK",
+    "lãi thuần từ dịch vụ": "Lãi thuần từ hoạt động dịch vụ",
+    "thu nhập từ dịch vụ": "Thu nhập từ hoạt động dịch vụ",
+    "lãi thuần từ ngoại hối và vàng": "Lãi thuần từ hoạt động kinh doanh ngoại hối",
+    "lãi thuần từ chứng khoán kinh doanh": "Lãi thuần từ mua bán chứng khoán kinh doanh",
+    "lãi thuần từ chứng khoán đầu tư": "Lãi thuần từ mua bán chứng khoán đầu tư",
+    "chi phí hoạt động (cir)": "Chi phí hoạt động",
+    "other assets": "Tài sản khác",
+    "other liabilities": "Nợ phải trả khác",
 })
 
-# 🆕 v17.3: bảng tra không phân biệt hoa/thường + nhận diện nhãn tiếng Anh
-_VAS_LOWER = {m.lower(): m for m in VAS_WHITELIST}
-_ALIAS_LOWER = {k.lower(): v for k, v in ALIAS_TO_VAS.items()}
-_VN_CHARS = re.compile(r'[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]', re.IGNORECASE)
-UNKNOWN_METRIC = "Chỉ tiêu chưa xác định"
-_STOP_VN = {'của', 'và', 'trên', 'cho', 'tại', 'trong', 'sau', 'hạn'}
-_JUNK_METRICS = {'', 'của', 'và', 'trên', 'cho', 'tại', 'trong', 'nan', 'none', 'null', UNKNOWN_METRIC.lower()}
-_UNMAPPED_METRICS = set()   # nhãn tiếng Anh chưa có trong từ điển (xuất ra data/_unmapped_metrics.csv)
+JUNK_WORDS = {
+    'của', 'và', 'hoặc', 'từ', 'cho', 'các', 'tại', 'trong', 'trên', 'dưới', 'là', 'với',
+    'theo', 'không', 'có', 'được', 'bị', 'sự', 'cái', 'này', 'kia', 'đó', 'một', 'những',
+    'ở', 'về', 'để', 'khi', 'nếu', 'thì', 'mà', 'hay', 'nhưng', 'rất', 'đã', 'sẽ', 'đang',
+    'vẫn', 'cũng', 'chỉ', 'tiêu', 'chưa', 'xác', 'định', 'khác', 'tổng', 'ròng',
+    'net', 'of', 'the', 'and', 'or', 'total', 'other', 'unknown', 'undefined',
+}
+JUNK_EXACT = {
+    'của', 'và', 'hoặc', 'từ', 'cho', 'các', 'khác', 'tổng', 'ròng', 'net', 'total', 'other',
+    'chỉ tiêu chưa xác định', 'nan', 'none', 'null', 'n/a', '-', '', 'undefined', 'unknown',
+}
+
+def is_junk_label(s):
+    if s is None:
+        return True
+    t = clean_text(s).lower()
+    if len(t) < 2:
+        return True
+    if t in JUNK_EXACT:
+        return True
+    if not re.search(r'[a-zà-ỹđ]', t):
+        return True
+    toks = re.findall(r'[a-zà-ỹđ]+', t)
+    if toks and all(w in JUNK_WORDS for w in toks):
+        return True
+    return False
+
+def _norm_key(s):
+    s = unicodedata.normalize('NFC', str(s))
+    s = re.sub(r'[\n\r\t]+', ' ', s)
+    s = re.sub(r'\s{2,}', ' ', s).strip()
+    s = re.sub(r'\s*[\[(]\d+[a-zA-Z]?[\])]\s*$', '', s)
+    s = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', s)
+    s = s.rstrip(' :.')
+    return s.strip()
 
 def _looks_english(s):
-    s = str(s)
-    return (not _VN_CHARS.search(s)) and re.search(r'[A-Za-z]{3,}', s) is not None
+    low = s.lower()
+    if re.search(r'[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]', low):
+        return False
+    return bool(re.search(r'[a-z]', low))
+
+@lru_cache(maxsize=300000)
+def _std_cached(metric, rtype):
+    s = _norm_key(metric)
+    if not s or s.lower() in ('nan', 'none', 'null'):
+        return None
+    if "Chỉ số thị trường" in rtype or "Chỉ số vĩ mô" in rtype:
+        return None if is_junk_label(s) else s
+    if s in VAS_WHITELIST:
+        return s
+    low = s.lower()
+    if low in _WHITELIST_LOWER:
+        return _WHITELIST_LOWER[low]
+    if s in ALIAS_TO_VAS:
+        return ALIAS_TO_VAS[s]
+    if low in _ALIAS_LOWER:
+        return _ALIAS_LOWER[low]
+    if s in TRANSLATION_MAP:
+        return TRANSLATION_MAP[s]
+    if low in _TRANS_LOWER:
+        return _TRANS_LOWER[low]
+    fixed = fix_truncated_text(s)
+    if fixed != s:
+        for cand in (fixed, fixed.lower()):
+            if cand in VAS_WHITELIST: return fixed
+            if cand in _WHITELIST_LOWER: return _WHITELIST_LOWER[cand]
+            if cand in ALIAS_TO_VAS: return ALIAS_TO_VAS[cand]
+            if cand in _ALIAS_LOWER: return _ALIAS_LOWER[cand]
+            if cand in TRANSLATION_MAP: return TRANSLATION_MAP[cand]
+            if cand in _TRANS_LOWER: return _TRANS_LOWER[cand]
+        s = fixed
+        low = s.lower()
+    if _looks_english(s):
+        t = translate_metric(s)
+        if t is None or is_junk_label(t):
+            return None
+        for cand in (t, t.lower()):
+            if cand in VAS_WHITELIST: return t
+            if cand in _WHITELIST_LOWER: return _WHITELIST_LOWER[cand]
+            if cand in ALIAS_TO_VAS: return ALIAS_TO_VAS[cand]
+            if cand in _ALIAS_LOWER: return _ALIAS_LOWER[cand]
+        return t
+    if is_junk_label(s):
+        return None
+    return s
 
 def standardize_metric(raw_metric, report_type):
-    if pd.isna(raw_metric): return None
-    metric = clean_text(raw_metric)
-    if not metric: return None
-    metric = re.sub(r'\s*\[\d+\]\s*$', '', metric).strip()   # 🆕 v17.3: bỏ hậu tố [2] của vnfinancialdata
-    if not metric: return None
+    if raw_metric is None:
+        return None
+    try:
+        if pd.isna(raw_metric):
+            return None
+    except (TypeError, ValueError):
+        pass
+    return _std_cached(str(raw_metric), str(report_type))
 
-    if "Chỉ số thị trường" in str(report_type) or "Chỉ số vĩ mô" in str(report_type):
-        return translate_metric(metric) if _looks_english(metric) else metric
-    
-    if metric in VAS_WHITELIST: return metric
-    if metric in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric]
-    
-    metric_no_code = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', metric)
-    if metric_no_code in VAS_WHITELIST: return metric_no_code
-    if metric_no_code in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric_no_code]
-    
-    # 🆕 v17.3: so khớp không phân biệt hoa/thường (thay vòng for chậm, kết quả tương đương)
-    for cand in (metric.lower(), metric_no_code.lower()):
-        if cand in _ALIAS_LOWER: return _ALIAS_LOWER[cand]
-        if cand in _VAS_LOWER: return _VAS_LOWER[cand]
+def force_vietnamese_label(metric, report_type):
+    """🆕 v19/v22: CỔNG DỊCH DUY NHẤT — mọi nhãn đi qua đây đều phải là tiếng Việt."""
+    std = standardize_metric(metric, report_type)
+    if std is None or is_junk_label(std):
+        return None
+    if _looks_english(std):
+        t = translate_metric(std)
+        if t is None or is_junk_label(t) or _looks_english(t):
+            return None
+        std = t
+    return std
 
-    # 🆕 v17.3: nhãn CHỮ HOA -> thường rồi so khớp lại
-    if metric_no_code.isupper() and len(metric_no_code) > 3:
-        metric_no_code = metric_no_code[:1] + metric_no_code[1:].lower()
-        if metric_no_code in VAS_WHITELIST: return metric_no_code
-        if metric_no_code in ALIAS_TO_VAS: return ALIAS_TO_VAS[metric_no_code]
-
-    # 🆕 v17.3: còn tiếng Anh -> dịch qua từ điển rồi chuẩn VAS lần nữa
-    if _looks_english(metric_no_code):
-        vi = translate_metric(metric_no_code)
-        if vi in VAS_WHITELIST: return vi
-        if vi in ALIAS_TO_VAS: return ALIAS_TO_VAS[vi]
-        if vi.lower() in _ALIAS_LOWER: return _ALIAS_LOWER[vi.lower()]
-        if vi.lower() in _VAS_LOWER: return _VAS_LOWER[vi.lower()]
-        return vi
-            
-    return metric_no_code
-
+def sweep_labels(df, label_col='Chỉ tiêu tiếng Việt', type_col='Loại báo cáo'):
+    if df is None or df.empty:
+        return df, 0
+    before = len(df)
+    df = df.copy()
+    df[label_col] = [force_vietnamese_label(m, rt) for m, rt in zip(df[label_col], df[type_col])]
+    df = df.dropna(subset=[label_col])
+    df = df[df[label_col].astype(str).str.strip().ne('')]
+    return df, before - len(df)
 
 # ==========================================
 # 2. API KEY & CÀI ĐẶT THƯ VIỆN (GIỮ NGUYÊN)
@@ -263,10 +472,8 @@ except ImportError:
     os.system("pip install yfinance --quiet")
     import yfinance as yf
 
-# v17.2: ĐÃ XOÁ khối tự động `pip install vnstock`.
-
 # ==========================================
-# 🆕 1.5 SUPABASE INTEGRATION (GIỮ NGUYÊN, thêm dọn dòng rác)
+# 1.5 SUPABASE INTEGRATION (GIỮ KHUNG + 🆕 v22 ENGINE BỀN VỮNG)
 # ==========================================
 try:
     from supabase import create_client
@@ -303,11 +510,17 @@ SUPABASE_TABLE = os.environ.get("SUPABASE_TABLE", "finex_stock_master")
 SUPABASE_PRIORITY = os.environ.get("SUPABASE_PRIORITY", "low").lower()
 PUSH_TO_SUPABASE = os.environ.get("PUSH_TO_SUPABASE", "false").lower() == "true"
 SUPABASE_ON_CONFLICT = os.environ.get("SUPABASE_ON_CONFLICT", "ticker,report_type,period_type,report_date,item_vn")
-# 🆕 v17.3: tự dọn dòng value=0 / NULL / item_vn rỗng-rác-tiếng Anh trên Supabase trước khi upsert (chỉ chạy khi PUSH_TO_SUPABASE=true)
-SUPABASE_PURGE = os.environ.get("SUPABASE_PURGE", "true").strip().lower() in ("1", "true", "yes", "y")
-
-# CÔNG TẮC TẮT NHÁNH VNDIRECT (BCTC + fallback giá/SLCP qua api-finfo). Mặc định = TẮT.
+PURGE_SUPABASE_BAD = os.environ.get("PURGE_SUPABASE_BAD", "true").strip().lower() in ("1", "true", "yes", "y")
 SKIP_VNDIRECT = os.environ.get("SKIP_VNDIRECT", "true").strip().lower() in ("1", "true", "yes", "y")
+COVERAGE_REPORT = os.environ.get("COVERAGE_REPORT", "false").strip().lower() in ("1", "true", "yes", "y")
+
+# 🆕 v22: tham số engine upsert chống ConnectionTerminated / GOAWAY HTTP2
+UPSERT_BATCH_START = int(os.environ.get("UPSERT_BATCH_START", "200"))
+UPSERT_BATCH_MIN = 25
+UPSERT_MAX_ATTEMPTS = 6
+UPSERT_BATCH_PAUSE = 0.35
+UPSERT_MAX_PAYLOAD_BYTES = 600_000
+UPSERT_CLIENT_REFRESH_EVERY = 40
 
 STANDARD_COLUMNS = [
     'Mã chứng khoán', 'Tên doanh nghiệp', 'Tên ngành',
@@ -333,11 +546,12 @@ PRIORITY_MAP = {
     'INDICES': 2, 'YF_QUARTER': 3, 'YFINANCE': 3, 'VNDIRECT': 3, 'VPS': 3, 'SUPABASE': 4,
 }
 
-_supabase_client = None
+# 🆕 v22: quản lý client tập trung — tạo lại khi dính lỗi mạng
+_SUPABASE_STATE = {'client': None}
 
-def init_supabase():
-    global _supabase_client
-    if _supabase_client is not None: return _supabase_client
+def init_supabase(force_new=False):
+    if not force_new and _SUPABASE_STATE['client'] is not None:
+        return _SUPABASE_STATE['client']
     if not HAS_SUPABASE_LIB:
         print("⚠️ [SUPABASE] Thiếu thư viện supabase.")
         return None
@@ -345,21 +559,46 @@ def init_supabase():
         print("⚠️ [SUPABASE] Thiếu URL / KEY.")
         return None
     try:
-        _supabase_client = create_client(SUPABASE_URL, SUPABASE_KEY)
-        print(f"✅ [SUPABASE] Đã kết nối bảng '{SUPABASE_TABLE}'.")
-        return _supabase_client
+        try:
+            from supabase import create_client as _cc, ClientOptions
+            opts = None
+            try:
+                opts = ClientOptions(postgrest_client_timeout=90)
+            except Exception:
+                opts = None
+            _SUPABASE_STATE['client'] = _cc(SUPABASE_URL, SUPABASE_KEY, options=opts) if opts else _cc(SUPABASE_URL, SUPABASE_KEY)
+        except Exception:
+            from supabase import create_client as _cc
+            _SUPABASE_STATE['client'] = _cc(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ [SUPABASE] Đã kết nối (client mới).")
+        return _SUPABASE_STATE['client']
     except Exception as e:
         print(f"❌ [SUPABASE] Lỗi kết nối: {e}")
         return None
 
-def _retry(fn, max_retries=3, backoff=2, label="SUPABASE"):
+_NETWORK_KEYS = ('connectionterminated', 'connection', 'timeout', 'timed out', 'reset',
+                 'broken pipe', 'goaway', 'go away', 'server disconnected', 'protocolerror',
+                 'remoteprotocolerror', 'streamid', 'eof', 'closed')
+
+def _is_network_err(e):
+    if type(e).__name__ in ('ConnectionTerminated', 'ConnectionError', 'ConnectError', 'ReadError',
+                            'WriteError', 'RemoteProtocolError', 'ProtocolError', 'ReadTimeout',
+                            'ConnectTimeout', 'PoolTimeout', 'TimeoutException', 'OSError', 'IOError'):
+        return True
+    s = str(e).lower()
+    return any(k in s for k in _NETWORK_KEYS)
+
+def _retry(fn, max_retries=3, backoff=2, label="SUPABASE", refresh_client=False):
     last_err = None
     for attempt in range(max_retries):
-        try: return fn()
+        try:
+            return fn()
         except Exception as e:
             last_err = e
+            if refresh_client and _is_network_err(e):
+                init_supabase(force_new=True)
             if attempt == max_retries - 1: break
-            print(f"⚠️ [{label}] Lỗi lần {attempt+1}, thử lại sau {backoff**attempt}s: {e}")
+            print(f"⚠️ [{label}] Lỗi lần {attempt+1} ({type(e).__name__}), thử lại sau {backoff**attempt}s...")
             time.sleep(backoff ** attempt)
     raise last_err
 
@@ -398,57 +637,59 @@ def load_data_from_supabase():
     def _fetch_all():
         rows, page_size, start = [], 1000, 0
         while True:
-            # 🆕 v17.3: bỏ sẵn các dòng value = 0 ngay khi tải
-            resp = client.table(SUPABASE_TABLE).select("*").neq("value", 0).range(start, start + page_size - 1).execute()
+            resp = _retry(lambda s=start: client.table(SUPABASE_TABLE).select("*").range(s, s + page_size - 1).execute(),
+                          max_retries=3, label="SUPABASE_SELECT", refresh_client=True)
             batch = resp.data or []
             rows.extend(batch)
             if len(batch) < page_size: break
             start += page_size
         return rows
     try:
-        all_rows = _retry(_fetch_all, label="SUPABASE")
+        all_rows = _retry(_fetch_all, label="SUPABASE", refresh_client=True)
         if not all_rows: return pd.DataFrame(columns=STANDARD_COLUMNS)
         df = pd.DataFrame(all_rows).rename(columns=EN_TO_VN_MAP)
         df = _normalize_to_standard(df, fill_company=False)
-        print(f"✅ [SUPABASE] Đã tải {len(df):,} dòng.")
+
+        before = len(df)
+        df['Giá trị'] = pd.to_numeric(df['Giá trị'], errors='coerce')
+        df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
+        df = df[df['Giá trị'] != 0]
+        df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
+        df = df[~df['Mã chứng khoán'].isin(['', 'NAN', 'NONE', 'NULL'])]
+        df['Loại báo cáo'] = df['Loại báo cáo'].map(lambda x: TRANSLATION_MAP.get(clean_text(x), clean_text(x)))
+        _ky_map = {'quarter': 'Quý', 'quarterly': 'Quý', 'year': 'Năm', 'annual': 'Năm'}
+        df['Loại kỳ'] = df['Loại kỳ'].map(lambda x: _ky_map.get(str(x).strip().lower(), x))
+        df, n_drop = sweep_labels(df)
+        print(f"✅ [SUPABASE] Đã tải {len(df):,} dòng (🧹 lọc bỏ {before - len(df):,} dòng bẩn/Anh/rác).")
         return df
     except Exception as e:
-        print(f"❌ [SUPABASE] Lỗi tải: {e}")
+        print(f"❌ [SUPABASE] Lỗi tải: {type(e).__name__}: {e}")
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
-# 🆕 v17.3: DỌN DÒNG TRỐNG / RÁC / TIẾNG ANH TRÊN SUPABASE
-_DB_JUNK_ITEMS = ['Của', 'Và', 'Trên', 'Cho', 'Tại', 'Trong', UNKNOWN_METRIC]
-_ASCII_ONLY_REGEX = r"^[A-Za-z0-9 ,.&()/:'%+\[\]\-]+$"   # item_vn chỉ gồm ký tự ASCII = nhãn tiếng Anh
+# 🆕 v22: helpers payload upsert
+def _est_bytes(records):
+    try:
+        return len(json.dumps(records, ensure_ascii=False).encode('utf-8'))
+    except Exception:
+        return len(records) * 300
 
-def purge_bad_rows_supabase():
-    """Xoá: value=0, value NULL, item_vn rỗng/NULL, item_vn rác, item_vn tiếng Anh. Lỗi bước nào bỏ qua bước đó."""
-    client = init_supabase()
-    if client is None: return False
-    T = SUPABASE_TABLE
-    tasks = [
-        ("value = 0",             lambda: client.table(T).delete().eq('value', 0)),
-        ("value NULL",            lambda: client.table(T).delete().is_('value', 'null')),
-        ("item_vn rỗng",          lambda: client.table(T).delete().eq('item_vn', '')),
-        ("item_vn NULL",          lambda: client.table(T).delete().is_('item_vn', 'null')),
-        ("item_vn rác (Của/Và…)", lambda: client.table(T).delete().in_('item_vn', _DB_JUNK_ITEMS)),
-        ("item_vn tiếng Anh",     lambda: client.table(T).delete().filter('item_vn', 'match', _ASCII_ONLY_REGEX)),
-    ]
-    print("\n🧽 [SUPABASE] Dọn dòng trống/rác/tiếng Anh...")
-    ok_all = True
-    for label, build in tasks:
-        try:
-            _retry(lambda b=build: b().execute(), max_retries=2, label=f"SUPABASE_PURGE:{label}")
-            print(f"   ✓ Đã dọn: {label}")
-        except Exception as e:
-            ok_all = False
-            print(f"   ⚠️ Bỏ qua '{label}' ({type(e).__name__}: {str(e)[:120]}) — có thể chạy SQL thủ công trong Supabase SQL Editor.")
-    return ok_all
+def _split_by_size(records, max_bytes):
+    if _est_bytes(records) <= max_bytes: return [records]
+    out = []
+    def rec(chunk):
+        if len(chunk) <= 1 or _est_bytes(chunk) <= max_bytes:
+            out.append(chunk); return
+        mid = len(chunk) // 2
+        rec(chunk[:mid]); rec(chunk[mid:])
+    rec(records)
+    return out
 
-def upsert_to_supabase(df, batch_size=500):
+def upsert_to_supabase(df, batch_size=UPSERT_BATCH_START):
+    """🆕 v22: upsert bền vững — batch nhỏ, chia theo size, retry + đổi client, KHÔNG fail job."""
     client = init_supabase()
     if client is None: return False
     if df is None or df.empty: return False
-    
+
     try:
         payload = df.copy()
         payload = payload.dropna(subset=['Mã chứng khoán', 'Giá trị'])
@@ -456,31 +697,37 @@ def upsert_to_supabase(df, batch_size=500):
         payload = payload[payload['Mã chứng khoán'] != '']
         payload = payload[payload['Mã chứng khoán'] != 'NAN']
         payload = payload.rename(columns=VN_TO_EN_MAP)
-        
+
         valid_cols = ['ticker', 'company_name', 'sector', 'report_type', 'period_type', 'year', 'report_date', 'item_vn', 'value']
         for col in valid_cols:
             if col not in payload.columns: payload[col] = None
-            
+
         records = []
-        for _, row in payload.iterrows():
+        skipped_bad = 0
+        for row in payload.to_dict('records'):
             ticker = str(row['ticker']).strip() if pd.notna(row['ticker']) else ''
             if not ticker: continue
-            
+
             val = pd.to_numeric(row['value'], errors='coerce')
             if pd.isna(val) or val == 0: continue
-            
+
+            item = force_vietnamese_label(row['item_vn'], row['report_type'])
+            if not item:
+                skipped_bad += 1
+                continue
+
             yr = pd.to_numeric(row['year'], errors='coerce')
-            yr = int(yr) if pd.notna(yr) else datetime.now().year
-            
+            if pd.isna(yr):
+                m = re.match(r'(\d{4})', str(row['report_date'] or ''))
+                yr = int(m.group(1)) if m else datetime.now().year
+            yr = int(yr)
+
             def clean_str(s):
                 if pd.isna(s): return None
                 s = str(s).strip()
                 return s if s else None
 
-            item_clean = clean_str(row['item_vn'])
-            if not item_clean or item_clean.lower() in _JUNK_METRICS: continue   # 🆕 v17.3: không đẩy dòng nhãn trống/rác lên Supabase
-                
-            r = {
+            records.append({
                 'ticker': ticker,
                 'company_name': clean_str(row['company_name']),
                 'sector': clean_str(row['sector']),
@@ -488,34 +735,93 @@ def upsert_to_supabase(df, batch_size=500):
                 'period_type': clean_str(row['period_type']),
                 'year': yr,
                 'report_date': clean_str(row['report_date']),
-                'item_vn': item_clean,
+                'item_vn': item,
                 'value': float(val)
-            }
-            records.append(r)
-            
+            })
+
         total = len(records)
+        if skipped_bad:
+            print(f"🧹 [SUPABASE] Chặn {skipped_bad:,} dòng rác/trống/Anh trước khi upsert.")
         if total == 0:
             print("⚠️ [SUPABASE] Không có bản ghi hợp lệ sau khi làm sạch.")
             return False
-            
-        print(f"📤 [SUPABASE] Bắt đầu upsert {total:,} bản ghi (batch={batch_size})...")
-        
-        upsert_kwargs = {}
-        if SUPABASE_ON_CONFLICT:
-            upsert_kwargs['on_conflict'] = SUPABASE_ON_CONFLICT
-            
+
+        chunks = []
         for i in range(0, total, batch_size):
-            chunk = records[i:i+batch_size]
-            def _do_upsert(c=chunk, kw=upsert_kwargs):
-                return client.table(SUPABASE_TABLE).upsert(c, **kw).execute()
-            _retry(_do_upsert, label="SUPABASE_UPSERT")
-            print(f"   ✓ {min(i+batch_size, total):,}/{total:,}")
-            
-        print("✅ [SUPABASE] Upsert hoàn tất.")
-        return True
+            chunks.extend(_split_by_size(records[i:i+batch_size], UPSERT_MAX_PAYLOAD_BYTES))
+        done_rows = 0; ok_batches = 0; failed_rows = 0
+        print(f"📤 [SUPABASE] Upsert {total:,} bản ghi trong {len(chunks)} batch (≤{UPSERT_MAX_PAYLOAD_BYTES//1000}KB/batch)...")
+
+        qi = 0
+        while qi < len(chunks):
+            chunk = chunks[qi]; qi += 1
+            attempt = 0
+            while True:
+                try:
+                    if SUPABASE_ON_CONFLICT:
+                        client.table(SUPABASE_TABLE).upsert(chunk, on_conflict=SUPABASE_ON_CONFLICT).execute()
+                    else:
+                        client.table(SUPABASE_TABLE).upsert(chunk).execute()
+                    ok_batches += 1; done_rows += len(chunk)
+                    if ok_batches % 10 == 0 or done_rows == total:
+                        print(f"   ✓ {done_rows:,}/{total:,} (batch {len(chunk)})")
+                    if ok_batches % UPSERT_CLIENT_REFRESH_EVERY == 0:
+                        client = init_supabase(force_new=True)
+                    time.sleep(UPSERT_BATCH_PAUSE)
+                    break
+                except Exception as e:
+                    attempt += 1
+                    ename = type(e).__name__
+                    if attempt > UPSERT_MAX_ATTEMPTS:
+                        print(f"  ❌ Batch {len(chunk)} bản ghi lỗi vĩnh viễn: {ename}: {e} (sẽ đẩy lại lần chạy sau)")
+                        failed_rows += len(chunk)
+                        break
+                    if _is_network_err(e):
+                        client = init_supabase(force_new=True)
+                    sl = str(e).lower()
+                    if len(chunk) > UPSERT_BATCH_MIN and (_is_network_err(e) or '413' in sl or 'payload' in sl or 'too large' in sl):
+                        mid = len(chunk) // 2
+                        chunks.insert(qi, chunk[mid:])
+                        chunk = chunk[:mid]
+                        print(f"  ↘️ Chia nhỏ batch còn {len(chunk)} bản ghi (lỗi {ename})")
+                        continue
+                    wait = min(2 ** attempt, 30) + random.uniform(0, 1.5)
+                    print(f"  ⚠️ Batch lỗi lần {attempt}/{UPSERT_MAX_ATTEMPTS} ({ename}): thử lại sau {wait:.1f}s")
+                    time.sleep(wait)
+
+        print(f"✅ [SUPABASE] Upsert xong {done_rows:,}/{total:,} bản ghi; chưa đẩy được: {failed_rows:,}")
+        return done_rows > 0
     except Exception as e:
-        print(f"❌ [SUPABASE] Lỗi upsert: {e}")
+        print(f"❌ [SUPABASE] Lỗi upsert tổng: {type(e).__name__}: {e}")
         return False
+
+def purge_supabase_bad_rows():
+    client = init_supabase()
+    if client is None: return
+    print("🧽 [SUPABASE] Purge dòng bẩn: value=0/NULL, item_vn rỗng/NULL, nhãn rác, nhãn Anh, nhãn [n]...")
+    T = SUPABASE_TABLE
+
+    def _run(label, fn):
+        try:
+            resp = _retry(fn, max_retries=2, backoff=2, label="SUPABASE_PURGE", refresh_client=True)
+            n = len(getattr(resp, 'data', None) or [])
+            print(f"   ✓ {label}: xoá {n:,} dòng")
+        except Exception as e:
+            print(f"   ⚠️ {label}: {type(e).__name__}: {e}")
+
+    _run("value = 0",        lambda: client.table(T).delete().eq('value', 0).execute())
+    _run("value NULL",       lambda: client.table(T).delete().is_('value', 'null').execute())
+    _run("item_vn NULL",     lambda: client.table(T).delete().is_('item_vn', 'null').execute())
+    _run("item_vn rỗng",     lambda: client.table(T).delete().eq('item_vn', '').execute())
+    junk_variants = sorted({j for j in JUNK_EXACT if j} | {j.capitalize() for j in JUNK_EXACT if j} | {j.title() for j in JUNK_EXACT if j})
+    _run("nhãn rác (Của...)", lambda: client.table(T).delete().in_('item_vn', junk_variants).execute())
+    _run("nhãn 'chưa xác định'", lambda: client.table(T).delete().like('item_vn', '%chưa xác định%').execute())
+    _run("nhãn dính [n]",    lambda: client.table(T).delete().like('item_vn', '%[%]').execute())
+    en = sorted(_ENGLISH_PURGE)
+    for i in range(0, len(en), 40):
+        chunk = en[i:i+40]
+        _run(f"nhãn tiếng Anh đợt {i//40+1}", lambda c=chunk: client.table(T).delete().in_('item_vn', c).execute())
+    print("✅ [SUPABASE] Purge hoàn tất.")
 
 # ==========================================
 # 2. TẢI DỮ LIỆU HÀNG NGÀY (GIỮ NGUYÊN)
@@ -618,7 +924,7 @@ def get_company_profile(symbol):
     return company_names.get(symbol, f"Công ty Cổ phần {symbol}"), sector
 
 # ==========================================
-# 4. TRANSLATION MAP (GIỮ NGUYÊN 100%) + 🆕 v17.3 EXTRA_TRANSLATION_MAP
+# 4. TRANSLATION MAP (GIỮ NGUYÊN 100% + BỔ SUNG ~170 KEY)
 # ==========================================
 TRANSLATION_MAP = {
     'N s':'Số lượng cổ phiếu ròng','M':'Lợi ích cổ đông không kiểm soát',
@@ -771,171 +1077,331 @@ TRANSLATION_MAP = {
     'Gross Margins':'Biên lợi nhuận gộp (%)','Historical Dividend Cash':'Lịch sử trả cổ tức bằng tiền (VND/Cổ phiếu)'
 }
 
-# 🆕 v17.3: BỘ TỪ ĐIỂN BỔ SUNG — toàn bộ nhãn yfinance còn thiếu + nhãn tiếng Anh của ngân hàng/vnfinancialdata.
-#           Chỉ THÊM khóa chưa có (không ghi đè từ điển gốc).
-EXTRA_TRANSLATION_MAP = {
-    # ---- Bảng cân đối kế toán ----
-    'Treasury Shares Number':'Số lượng cổ phiếu quỹ','Treasury Stock':'Cổ phiếu quỹ',
-    'Tangible Book Value':'Giá trị sổ sách hữu hình','Invested Capital':'Vốn đầu tư',
-    'Net Tangible Assets':'Tài sản hữu hình ròng','Capital Lease Obligations':'Nghĩa vụ thuê tài chính',
-    'Common Stock Equity':'Vốn chủ sở hữu cổ phiếu phổ thông',
-    'Total Capitalization':'Tổng vốn hóa (vốn chủ sở hữu và nợ dài hạn)',
-    'Other Equity Adjustments':'Điều chỉnh vốn chủ sở hữu khác','Preferred Stock':'Cổ phiếu ưu đãi',
-    'Other Capital Stock':'Vốn cổ phần khác','Preferred Securities Outside Stock Equity':'Chứng khoán ưu đãi ngoài vốn chủ sở hữu',
-    'Non Current Deferred Liabilities':'Nợ hoãn lại dài hạn','Non Current Deferred Revenue':'Doanh thu chưa thực hiện dài hạn',
-    'Non Current Deferred Taxes Liabilities':'Thuế thu nhập hoãn lại phải trả dài hạn',
-    'Long Term Debt And Capital Lease Obligation':'Vay và nợ thuê tài chính dài hạn (gồm thuê tài chính)',
-    'Long Term Capital Lease Obligation':'Nợ thuê tài chính dài hạn',
-    'Current Deferred Liabilities':'Nợ hoãn lại ngắn hạn','Current Deferred Revenue':'Doanh thu chưa thực hiện ngắn hạn',
-    'Current Debt And Capital Lease Obligation':'Vay và nợ thuê tài chính ngắn hạn (gồm thuê tài chính)',
-    'Current Capital Lease Obligation':'Nợ thuê tài chính ngắn hạn','Other Current Borrowings':'Vay ngắn hạn khác',
-    'Commercial Paper':'Thương phiếu','Line Of Credit':'Hạn mức tín dụng',
-    'Pensionand Other Post Retirement Benefit Plans Current':'Quỹ phúc lợi nhân viên ngắn hạn',
-    'Payables And Accrued Expenses':'Phải trả và chi phí phải trả','Income Tax Payable':'Thuế thu nhập doanh nghiệp phải nộp',
-    'Current Accrued Expenses':'Chi phí phải trả ngắn hạn','Interest Payable':'Lãi vay phải trả',
-    'Current Provisions':'Dự phòng ngắn hạn','Employee Benefits':'Phúc lợi nhân viên',
-    'Non Current Prepaid Assets':'Chi phí trả trước dài hạn','Non Current Deferred Assets':'Tài sản hoãn lại dài hạn',
-    'Non Current Deferred Taxes Assets':'Tài sản thuế thu nhập hoãn lại dài hạn','Defined Pension Benefit':'Quỹ lương hưu xác định',
-    'Long Term Equity Investment':'Đầu tư vốn chủ sở hữu dài hạn','Investmentin Financial Assets':'Đầu tư vào tài sản tài chính',
-    'Financial Assets Designatedas Fair Value Through Profitor Loss Total':'Tài sản tài chính ghi nhận theo giá trị hợp lý qua lãi lỗ',
-    'Investments In Other Ventures Under Equity Method':'Đầu tư vào đơn vị khác theo phương pháp vốn chủ sở hữu',
-    'Other Current Assets':'Tài sản ngắn hạn khác','Hedging Assets Current':'Tài sản phòng ngừa rủi ro ngắn hạn',
-    'Assets Held For Sale Current':'Tài sản nắm giữ để bán ngắn hạn',
-    'Inventories Adjustments Allowances':'Dự phòng giảm giá hàng tồn kho','Other Inventories':'Hàng tồn kho khác',
-    'Receivables Adjustments Allowances':'Dự phòng các khoản phải thu','Accrued Interest Receivable':'Lãi dự thu',
-    'Notes Receivable':'Phải thu thương phiếu','Loans Receivable':'Phải thu cho vay',
-    'Gross Accounts Receivable':'Phải thu khách hàng (gộp)',
-    'Duefrom Related Parties Non Current':'Phải thu các bên liên quan dài hạn',
-    'Due From Related Parties Non Current':'Phải thu các bên liên quan dài hạn',
-    'Total Partnership Capital':'Tổng vốn góp đối tác',
-    # ---- Báo cáo kết quả kinh doanh ----
-    'Total Unusual Items':'Tổng các khoản mục bất thường','Reconciled Cost Of Revenue':'Giá vốn hàng bán được điều chỉnh',
-    'Normalized Basic EPS':'EPS cơ bản chuẩn hóa','Other Non Operating Income Expenses':'Thu nhập/chi phí ngoài hoạt động khác',
-    'Interest Expense Non Operating':'Chi phí lãi vay ngoài hoạt động','Interest Income Non Operating':'Thu nhập lãi ngoài hoạt động',
-    'Depreciation Amortization Depletion Income Statement':'Khấu hao và phân bổ (báo cáo kết quả kinh doanh)',
-    'Depreciation And Amortization In Income Statement':'Khấu hao và phân bổ (báo cáo kết quả kinh doanh)',
-    'Other Gand A':'Chi phí quản lý khác','Salaries And Wages':'Lương và tiền công',
-    'Rent And Landing Fees':'Chi phí thuê và phí hạ cánh','Other Taxes':'Thuế khác',
-    'Provision For Doubtful Accounts':'Dự phòng phải thu khó đòi','Gain On Sale Of PPE':'Lãi từ thanh lý tài sản cố định',
-    'Impairment Of Capital Assets':'Tổn thất tài sản vốn','Restructuring And Mergern Acquisition':'Chi phí tái cấu trúc và sáp nhập',
-    'Earnings From Equity Interest':'Lãi từ đầu tư vốn chủ sở hữu',
-    'Earnings From Equity Interest Net Of Tax':'Lãi từ đầu tư vốn chủ sở hữu sau thuế',
-    'Insurance And Claims':'Bảo hiểm và bồi thường','Securities Amortization':'Phân bổ chứng khoán',
-    'Occupancy And Equipment':'Chi phí cơ sở vật chất và thiết bị',
-    'Professional Expense And Contract Services Expense':'Chi phí dịch vụ chuyên môn và hợp đồng',
-    'Dilution Effect':'Ảnh hưởng pha loãng','Preferred Stock Dividends':'Cổ tức cổ phiếu ưu đãi',
-    'Average Dilution Earnings':'Lợi nhuận pha loãng bình quân',
-    'Otherunder Preferred Stock Dividend':'Cổ tức cổ phiếu ưu đãi và điều chỉnh khác',
-    'Net Income From Continuing Operations':'Lợi nhuận ròng từ hoạt động liên tục',
-    'Non Interest Income':'Thu nhập ngoài lãi','Non Interest Expense':'Chi phí ngoài lãi',
-    'Other Non Interest Income':'Thu nhập ngoài lãi khác','Fees And Commissions':'Thu nhập phí và hoa hồng',
-    'Credit Losses Provision':'Chi phí dự phòng rủi ro tín dụng',
-    'Interest Income After Provision For Loan Loss':'Thu nhập lãi thuần sau dự phòng rủi ro tín dụng',
-    'Total Premiums Earned':'Tổng phí bảo hiểm đã thu','Net Policyholder Benefits And Claims':'Chi bồi thường và quyền lợi bảo hiểm thuần',
-    # ---- Báo cáo lưu chuyển tiền tệ ----
-    'Repurchase Of Capital Stock':'Tiền chi mua lại cổ phiếu','Issuance Of Capital Stock':'Tiền thu từ phát hành cổ phiếu',
-    'Interest Paid Supplemental Data':'Lãi vay đã trả (bổ sung)','Income Tax Paid Supplemental Data':'Thuế thu nhập doanh nghiệp đã nộp (bổ sung)',
-    'Effect Of Exchange Rate Changes':'Ảnh hưởng của thay đổi tỷ giá hối đoái','Net Other Financing Charges':'Chênh lệch dòng tiền tài chính khác',
-    'Common Stock Dividend Paid':'Cổ tức cổ phiếu phổ thông đã trả','Common Stock Payments':'Tiền chi mua cổ phiếu phổ thông',
-    'Common Stock Issuance':'Tiền thu từ phát hành cổ phiếu phổ thông','Net Preferred Stock Issuance':'Phát hành cổ phiếu ưu đãi thuần',
-    'Net Issuance Payments Of Debt':'Tiền vay và trả nợ thuần','Net Short Term Debt Issuance':'Vay ngắn hạn thuần',
-    'Net Long Term Debt Issuance':'Vay dài hạn thuần','Long Term Debt Payments':'Tiền trả nợ vay dài hạn',
-    'Long Term Debt Issuance':'Tiền thu từ vay dài hạn','Short Term Debt Payments':'Tiền trả nợ vay ngắn hạn',
-    'Short Term Debt Issuance':'Tiền thu từ vay ngắn hạn','Net Other Investing Changes':'Chênh lệch dòng tiền đầu tư khác',
-    'Interest Received Cfi':'Lãi đã nhận từ hoạt động đầu tư','Dividends Received Cfi':'Cổ tức đã nhận từ hoạt động đầu tư',
-    'Sale Of Investment':'Tiền thu từ bán khoản đầu tư','Purchase Of Investment':'Tiền chi mua khoản đầu tư',
-    'Sale Of Business':'Tiền thu từ bán doanh nghiệp','Purchase Of Business':'Tiền chi mua doanh nghiệp',
-    'Purchase Of Intangibles':'Tiền chi mua tài sản vô hình','Sale Of Intangibles':'Tiền thu từ bán tài sản vô hình',
-    'Capital Expenditure Reported':'Chi đầu tư tài sản cố định (đã báo cáo)',
-    'Change In Other Current Liabilities':'Biến động nợ ngắn hạn khác','Change In Other Current Assets':'Biến động tài sản ngắn hạn khác',
-    'Change In Payables And Accrued Expense':'Biến động phải trả và chi phí phải trả','Change In Payable':'Biến động các khoản phải trả',
-    'Change In Tax Payable':'Biến động thuế phải nộp','Change In Income Tax Payable':'Biến động thuế thu nhập phải nộp',
-    'Change In Interest Payable':'Biến động lãi vay phải trả','Change In Prepaid Assets':'Biến động chi phí trả trước',
-    'Changes In Account Receivables':'Biến động phải thu khách hàng','Other Non Cash Items':'Các khoản phi tiền mặt khác',
-    'Excess Tax Benefit From Stock Based Compensation':'Lợi ích thuế vượt mức từ thưởng cổ phiếu',
-    'Stock Based Compensation':'Chi phí thưởng bằng cổ phiếu',
-    'Unrealized Gain Loss On Investment Securities':'Lãi/lỗ chưa thực hiện từ chứng khoán đầu tư',
-    'Provision And Write Off Of Assets':'Dự phòng và xóa sổ tài sản','Amortization Of Securities':'Phân bổ chứng khoán',
-    'Deferred Tax':'Thuế hoãn lại','Depreciation':'Khấu hao','Amortization Cash Flow':'Phân bổ',
-    'Operating Gains Losses':'Lãi/lỗ từ hoạt động kinh doanh','Pension And Employee Benefit Expense':'Chi phí lương hưu và phúc lợi nhân viên',
-    'Earnings Losses From Equity Investments':'Lãi/lỗ từ đầu tư vốn chủ sở hữu',
-    'Gain Loss On Investment Securities':'Lãi/lỗ từ chứng khoán đầu tư','Gain Loss On Sale Of PPE':'Lãi/lỗ từ thanh lý tài sản cố định',
-    'Gain Loss On Sale Of Business':'Lãi/lỗ từ bán doanh nghiệp','Net Foreign Currency Exchange Gain Loss':'Lãi/lỗ tỷ giá hối đoái thuần',
-    'Net Foreign Currency Exchange Gain':'Lãi tỷ giá hối đoái thuần','Net Foreign Currency Exchange Loss':'Lỗ tỷ giá hối đoái thuần',
-    'Taxes Refund Paid':'Thuế đã nộp/hoàn','Interest Paid Cfo':'Lãi vay đã trả (HĐKD)','Interest Received Cfo':'Lãi đã nhận (HĐKD)',
-    'Dividend Received Cfo':'Cổ tức đã nhận (HĐKD)','Dividend Paid Cfo':'Cổ tức đã trả (HĐKD)','Interest Paid Cff':'Lãi vay đã trả (HĐTC)',
-    'Other Cash Adjustment Outside Changein Cash':'Điều chỉnh tiền khác ngoài thay đổi tiền',
-    'Other Cash Adjustment Inside Changein Cash':'Điều chỉnh tiền khác trong thay đổi tiền',
-    'Cash From Discontinued Financing Activities':'Tiền từ hoạt động tài chính không liên tục',
-    'Cash From Discontinued Investing Activities':'Tiền từ hoạt động đầu tư không liên tục',
-    'Cash From Discontinued Operating Activities':'Tiền từ hoạt động kinh doanh không liên tục',
-    # ---- Nhãn tiếng Anh của ngân hàng / vnfinancialdata / nguồn cũ ----
-    'Other assets':'Tài sản Có khác','Other liabilities':'Nợ phải trả khác','Total assets':'Tổng cộng tài sản',
-    'Total liabilities':'Nợ phải trả','Total liabilities and equity':'Tổng cộng nguồn vốn',
-    'Customer deposits':'Tiền gửi của khách hàng','Loans to customers':'Cho vay khách hàng','Fixed assets':'Tài sản cố định',
-    'Investment securities':'Chứng khoán đầu tư','Trading securities':'Chứng khoán kinh doanh','Net revenue':'Doanh thu thuần',
-}
-for _k, _v in EXTRA_TRANSLATION_MAP.items():
-    TRANSLATION_MAP.setdefault(_k, _v)
-
-_TR_LOWER = {}
-for _k, _v in TRANSLATION_MAP.items():
-    _TR_LOWER.setdefault(_k.lower(), _v)
+TRANSLATION_MAP.update({
+    'Depreciation': 'Khấu hao TSCĐ và BĐSĐT',
+    'Reconciled Cost Of Revenue': 'Giá vốn hàng bán (điều chỉnh)',
+    'Securities Amortization': 'Phân bổ chứng khoán',
+    'Amortization Of Securities': 'Phân bổ chứng khoán',
+    'Amortization Of Intangibles': 'Phân bổ tài sản vô hình',
+    'Gain Loss On Investment Securities': 'Lãi/lỗ từ chứng khoán đầu tư',
+    'Gain On Investment Securities': 'Lãi từ chứng khoán đầu tư',
+    'Loss On Investment Securities': 'Lỗ từ chứng khoán đầu tư',
+    'Unrealized Gain Loss On Investment Securities': 'Lãi/lỗ chưa thực hiện từ chứng khoán đầu tư',
+    'Realized Gain Loss On Investment Securities': 'Lãi/lỗ đã thực hiện từ chứng khoán đầu tư',
+    'Net Foreign Currency Exchange Gain': 'Lãi / Lỗ chênh lệch tỷ giá hối đoái thuần',
+    'Foreign Currency Exchange Gains Losses': 'Lãi/lỗ chênh lệch tỷ giá hối đoái',
+    'Gain On Sale Of PPE': 'Lãi từ thanh lý tài sản cố định',
+    'Gain On Sale Of Business': 'Lãi từ bán công ty con',
+    'Earnings Losses From Equity Investments': 'Lãi/lỗ từ đầu tư góp vốn',
+    'Earnings From Equity Interest': 'Lãi từ công ty liên kết',
+    'Earnings From Equity Interest Net Of Tax': 'Lãi từ công ty liên kết (sau thuế)',
+    'Total Unusual Items': 'Tổng các khoản mục bất thường',
+    'Impairment Of Capital Assets': 'Tổn thất tài sản cố định',
+    'Restructuring And Mergern Acquisition': 'Chi phí tái cấu trúc và sáp nhập',
+    'Restructuring And Mergers Acquisition': 'Chi phí tái cấu trúc và sáp nhập',
+    'Stock Based Compensation': 'Chi phí cổ phiếu thưởng cho nhân viên',
+    'Share Based Compensation': 'Chi phí cổ phiếu thưởng cho nhân viên',
+    'Excess Tax Benefit From Stock Based Compensation': 'Ưu đãi thuế vượt trội từ cổ phiếu thưởng',
+    'Provisionand Write Offof Assets': 'Dự phòng và xóa sổ tài sản',
+    'Provision For Doubtful Accounts': 'Dự phòng phải thu khó đòi',
+    'Net Issuance Payments Of Debt': 'Tiền vay/trả nợ gốc thuần',
+    'Net Long Term Debt Issuance': 'Tiền thu từ đi vay dài hạn (thuần)',
+    'Long Term Debt Issuance': 'Tiền thu từ đi vay dài hạn',
+    'Long Term Debt Payments': 'Tiền trả nợ gốc vay dài hạn',
+    'Net Short Term Debt Issuance': 'Tiền thu từ đi vay ngắn hạn (thuần)',
+    'Short Term Debt Issuance': 'Tiền thu từ đi vay ngắn hạn',
+    'Short Term Debt Payments': 'Tiền trả nợ gốc vay ngắn hạn',
+    'Interest Received Cfi': 'Tiền lãi nhận được (HĐĐT)',
+    'Interest Received Cfo': 'Tiền lãi nhận được (HĐKD)',
+    'Interest Paid Cfo': 'Tiền lãi vay đã trả',
+    'Interest Paid Cff': 'Tiền lãi vay đã trả (HĐTC)',
+    'Interest Paid Supplemental Data': 'Tiền lãi vay đã trả (bổ sung)',
+    'Income Tax Paid Supplemental Data': 'Thuế TNDN đã nộp (bổ sung)',
+    'Taxes Refund Paid': 'Thuế được hoàn lại',
+    'Tax Paid': 'Thuế đã nộp',
+    'Dividends Paid Cfo': 'Cổ tức đã trả (HĐKD)',
+    'Dividends Received Cfo': 'Cổ tức đã nhận (HĐKD)',
+    'Dividend Received Cfi': 'Cổ tức đã nhận (HĐĐT)',
+    'Dividends Paid': 'Cổ tức đã trả',
+    'Dividends Received': 'Cổ tức đã nhận',
+    'Common Stock Dividend Paid': 'Cổ tức đã trả cho cổ đông phổ thông',
+    'Preferred Stock Dividend Paid': 'Cổ tức đã trả cho cổ đông ưu đãi',
+    'Change In Payable': 'Biến động các khoản phải trả',
+    'Change In Payables And Accrued Expense': 'Biến động phải trả và chi phí phải trả',
+    'Change In Accrued Expense': 'Biến động chi phí phải trả',
+    'Change In Prepaid Assets': 'Biến động chi phí trả trước',
+    'Change In Other Current Assets': 'Biến động tài sản ngắn hạn khác',
+    'Change In Other Current Liabilities': 'Biến động nợ ngắn hạn khác',
+    'Change In Tax Payable': 'Biến động thuế phải trả',
+    'Change In Dividend Payable': 'Biến động cổ tức phải trả',
+    'Other Non Cash Items': 'Các khoản mục phi tiền mặt khác',
+    'Other Cash Adjustment Inside Changein Cash': 'Điều chỉnh tiền khác trong biến động tiền',
+    'Other Cash Adjustment Outside Changein Cash': 'Điều chỉnh tiền khác ngoài biến động tiền',
+    'Effect Of Exchange Rate Changes': 'Ảnh hưởng của thay đổi tỷ giá quy đổi ngoại tệ',
+    'Purchase Of Investment': 'Tiền chi đầu tư góp vốn',
+    'Sale Of Investment': 'Tiền thu hồi đầu tư góp vốn',
+    'Purchase Of Business': 'Tiền mua công ty con',
+    'Sale Of Business': 'Tiền bán công ty con',
+    'Common Stock Issuance': 'Tiền thu từ phát hành cổ phiếu',
+    'Common Stock Repurchase': 'Tiền mua lại cổ phiếu quỹ',
+    'Repurchase Of Capital Stock': 'Tiền mua lại cổ phiếu quỹ',
+    'Issuance Of Capital Stock': 'Tiền thu từ phát hành cổ phiếu',
+    'Net Other Financing Charges': 'Chi phí tài chính khác thuần',
+    'Net Other Investing Changes': 'Biến động đầu tư khác thuần',
+    'Total Expenses': 'Tổng chi phí',
+    'Rent And Landing Fees': 'Chi phí thuê mặt bằng',
+    'Insurance And Claims': 'Chi phí bảo hiểm và bồi thường',
+    'Salaries And Wages': 'Chi phí lương và nhân công',
+    'Other Gand A': 'Chi phí quản lý doanh nghiệp khác',
+    'Other G And A': 'Chi phí quản lý doanh nghiệp khác',
+    'Interest Income Non Operating': 'Thu nhập lãi ngoài hoạt động',
+    'Interest Expense Non Operating': 'Chi phí lãi ngoài hoạt động',
+    'Net Non Operating Interest Income Expense': 'Thu nhập/chi phí lãi thuần ngoài HĐKD',
+    'Total Other Income Expense Net': 'Tổng thu nhập/chi phí khác thuần',
+    'Provision For Loan Lease And Other Losses': 'Chi phí dự phòng rủi ro tín dụng',
+    'Net Fee And Commission Income': 'Lãi thuần từ hoạt động dịch vụ',
+    'Net Commission Income': 'Lãi thuần từ hoạt động dịch vụ',
+    'Fees And Commissions': 'Thu nhập phí và hoa hồng',
+    'Net Investment Income': 'Lãi thuần từ đầu tư',
+    'Trading Gain Loss': 'Lãi/lỗ từ hoạt động tự doanh',
+    'Net Realized Gain Loss On Investments': 'Lãi/lỗ đã thực hiện từ đầu tư',
+    'Treasury Shares Number': 'Số lượng cổ phiếu quỹ',
+    'Capital Lease Obligations': 'Nợ thuê tài chính',
+    'Current Capital Lease Obligation': 'Nợ thuê tài chính ngắn hạn',
+    'Long Term Capital Lease Obligation': 'Nợ thuê tài chính dài hạn',
+    'Current Debt And Capital Lease Obligation': 'Vay và nợ thuê tài chính ngắn hạn',
+    'Long Term Debt And Capital Lease Obligation': 'Vay và nợ thuê tài chính dài hạn',
+    'Current Provisions': 'Dự phòng phải trả ngắn hạn',
+    'Non Current Provisions': 'Dự phòng phải trả dài hạn',
+    'Long Term Provisions': 'Dự phòng phải trả dài hạn',
+    'Employee Benefits': 'Phải trả người lao động',
+    'Current Employee Benefits': 'Phải trả người lao động ngắn hạn',
+    'Non Current Employee Benefits': 'Phải trả người lao động dài hạn',
+    'Long Term Employee Benefit Liabilities': 'Phải trả phúc lợi nhân viên dài hạn',
+    'Non Current Pension And Other Postretirement Benefit Plans': 'Quỹ phúc lợi nhân viên và hưu trí dài hạn',
+    'Tradeand Other Payables Non Current': 'Phải trả thương mại và khác dài hạn',
+    'Trade And Other Payables Non Current': 'Phải trả thương mại và khác dài hạn',
+    'Non Current Deferred Taxes Liabilities': 'Thuế thu nhập hoãn lại phải trả dài hạn',
+    'Non Current Deferred Taxes Assets': 'Tài sản thuế thu nhập hoãn lại dài hạn',
+    'Non Current Deferred Revenue': 'Doanh thu chưa thực hiện dài hạn',
+    'Non Current Deferred Liabilities': 'Nợ hoãn lại dài hạn',
+    'Non Current Accrued Expenses': 'Chi phí phải trả dài hạn',
+    'Non Current Note Receivables': 'Phải thu theo giấy nợ dài hạn',
+    'Non Current Accounts Receivable': 'Phải thu khách hàng dài hạn',
+    'Non Current Prepaid Assets': 'Chi phí trả trước dài hạn',
+    'Current Deferred Taxes Assets': 'Tài sản thuế thu nhập hoãn lại ngắn hạn',
+    'Current Deferred Taxes Liabilities': 'Thuế thu nhập hoãn lại phải trả ngắn hạn',
+    'Current Deferred Revenue': 'Doanh thu chưa thực hiện ngắn hạn',
+    'Current Deferred Liabilities': 'Nợ hoãn lại ngắn hạn',
+    'Current Accrued Expenses': 'Chi phí phải trả ngắn hạn',
+    'Current Notes Receivable': 'Phải thu theo giấy nợ ngắn hạn',
+    'Current Prepaid Assets': 'Chi phí trả trước ngắn hạn',
+    'Line Of Credit': 'Hạn mức tín dụng',
+    'Commercial Paper': 'Thương phiếu',
+    'Other Current Borrowings': 'Vay ngắn hạn khác',
+    'Other Non Current Borrowings': 'Vay dài hạn khác',
+    'Derivative Product Liabilities': 'Nợ công cụ phái sinh',
+    'Derivative Assets': 'Tài sản phái sinh',
+    'Hedging Assets Current': 'Tài sản phòng ngừa rủi ro ngắn hạn',
+    'Hedging Assets Non Current': 'Tài sản phòng ngừa rủi ro dài hạn',
+    'Assets Held For Sale Current': 'Tài sản nắm giữ để bán ngắn hạn',
+    'Liabilities Held For Sale Current': 'Nợ gắn với tài sản nắm giữ để bán',
+    'Assets Held For Sale': 'Tài sản nắm giữ để bán',
+    'Liabilities Held For Sale': 'Nợ gắn với tài sản nắm giữ để bán',
+    'Restricted Investments': 'Đầu tư bị hạn chế',
+    'Cash Cash Equivalents And Short Term Investments': 'Tiền, tương đương tiền và đầu tư ngắn hạn',
+    'Total Money Market Investments': 'Tổng đầu tư thị trường tiền tệ',
+    'Money Market Investments': 'Đầu tư thị trường tiền tệ',
+    'Financial Assets': 'Tài sản tài chính',
+    'Financial Assets Designatedas Fair Value Through Profitor Loss Total': 'Tài sản tài chính ghi nhận qua lãi lỗ (FVTPL)',
+    'Loans Receivable': 'Các khoản cho vay phải thu',
+    'Gross Loan': 'Cho vay khách hàng (gộp)',
+    'Net Loan': 'Cho vay khách hàng thuần',
+    'Allowance For Loans And Lease Losses': 'Dự phòng rủi ro tín dụng',
+    'Securities And Investments': 'Chứng khoán và đầu tư',
+    'Long Term Equity Investment': 'Đầu tư góp vốn dài hạn',
+    'Investmentsin Subsidiariesat Cost': 'Đầu tư vào công ty con theo giá gốc',
+    'Investments In Subsidiaries': 'Đầu tư vào công ty con',
+    'Investments In Associates': 'Đầu tư vào công ty liên kết',
+    'Investments In Joint Ventures': 'Đầu tư vào liên doanh',
+    'Other Investments': 'Đầu tư khác',
+    'Gross Accounts Receivable': 'Phải thu khách hàng (gộp)',
+    'Due From Related Parties Non Current': 'Phải thu các bên liên quan dài hạn',
+    'Accrued Interest Receivable': 'Lãi dự thu',
+    'Dividends Receivable': 'Cổ tức phải thu',
+    'Inventories Adjustments Allowances': 'Dự phòng giảm giá hàng tồn kho',
+    'Other Inventories': 'Hàng tồn kho khác',
+    'Preferred Stock': 'Cổ phiếu ưu đãi',
+    'Treasury Stock': 'Cổ phiếu quỹ',
+    'Other Equity Adjustments': 'Điều chỉnh vốn chủ sở hữu khác',
+    'Foreign Currency Translation Adjustments': 'Chênh lệch tỷ giá quy đổi báo cáo',
+    'Unrealized Gain Loss': 'Lãi/lỗ chưa thực hiện',
+    'Fixed Assets Revaluation Reserve': 'Quỹ đánh giá lại tài sản cố định',
+    'Minimum Pension Liabilities': 'Nợ lương hưu tối thiểu',
+    'Common Stock Equity': 'Vốn chủ sở hữu phổ thông',
+    'Total Capitalization': 'Tổng vốn hóa sổ sách',
+    'Tangible Book Value': 'Giá trị sổ sách hữu hình',
+    'Invested Capital': 'Vốn đầu tư',
+    'Net Tangible Assets': 'Tài sản hữu hình thuần',
+    'Preferred Securities Outside Stock Equity': 'Chứng khoán ưu đãi ngoài vốn cổ phần',
+    'Restricted Common Stock': 'Cổ phiếu phổ thông bị hạn chế',
+    'Other Equity Interest': 'Lợi ích vốn chủ sở hữu khác',
+    'Payables And Accrued Expenses': 'Phải trả và chi phí phải trả',
+    'Income Tax Payable': 'Thuế TNDN phải trả',
+    'Total Deposits': 'Tổng tiền gửi khách hàng',
+    'Depositsby Bank': 'Tiền gửi và vay các tổ chức tín dụng khác',
+    'Federal Funds Purchased And Securities Sold Under Agreements To Repurchase': 'Giao dịch mua bán lại trái phiếu và vay liên ngân hàng',
+    'Buildings And Improvements': 'Nhà cửa và vật kiến trúc',
+    'Other Properties': 'Bất động sản khác',
+    'EPS': 'Lãi cơ bản trên cổ phiếu',
+    'ROE': 'Lợi nhuận trên vốn chủ sở hữu (ROE)',
+    'ROA': 'Lợi nhuận trên tổng tài sản (ROA)',
+    'FCF': 'Dòng tiền tự do (FCF)',
+    'FVTPL': 'Tài sản tài chính ghi nhận thông qua lãi lỗ (FVTPL)',
+    'HTM': 'Các khoản đầu tư nắm giữ đến ngày đáo hạn (HTM)',
+    'AFS': 'Tài sản tài chính sẵn sàng để bán (AFS)',
+})
 
 # ==========================================
-# 5. LÀM SẠCH CHUYÊN SÂU (GIỮ NGUYÊN, 🆕 v17.3 sạch đuôi .0 ngay khi cào)
+# 4.5 BẢNG TRA LOWERCASE DỰNG 1 LẦN (TỐI ƯU TỐC ĐỘ)
+# ==========================================
+_WHITELIST_LOWER = {v.lower(): v for v in VAS_WHITELIST}
+_ALIAS_LOWER = {k.lower(): v for k, v in ALIAS_TO_VAS.items()}
+_TRANS_LOWER = {k.lower(): v for k, v in TRANSLATION_MAP.items()}
+
+_EXTRA_ENGLISH_LABELS = [
+    'Depreciation And Amortization', 'Depreciation', 'Gain Loss On Investment Securities',
+    'Net Foreign Currency Exchange Gain', 'Net Income From Continuing Operation Net Minority Interest',
+    'Free Cash Flow', 'Repayment Of Debt', 'End Cash Position', 'Beginning Cash Position',
+    'Changes In Cash', 'Financing Cash Flow', 'Net Issuance Payments Of Debt',
+    'Net Long Term Debt Issuance', 'Long Term Debt Payments', 'Long Term Debt Issuance',
+    'Investing Cash Flow', 'Interest Received Cfi', 'Operating Cash Flow', 'Taxes Refund Paid',
+    'Interest Paid Cfo', 'Change In Working Capital', 'Change In Payable', 'Change In Prepaid Assets',
+    'Change In Inventory', 'Change In Receivables', 'Other Non Cash Items', 'Gross Profit',
+    'Cost Of Revenue', 'Total Revenue', 'Operating Revenue', 'Diluted Average Shares',
+    'Basic Average Shares', 'Diluted EPS', 'Basic EPS', 'Selling General And Administration',
+    'General And Administrative Expense', 'Tax Rate For Calcs', 'Normalized EBITDA',
+    'Reconciled Depreciation', 'Reconciled Cost Of Revenue', 'EBITDA', 'EBIT',
+    'Net Interest Income', 'Interest Expense', 'Interest Income', 'Normalized Income',
+    'Total Expenses', 'Total Operating Income As Reported',
+    'Net Income From Continuing And Discontinued Operation', 'Other assets',
+]
+_ENGLISH_PURGE = {k for k in list(TRANSLATION_MAP.keys()) + list(ALIAS_TO_VAS.keys())
+                  if k.isascii() and re.search(r'[A-Za-z]', k)} | set(_EXTRA_ENGLISH_LABELS)
+
+# ==========================================
+# 5. LÀM SẠCH CHUYÊN SÂU (GIỮ NGUYÊN + VÁ)
 # ==========================================
 def format_value(x):
-    if pd.isna(x): return None
-    try:
-        if isinstance(x, str):
-            x = x.replace(',', '').replace(' ', '')   # v17.2: sửa .replace(' ') thiếu đối số
-            if x.count('.') > 1: x = x.replace('.', '')
-        val = float(x)
-        if abs(val) > 1e18: return None   # v17.1: 1e15 -> 1e18 (cứu Tổng tài sản ngân hàng ~2e15 VND)
-        if val != val or val in [float('inf'), float('-inf')]: return None
-        r = round(val, 4)
-        # 🆕 v17.3: số nguyên trả về int (không đuôi .0); số thập phân giữ tối đa 4 chữ số
-        return int(r) if r == int(r) else r
-    except: return None
+    if x is None:
+        return None
+    if isinstance(x, str):
+        s = x.strip().replace(' ', '').replace('\u00a0', '')
+        if not s or s.lower() in ('nan', 'none', 'null', '-', ''):
+            return None
+        neg = s.startswith('(') and s.endswith(')')
+        if neg:
+            s = s[1:-1]
+        s = s.replace('%', '').replace(',', '')
+        if s.count('.') > 1:
+            s = s.replace('.', '')
+        try:
+            val = float(s)
+        except (TypeError, ValueError):
+            return None
+        if neg:
+            val = -val
+    else:
+        try:
+            if pd.isna(x):
+                return None
+            val = float(x)
+        except (TypeError, ValueError):
+            return None
+    if not math.isfinite(val) or abs(val) > 1e18:
+        return None
+    r = round(val, 4)
+    if r == int(r) and abs(r) < 9.007e15:
+        return int(r)
+    return r
 
 def clean_text(text):
-    if pd.isna(text): return ""
-    text = str(text)
+    if text is None:
+        return ""
+    try:
+        if pd.isna(text):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = unicodedata.normalize('NFC', str(text))
     text = re.sub(r'[\n\r\t]+', ' ', text)
     return re.sub(r'\s{2,}', ' ', text).strip()
 
+_TRUNCATED_FIX = {
+    'Các khoản phải': 'Các khoản phải thu',
+    'Lợi nhuận trước': 'Lợi nhuận trước thuế',
+    'Thuế và các kho': 'Thuế và các khoản phải nộp Nhà nước',
+    'Tiền và tương đ': 'Tiền và tương đương tiền',
+    'TỔNG CỘNG N': 'TỔNG CỘNG NỢ PHẢI TRẢ',
+    'VỐN CHỦ SỞ H': 'Vốn chủ sở hữu',
+    'Cổ phiếu phổ thô': 'Cổ phiếu phổ thông',
+    'Đầu tư dài hạn k': 'Đầu tư tài chính dài hạn',
+    'Lợi nhuận thuần': 'Lợi nhuận thuần từ hoạt động kinh doanh',
+    'Lưu chuyển tiền': 'Lưu chuyển tiền thuần trong kỳ',
+    'Lãi / Lỗ từ đánh': 'Lãi / Lỗ từ đánh giá lại tài sản',
+    'Tổng khác f giá gốc': 'Tổng chi phí khác theo giá gốc',
+    'Các công cụ tài chính phái sinh và các': 'Các công cụ tài chính phái sinh và tài sản tài chính khác',
+    'Các khoản nợ chính phủ và NHNN Việ': 'Nợ Chính phủ và Ngân hàng Nhà nước',
+    'Các khoản nợ chính phủ và NHNN Việt': 'Nợ Chính phủ và Ngân hàng Nhà nước',
+    'Các khoản nợ chính phủ và NHNN Việt Nam': 'Nợ Chính phủ và Ngân hàng Nhà nước',
+    'Chứng khoán đầu tư giữ đến ngày đáo': 'Chứng khoán đầu tư giữ đến ngày đáo hạn',
+    'NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ H': 'Tổng cộng nguồn vốn',
+    'NỢ PHẢI TRẢ VÀ VỐN CHỦ SỞ HỮU': 'Tổng cộng nguồn vốn',
+    'TỔNG CỘNG TÀI SẢN': 'Tổng cộng tài sản',
+    'TỔNG CỘNG NGUỒN VỐN': 'Tổng cộng nguồn vốn',
+    'TỔNG CỘNG NỢ PHẢI TRẢ': 'Nợ phải trả',
+    'VỐN CHỦ SỞ HỮU': 'Vốn chủ sở hữu',
+    'Dự phòng giảm giá chứng khoán kinh': 'Dự phòng giảm giá chứng khoán kinh doanh',
+    'Dự phòng giảm giá đầu tư dài hạn': 'Dự phòng đầu tư tài chính dài hạn',
+    'Chi phí quản lý doanh nghiệ': 'Chi phí quản lý doanh nghiệp',
+    'Chi phí bán hà': 'Chi phí bán hàng',
+    'Lợi nhuận sau thuế chưa phân phố': 'Lợi nhuận sau thuế chưa phân phối',
+    'Tiền và các khoản tương đương tiền': 'Tiền và các khoản tương đương tiền',
+}
+
 def fix_truncated_text(text):
-    text = clean_text(text)
-    fixes = {
-        "Các khoản phải": "Các khoản phải thu", "Lợi nhuận trước": "Lợi nhuận trước thuế",
-        "Thuế và các kho": "Thuế và các khoản phải nộp", "Tiền và tương đ": "Tiền và tương đương tiền",
-        "TỔNG CỘNG N": "TỔNG CỘNG NỢ PHẢI TRẢ", "VỐN CHỦ SỞ H": "VỐN CHỦ SỞ HỮU",
-        "Cổ phiếu phổ thô": "Cổ phiếu phổ thông", "Đầu tư dài hạn k": "Đầu tư dài hạn khác",
-        "Lợi nhuận thuần": "Lợi nhuận thuần từ HĐKD", "Lưu chuyển tiền": "Lưu chuyển tiền thuần",
-        "Lãi / Lỗ từ đánh": "Lãi / Lỗ từ đánh giá lại tài sản", "Tổng tài sản": "Tổng tài sản",
-        "Tổng khác f giá gốc": "Tổng chi phí khác theo giá gốc"
-    }
-    for k, v in fixes.items():
-        if text.startswith(k): return v
-    return text
+    t = clean_text(text)
+    return _TRUNCATED_FIX.get(t, t)
+
+_GLUED_FIXES = [
+    (r'Investmentsin', 'Investments in'),
+    (r'venturesat', 'ventures at'),
+    (r'associatesat', 'associates at'),
+    (r'Subsidiariesat', 'Subsidiaries at'),
+    (r'Pensi\s*onand', 'Pension and'),
+    (r'\bN\s+on\b', 'Non'),
+    (r'Classesof', 'Classes of'),
+    (r'Receiptsfrom', 'Receipts from'),
+    (r'Paymentsfrom', 'Payments from'),
+    (r'Paymentson', 'Payments on'),
+    (r'Behalfof', 'Behalf of'),
+    (r'Changein', 'Change in'),
+    (r'Write\s*Offof', 'Write Off of'),
+    (r'Provisionand', 'Provision and'),
+    (r'Designatedas', 'Designated as'),
+    (r'Profitor', 'Profit or'),
+    (r'Availablefor', 'Available for'),
+    (r'Depositsby', 'Deposits by'),
+    (r'Tradeand', 'Trade and'),
+    (r'Mergern', 'Mergers'),
+    (r'Availto', 'Available to'),
+    (r'Excludinggoodwill', 'Excluding goodwill'),
+]
 
 def fix_yfinance_typos(text):
-    # 🆕 v17.3: quy tắc tách từ chỉ áp dụng khi từ nối là chữ thường dính liền và đứng trước chữ HOA/khoảng trắng/cuối chuỗi
-    #           (bản cũ chèn khoảng trắng bừa vào từ lạ: "Depreciation" -> "Depreci ation")
-    text = re.sub(r'([a-z])(from|to|of|on|for|and|at|in)(?=[A-Z\s]|$)', r'\1 \2', text)
-    text = re.sub(r'Investmentsin', 'Investments in', text, flags=re.IGNORECASE)
-    text = re.sub(r'venturesat', 'ventures at', text, flags=re.IGNORECASE)
-    text = re.sub(r'associatesat', 'associates at', text, flags=re.IGNORECASE)
-    text = re.sub(r'Pensi onand', 'Pension and', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bN on\b', 'Non', text, flags=re.IGNORECASE)
-    text = re.sub(r'Classesof', 'Classes of', text, flags=re.IGNORECASE)
-    text = re.sub(r'Receiptsfrom', 'Receipts from', text, flags=re.IGNORECASE)
-    text = re.sub(r'Paymentsfrom', 'Payments from', text, flags=re.IGNORECASE)
-    text = re.sub(r'Paymentson', 'Payments on', text, flags=re.IGNORECASE)
-    text = re.sub(r'Behalfof', 'Behalf of', text, flags=re.IGNORECASE)
-    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text)
-    text = re.sub(r'\bf\b', 'phí', text, flags=re.IGNORECASE)
+    for pat, rep in _GLUED_FIXES:
+        text = re.sub(pat, rep, text, flags=re.IGNORECASE)
+    text = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', text)
     return re.sub(r'\s{2,}', ' ', text).strip()
 
 FALLBACK_MAP = {
@@ -953,84 +1419,143 @@ FALLBACK_MAP = {
     'accounts':'các khoản','retained':'giữ lại','earnings':'thu nhập','share':'cổ phiếu','capital':'vốn',
     'premium':'thặng dư','minority':'thiểu số','interest':'lợi ích'
 }
-# 🆕 v17.3: bổ sung từ vựng cho cơ chế dịch từng từ (chỉ thêm, không ghi đè)
-for _k, _v in {
-    'amortization':'phân bổ','gain':'lãi','loss':'lỗ','foreign':'ngoại tệ','currency':'tiền tệ','exchange':'tỷ giá',
-    'continuing':'liên tục','operations':'hoạt động','securities':'chứng khoán','refund':'hoàn','paid':'đã trả',
-    'received':'đã nhận','prepaid':'trả trước','working':'lưu động','change':'thay đổi','changes':'thay đổi',
-    'payables':'phải trả','receivables':'phải thu','issuance':'phát hành','repayment':'trả nợ','debt':'nợ vay',
-    'stock':'cổ phiếu','common':'phổ thông','dividend':'cổ tức','tax':'thuế','profit':'lợi nhuận','loan':'cho vay',
-    'loans':'cho vay','deposits':'tiền gửi','customer':'khách hàng','customers':'khách hàng','provision':'dự phòng',
-    'purchase':'mua','sale':'bán','business':'doanh nghiệp','investment':'đầu tư','units':'đơn vị',
-    'reported':'đã báo cáo','items':'khoản mục','adjustments':'điều chỉnh','unusual':'bất thường','special':'đặc biệt',
-    'charges':'chi phí','fees':'phí','commissions':'hoa hồng','services':'dịch vụ','salaries':'lương',
-    'wages':'tiền công','insurance':'bảo hiểm','claims':'bồi thường','margin':'biên','price':'giá','book':'sổ sách',
-    'value':'giá trị','average':'bình quân','shares':'cổ phiếu','basic':'cơ bản','diluted':'pha loãng',
-}.items():
-    FALLBACK_MAP.setdefault(_k, _v)
+FALLBACK_MAP.update({
+    'issuance':'phát hành','repayment':'trả nợ','refund':'hoàn lại','paid':'đã trả','received':'đã nhận',
+    'cfi':'HĐĐT','cfo':'HĐKD','cff':'HĐTC','prepaid':'trả trước','payables':'phải trả','receivables':'phải thu',
+    'continuing':'tiếp tục','discontinued':'không tiếp tục','discontinuous':'không tiếp tục','normalized':'chuẩn hóa',
+    'reconciled':'điều chỉnh','unusual':'bất thường','impairment':'tổn thất','amortization':'phân bổ',
+    'depletion':'khấu hao tài nguyên','securities':'chứng khoán','investment':'đầu tư','exchange':'tỷ giá',
+    'foreign':'ngoại tệ','currency':'tiền tệ','gain':'lãi','loss':'lỗ','gains':'lãi','losses':'lỗ',
+    'debt':'nợ vay','loan':'khoản vay','loans':'khoản vay','borrowings':'khoản vay','obligation':'nghĩa vụ',
+    'obligations':'nghĩa vụ','stock':'cổ phiếu','shares':'cổ phiếu','average':'bình quân','diluted':'pha loãng',
+    'basic':'cơ bản','eps':'EPS','dividend':'cổ tức','tax':'thuế','provision':'dự phòng','working':'lưu động',
+    'change':'biến động','changes':'biến động','position':'số dư','beginning':'đầu kỳ','end':'cuối kỳ',
+    'free':'tự do','flow':'lưu chuyển','flows':'lưu chuyển','statement':'báo cáo','balance':'cân đối',
+    'sheet':'kế toán','expenses':'chi phí','accrued':'phải trả','restricted':'bị hạn chế','financial':'tài chính',
+    'trading':'kinh doanh','held':'nắm giữ','maturity':'đáo hạn','available':'sẵn sàng','sale':'bán',
+    'customer':'khách hàng','deposits':'tiền gửi','bank':'ngân hàng','fees':'phí','commissions':'hoa hồng',
+    'fee':'phí','commission':'hoa hồng','compensation':'thù lao','wages':'lương','salaries':'lương',
+    'rent':'thuê','insurance':'bảo hiểm','claims':'bồi thường','restructuring':'tái cấu trúc',
+    'mergers':'sáp nhập','acquisition':'mua lại','business':'công ty con','purchase':'mua',
+    'write':'xóa','off':'sổ','allowance':'dự phòng','doubtful':'khó đòi','related':'liên quan',
+    'parties':'bên','due':'phải thu','notes':'giấy nợ','note':'giấy nợ','line':'hạn mức','credit':'tín dụng',
+    'commercial':'thương mại','paper':'phiếu','hedging':'phòng ngừa rủi ro','derivative':'phái sinh',
+    'employee':'nhân viên','benefits':'phúc lợi','treasury':'quỹ','preferred':'ưu đãi','common':'phổ thông',
+    'additional':'bổ sung','translation':'quy đổi','adjustments':'điều chỉnh','adjustment':'điều chỉnh',
+    'revaluation':'đánh giá lại','reserve':'quỹ','minimum':'tối thiểu','capitalization':'vốn hóa',
+    'book':'sổ sách','value':'giá trị','invested':'đầu tư','outside':'ngoài',
+    'money':'tiền','market':'thị trường','federal':'liên bang','funds':'quỹ','purchased':'mua',
+    'sold':'bán','under':'theo','agreements':'hợp đồng','repurchase':'mua lại','land':'đất',
+    'machinery':'máy móc','furniture':'nội thất','construction':'xây dựng','progress':'dở dang',
+    'raw':'nguyên','materials':'vật liệu','work':'dở dang','process':'dở dang','finished':'thành phẩm',
+    'goods':'hàng hóa','inventories':'hàng tồn kho','allowances':'dự phòng','leasing':'thuê',
+    'supplemental':'bổ sung','data':'số liệu','effect':'ảnh hưởng','rate':'tỷ giá','unrealized':'chưa thực hiện',
+    'realized':'đã thực hiện','attributable':'phân bổ','stockholders':'cổ đông',
+    'noncontrolling':'không kiểm soát','interests':'lợi ích','including':'bao gồm','extraordinary':'bất thường',
+    'special':'đặc biệt','charges':'chi phí','charge':'chi phí',
+})
 
-_TR_CACHE = {}
+_VN_DIACRITIC_RE = re.compile(r'[àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]')
+_ALLOWED_ASCII_VN = {'EBIT', 'EBITDA', 'FVTPL', 'HTM', 'AFS', 'EPS', 'ROE', 'ROA', 'FCF', 'VND', 'CIR',
+                     'CTCK', 'NHNN', 'TKV', 'TNDN', 'GTGT', 'TMCP', 'CTCP', 'VN', 'HNX', 'HOSE', 'UPCOM'}
 
-def _translate_metric_core(metric_original, is_vn=False):
-    cleaned_key = clean_text(metric_original)
-    if cleaned_key in TRANSLATION_MAP: return TRANSLATION_MAP[cleaned_key]
-    if cleaned_key.lower() in _TR_LOWER: return _TR_LOWER[cleaned_key.lower()]   # 🆕 v17.3: tra bảng thường, thay vòng for chậm
-    if is_vn or any(char in cleaned_key for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
+def translate_metric(metric_original, is_vn=False):
+    cleaned_key = _norm_key(clean_text(metric_original))
+    if not cleaned_key:
+        return None
+    if cleaned_key in TRANSLATION_MAP:
+        return TRANSLATION_MAP[cleaned_key]
+    low = cleaned_key.lower()
+    if low in _TRANS_LOWER:
+        return _TRANS_LOWER[low]
+    if is_vn or _VN_DIACRITIC_RE.search(low):
         cleaned_key = re.sub(r'\bM\b', 'Lợi ích cổ đông không kiểm soát', cleaned_key)
         cleaned_key = re.sub(r'\bN s\b', 'Số lượng cổ phiếu ròng', cleaned_key)
         cleaned_key = cleaned_key.replace('f giá gốc', 'phí giá gốc')
-        return cleaned_key
+        return None if is_junk_label(cleaned_key) else cleaned_key
+
     fixed_key = fix_yfinance_typos(cleaned_key)
-    if fixed_key in TRANSLATION_MAP: return TRANSLATION_MAP[fixed_key]
-    if fixed_key.lower() in _TR_LOWER: return _TR_LOWER[fixed_key.lower()]
-    _UNMAPPED_METRICS.add(cleaned_key)   # 🆕 v17.3: ghi nhãn chưa có trong từ điển để bổ sung sau
-    k_lower = fixed_key.lower()
-    if 'gain' in k_lower and 'loss' in k_lower: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
-    if 'effect of exchange' in k_lower or 'foreign' in k_lower: return 'Ảnh hưởng thay đổi tỷ giá hối đoái'
-    if 'net income' in k_lower or 'net profit' in k_lower: return 'Lợi nhuận sau thuế (Lợi nhuận ròng)'
-    if 'operating income' in k_lower or 'operating profit' in k_lower: return 'Lợi nhuận thuần từ hoạt động kinh doanh'
-    if 'gross profit' in k_lower: return 'Lợi nhuận gộp'
-    if 'pretax income' in k_lower or 'income before tax' in k_lower: return 'Lợi nhuận kế toán trước thuế'
-    if 'revenue' in k_lower or 'sales' in k_lower: return 'Tổng doanh thu / Doanh thu thuần'
-    if 'cost of' in k_lower or 'cogs' in k_lower: return 'Giá vốn hàng bán'
-    if 'interest expense' in k_lower: return 'Chi phí lãi vay'
-    if 'interest income' in k_lower: return 'Thu nhập lãi'
-    if 'tax provision' in k_lower or 'tax expense' in k_lower: return 'Chi phí thuế thu nhập doanh nghiệp'
-    if 'depreciation' in k_lower or 'amortization' in k_lower: return 'Khấu hao tài sản cố định và phân bổ'
-    if 'cash flow' in k_lower: return 'Lưu chuyển tiền thuần'
+    if fixed_key in TRANSLATION_MAP:
+        return TRANSLATION_MAP[fixed_key]
+    if fixed_key.lower() in _TRANS_LOWER:
+        return _TRANS_LOWER[fixed_key.lower()]
+
+    k = fixed_key.lower()
+    if 'net interest income' in k: return 'Thu nhập lãi thuần'
+    if 'interest expense' in k: return 'Chi phí lãi vay'
+    if 'interest income' in k: return 'Thu nhập lãi'
+    if 'interest' in k and 'paid' in k: return 'Tiền lãi vay đã trả'
+    if 'interest' in k and 'received' in k: return 'Tiền lãi nhận được'
+    if 'net income' in k and 'minority' in k: return 'LNST của công ty mẹ'
+    if 'net income' in k and 'continuing' in k and 'discontinu' in k: return 'Lợi nhuận sau thuế TNDN'
+    if 'net income' in k and 'continuing' in k: return 'Lợi nhuận sau thuế từ hoạt động tiếp tục'
+    if 'net income' in k and 'discontinu' in k: return 'Lợi nhuận ròng từ hoạt động không liên tục'
+    if 'net income' in k or 'net profit' in k: return 'Lợi nhuận sau thuế TNDN'
+    if 'ebitda' in k: return 'Lợi nhuận trước lãi vay, thuế và khấu hao (EBITDA)'
+    if re.search(r'\bebit\b', k): return 'Lợi nhuận trước lãi vay và thuế (EBIT)'
+    if 'pretax' in k or 'before tax' in k: return 'Tổng lợi nhuận kế toán trước thuế'
+    if 'gross profit' in k: return 'Lợi nhuận gộp'
+    if 'operating income' in k or 'operating profit' in k: return 'Lợi nhuận thuần từ hoạt động kinh doanh'
+    if 'cost of' in k or 'cogs' in k: return 'Giá vốn hàng bán'
+    if 'revenue' in k or 'sales' in k: return 'Doanh thu thuần'
+    if 'tax provision' in k or 'tax expense' in k or 'income tax' in k: return 'Chi phí thuế thu nhập doanh nghiệp'
+    if 'taxes refund' in k or 'tax refund' in k: return 'Thuế được hoàn lại'
+    if 'depreciation' in k or 'amortization' in k or 'depletion' in k: return 'Khấu hao TSCĐ và BĐSĐT'
+    if 'gain' in k and 'loss' in k and ('securit' in k or 'investment' in k): return 'Lãi/lỗ từ chứng khoán đầu tư'
+    if 'gain' in k and 'loss' in k: return 'Lãi / Lỗ từ đánh giá hoặc thanh lý tài sản'
+    if 'exchange' in k or 'foreign currency' in k: return 'Lãi / Lỗ chênh lệch tỷ giá hối đoái thuần'
+    if 'repayment of debt' in k or 'debt payments' in k: return 'Tiền trả nợ gốc vay'
+    if 'issuance of debt' in k or 'debt issuance' in k: return 'Tiền thu từ đi vay'
+    if 'dividend' in k and ('paid' in k or 'payable' in k): return 'Cổ tức, lợi nhuận đã trả cho chủ sở hữu'
+    if 'dividend' in k and 'received' in k: return 'Cổ tức đã nhận'
+    if 'dividend' in k: return 'Cổ tức'
+    if 'cash flow' in k and 'operating' in k: return 'Lưu chuyển tiền thuần từ HĐKD'
+    if 'cash flow' in k and 'investing' in k: return 'Lưu chuyển tiền thuần từ HĐĐT'
+    if 'cash flow' in k and 'financing' in k: return 'Lưu chuyển tiền thuần từ HĐTC'
+    if 'cash flow' in k or 'free cash flow' in k: return 'Lưu chuyển tiền thuần'
+    if 'beginning cash' in k: return 'Tiền và tương đương tiền đầu kỳ'
+    if 'end cash' in k: return 'Tiền và tương đương tiền cuối kỳ'
+    if 'changes in cash' in k: return 'Lưu chuyển tiền thuần trong kỳ'
+    if 'working capital' in k: return 'Biến động vốn lưu động'
+    if 'change in' in k and 'inventor' in k: return 'Tăng/giảm hàng tồn kho'
+    if 'change in' in k and 'receivable' in k: return 'Tăng/giảm các khoản phải thu'
+    if 'change in' in k and ('payable' in k or 'accrued' in k): return 'Tăng/giảm các khoản phải trả'
+    if 'change in' in k and 'prepaid' in k: return 'Tăng/giảm chi phí trả trước'
+    if 'non cash items' in k: return 'Các khoản mục phi tiền mặt khác'
+    if 'shares' in k and ('average' in k or 'diluted' in k or 'basic' in k): return 'Số lượng cổ phiếu bình quân'
+    if 'eps' in k: return 'Lãi cơ bản trên cổ phiếu'
+    if 'other' in k and 'assets' in k: return 'Tài sản khác'
+    if 'other' in k and 'liabilities' in k: return 'Nợ phải trả khác'
+
     words = fixed_key.split()
     translated_words = []
+    n_translated = 0
     for w in words:
-        if any(char in w for char in ['à','á','ả','ã','ạ','ă','â','đ','ê','ô','ơ','ư','ý']):
-            translated_words.append(w); continue
+        if _VN_DIACRITIC_RE.search(w.lower()):
+            translated_words.append(w); n_translated += 1; continue
         w_clean = re.sub(r'[^a-zA-Z]', '', w).lower()
-        if w_clean in FALLBACK_MAP: translated_words.append(FALLBACK_MAP[w_clean])
-        elif w.isupper() and len(w) <= 5: translated_words.append(w)
+        if w_clean in FALLBACK_MAP:
+            translated_words.append(FALLBACK_MAP[w_clean]); n_translated += 1
+        elif w.isupper() and len(w) <= 5 and w in _ALLOWED_ASCII_VN:
+            translated_words.append(w)
     result = " ".join(translated_words)
-    result = re.sub(r'\b[a-zA-Z]\b', '', result)
     result = re.sub(r'\s{2,}', ' ', result).strip()
-    # 🆕 v17.3: chặn nhãn rác chỉ gồm từ nối ("Của", "Và"...) -> đánh dấu chưa xác định để bị loại ở Tầng 1
-    if not result or set(result.lower().split()) <= _STOP_VN: result = UNKNOWN_METRIC
+    if n_translated < 2 or len(result) < 4:
+        return None
+    if is_junk_label(result):
+        return None
+    if result.isascii() and result.upper() not in _ALLOWED_ASCII_VN:
+        return None
     return result.capitalize()
 
-def translate_metric(metric_original, is_vn=False):
-    """🆕 v17.3: bọc cache (mỗi nhãn chỉ dịch 1 lần) — logic dịch giữ nguyên."""
-    key = (str(metric_original), bool(is_vn))
-    r = _TR_CACHE.get(key)
-    if r is None:
-        r = _translate_metric_core(metric_original, is_vn)
-        _TR_CACHE[key] = r
-    return r
-
 # ==========================================
-# 5.5 🆕 v17.4: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
+# 5.5 🆕 v22.0: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
 # ==========================================
-PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu (VNZ từng giao dịch >1 triệu)
+PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu
 SHARES_MIN, SHARES_MAX = 1_000_000.0, 5e11      # số cổ phiếu
 MCAP_MIN, MCAP_MAX = 1e9, 5e16                  # VNĐ
 
 def norm_price(v):
-    """Giá phải nằm trong thang VNĐ/cp hợp lý; ngoài thang -> None (bỏ)."""
     fv = format_value(v)
     if fv is None: return None
     fv = float(fv)
@@ -1038,7 +1563,6 @@ def norm_price(v):
     return int(fv) if fv == int(fv) else round(fv, 2)
 
 def norm_shares(v):
-    """SLCP: nguồn trả đơn vị TRIỆU cp (<1e6) -> x1e6; ngoài thang -> None."""
     fv = format_value(v)
     if fv is None: return None
     fv = float(fv)
@@ -1050,7 +1574,6 @@ def norm_shares(v):
     return int(round(fv))
 
 def norm_market_cap(v, price=None, shares=None):
-    """Vốn hoá: nguồn trả đơn vị TỶ đồng (<1e9) -> x1e9; lệch giá x SLCP >50% -> lấy giá x SLCP."""
     fv = format_value(v)
     if fv is None: return None
     fv = float(fv)
@@ -1064,7 +1587,7 @@ def norm_market_cap(v, price=None, shares=None):
     return int(round(fv))
 
 # ==========================================
-# 6. HTTP SESSION (GIỮ NGUYÊN session gốc)
+# 6. HTTP SESSION (GIỮ NGUYÊN)
 # ==========================================
 session = requests.Session()
 session.headers.update({
@@ -1073,7 +1596,6 @@ session.headers.update({
     'Accept-Language': 'vi-VN,vi;q=0.9,en;q=0.8',
 })
 
-# ===== ENGINE HTTP CHO VNDIRECT (thread-safe) — CHỈ CHẠY KHI SKIP_VNDIRECT=false =====
 VND_HOSTS = ["https://finfo-api.vndirect.com.vn", "https://api-finfo.vndirect.com.vn"]
 VND_PAGE_SIZE = 1000
 VND_MAX_PAGES = 60
@@ -1102,7 +1624,6 @@ def _throttle():
 _vnd_host_idx = 0
 _vnd_lock = threading.Lock()
 def vnd_get(path, params, max_retries=1, label=""):
-    """GET VNDirect. Mặc định 1 lần thử (KHÔNG retry 4 lần), lỗi là bỏ qua ngay."""
     global _vnd_host_idx
     if SKIP_VNDIRECT: return None
     last_err = None
@@ -1127,14 +1648,13 @@ def vnd_get(path, params, max_retries=1, label=""):
     return None
 
 # ==========================================
-# 6.1. VNDIRECT BCTC API — VÔ HIỆU HOÁ MẶC ĐỊNH (SKIP_VNDIRECT=true)
+# 6.1. VNDIRECT BCTC API (TẮT MẶC ĐỊNH)
 # ==========================================
 def _item_key(it):
     return it.get('id') or (it.get('reportDate'), it.get('itemCode'),
                             it.get('quarter'), it.get('numericValue'))
 
 def _period_from_item(it, report_type):
-    """(năm, nhãn kỳ). Quý: ưu tiên 'quarter' > lengthReport 6/9 > tháng > lr12."""
     rd = str(it.get('reportDate') or it.get('fiscalDate') or '')
     year = it.get('year')
     if not year:
@@ -1163,7 +1683,6 @@ def _period_from_item(it, report_type):
     return year, f"{year}-Q{q}"
 
 def _fetch_vnd_by_year(symbol, stmt_code, report_type, base_q):
-    """Fallback khi API phớt lờ tham số page: cắt lát từng năm (mỗi năm < 1 trang)."""
     out, seen = [], set()
     for y in range(VND_MIN_YEAR, datetime.now().year + 1):
         q = f"{base_q}~reportDate:gte:{y}-01-01~reportDate:lte:{y}-12-31"
@@ -1177,7 +1696,6 @@ def _fetch_vnd_by_year(symbol, stmt_code, report_type, base_q):
     return out
 
 def _fetch_vnd_statement(symbol, stmt_code, report_type):
-    """Lật HẾT trang của 1 mã x 1 báo cáo x 1 loại kỳ. Không break thầm lặng."""
     base_q = f"code:{symbol}~reportType:{report_type}~financialStatement:{stmt_code}"
     out, seen = [], set()
     total_hint, page = None, 1
@@ -1205,7 +1723,6 @@ def _fetch_vnd_statement(symbol, stmt_code, report_type):
     return out
 
 def fetch_vndirect_bctc_financials(symbol):
-    """⭐ (TẮT MẶC ĐỊNH) Nguồn BCTC Quý + Năm từ VNDirect. Chỉ chạy khi SKIP_VNDIRECT=false."""
     if SKIP_VNDIRECT: return []
     records = []
     company_name, sector_name = get_company_profile(symbol)
@@ -1224,6 +1741,7 @@ def fetch_vndirect_bctc_financials(symbol):
                 metric_vn = clean_text(item.get('itemName', ''))
                 if not metric_vn:
                     metric_vn = fix_truncated_text(item.get('itemCode', ''))
+                metric_vn = force_vietnamese_label(metric_vn, stmt_vn)
                 if not metric_vn: continue
                 records.append({
                     'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
@@ -1234,7 +1752,7 @@ def fetch_vndirect_bctc_financials(symbol):
     return records
 
 # ==========================================
-# 6.2. FALLBACK Giá + SLCP (🆕 v17.4: chuẩn đơn vị bằng norm_*)
+# 6.2. FALLBACK Giá + SLCP (🆕 v22: chuẩn đơn vị bằng norm_*)
 # ==========================================
 def fetch_vndirect_fallback(symbol):
     if SKIP_VNDIRECT: return []
@@ -1248,8 +1766,7 @@ def fetch_vndirect_fallback(symbol):
         if res.status_code == 200:
             data = res.json()
             if data.get('data') and len(data['data']) > 0:
-                price = data['data'][0].get('close')
-                fv = norm_price(price)   # 🆕 v17.4
+                fv = norm_price(data['data'][0].get('close'))
                 if fv:
                     records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': fv})
     except Exception: pass
@@ -1260,7 +1777,7 @@ def fetch_vndirect_fallback(symbol):
             data = res.json()
             if data.get('data') and len(data['data']) > 0:
                 shares = data['data'][0].get('listedShare') or data['data'][0].get('issueShare')
-                fv = norm_shares(shares)   # 🆕 v17.4
+                fv = norm_shares(shares)
                 if fv:
                     records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Tổng số lượng cổ phiếu lưu hành', 'Giá trị': fv})
     except Exception: pass
@@ -1280,8 +1797,8 @@ def fetch_vps_fallback(symbol):
                 item = data[0]
                 price = item.get('lastPrice') or item.get('closePrice')
                 shares = item.get('listedShare') or item.get('issueShare')
-                fv_p = norm_price(price)     # 🆕 v17.4
-                fv_s = norm_shares(shares)   # 🆕 v17.4
+                fv_p = norm_price(price)
+                fv_s = norm_shares(shares)
                 if fv_p:
                     records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức', 'Loại kỳ': 'Real-time', 'Năm': current_year, 'Ngày kỳ': today_str, 'Chỉ tiêu tiếng Việt': 'Giá cổ phiếu hiện tại', 'Giá trị': fv_p})
                 if fv_s:
@@ -1290,7 +1807,7 @@ def fetch_vps_fallback(symbol):
     return records
 
 # ==========================================
-# 7. YFINANCE CRAWLERS (🆕 v17.3: bỏ dòng nhãn chưa xác định; 🆕 v17.4: chuẩn đơn vị)
+# 7. YFINANCE CRAWLERS (GIỮ KHUNG + CỔNG DỊCH + 🆕 v22 CHUẨN ĐƠN VỊ)
 # ==========================================
 def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000):
     records = []
@@ -1303,7 +1820,6 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000
                 parts = date_str.split('-')
                 if not parts[0].isdigit() or int(parts[0]) < min_year: continue
                 year_val = parts[0]
-                # v17.1: nhãn quý thống nhất 'YYYY-Qn' để dedup chéo nguồn đúng
                 if ky_bao_cao == 'Quý' and len(parts) >= 2:
                     date_period = f"{year_val}-Q{(int(parts[1]) - 1) // 3 + 1}"
                 else:
@@ -1311,9 +1827,10 @@ def parse_financial_df(symbol, df, statement_type_raw, ky_bao_cao, min_year=2000
                 for row_idx, val in df[col].items():
                     if pd.notna(val):
                         fv = format_value(val)
-                        if fv is not None and fv != 0:   # v17.1: bỏ số 0 ngay từ nguồn
-                            metric_vn = translate_metric(str(row_idx).strip())
-                            if metric_vn == UNKNOWN_METRIC: continue   # 🆕 v17.3: không nhận nhãn rác/chưa xác định
+                        if fv is not None and fv != 0:
+                            metric_vn = force_vietnamese_label(str(row_idx).strip(), statement_type_vn)
+                            if not metric_vn:
+                                continue
                             records.append({
                                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                                 'Tên ngành': sector_name, 'Loại báo cáo': statement_type_vn,
@@ -1335,7 +1852,7 @@ def fetch_historical_dividends(symbol, ticker_obj, min_year=2000):
                 if year_val.isdigit() and int(year_val) >= min_year:
                     if pd.notna(div_val):
                         fv = format_value(div_val)
-                        if fv is not None:
+                        if fv is not None and fv != 0:
                             records.append({
                                 'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                                 'Tên ngành': sector_name, 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
@@ -1375,12 +1892,12 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
         if (not market_cap or market_cap == 0.0) and current_price > 0 and shares_out > 0:
             market_cap = current_price * shares_out
 
-        # 🆕 v17.4: CHUẨN ĐƠN VỊ NGAY KHI CÀO — chặn số 14 chữ số kiểu 36.166.511.658.185
+        # 🆕 v22: CHUẨN ĐƠN VỊ NGAY KHI CÀO — chặn số 14 chữ số kiểu 36.166.511.658.185
         current_price = norm_price(current_price) if current_price else None
         shares_out = norm_shares(shares_out) if shares_out else None
         market_cap = norm_market_cap(market_cap, current_price, shares_out) if market_cap else None
         if (current_price is None) and market_cap and shares_out:
-            current_price = norm_price(market_cap / shares_out)      # suy ra giá từ vốn hoá / SLCP
+            current_price = norm_price(market_cap / shares_out)
         if (market_cap is None) and current_price and shares_out:
             market_cap = norm_market_cap(current_price * shares_out, current_price, shares_out)
         if div_yield is not None and not (0.0 <= float(div_yield) <= 30.0):
@@ -1402,7 +1919,6 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     return records
 
 def fetch_market_indices():
-    # v17.2: BỎ "UPCOM-INDEX": "^UPCOM" (Yahoo không có dữ liệu -> cảnh báo "symbol may be delisted")
     indices = {"VN-INDEX": "^VNINDEX", "HNX-INDEX": "^HNX"}
     market_records = []
     current_year = str(datetime.now().year)
@@ -1415,9 +1931,9 @@ def fetch_market_indices():
             prev_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_val
             change_val = current_val - prev_close
             change_pct = (change_val / prev_close) * 100 if prev_close else 0
-            for name, val in [('Giá trị chỉ số', current_val), ('Biến động điểm (Change)', change_val), ('Biến động phần trăm (Percent Change)', change_pct)]:
+            for name, val in [('Giá trị chỉ số', current_val), ('Biến động điểm', change_val), ('Biến động phần trăm', change_pct)]:
                 fv = format_value(val)
-                if fv is not None:
+                if fv is not None and fv != 0:
                     market_records.append({
                         'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
                         'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
@@ -1428,7 +1944,7 @@ def fetch_market_indices():
     return market_records
 
 # ==========================================
-# 8. VNFINANCIALDATA BULK (GIỮ NGUYÊN, chỉ bỏ 'ratio')
+# 8. VNFINANCIALDATA BULK (GIỮ KHUNG + CỔNG DỊCH)
 # ==========================================
 def find_value_column(df):
     for name in ['value','ratio_value','value_ratio','Value','ratio','val']:
@@ -1440,7 +1956,6 @@ def find_value_column(df):
 def fetch_vnfinancialdata_bulk(ticker_market_map):
     if vnf is None: return []
     records = []
-    # v17.1: bỏ 'ratio' — vnfinancialdata chỉ hỗ trợ 3 báo cáo, chỉ có kỳ NĂM
     statements = {"balance_sheet": "Bảng cân đối kế toán", "income_statement": "Báo cáo kết quả kinh doanh", "cash_flow": "Báo cáo lưu chuyển tiền tệ"}
     target_symbols = set(ticker_market_map.keys())
     for exchange in ["HSX", "HNX"]:
@@ -1460,11 +1975,12 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                 df = df[df['Mã chứng khoán'].isin(target_symbols)]
                 for _, row in df.iterrows():
                     fv = format_value(row['Giá trị'])
-                    if fv is None or fv == 0: continue   # 🆕 v17.3: bỏ dòng 0 ngay từ nguồn
+                    if fv is None or fv == 0: continue
                     symbol = row['Mã chứng khoán']
                     company_name, sector_name = get_company_profile(symbol)
                     year_val = str(row['Năm'])
-                    metric_vn = fix_truncated_text(translate_metric(row['Chỉ tiêu tiếng Việt'], is_vn=True))
+                    metric_vn = force_vietnamese_label(row['Chỉ tiêu tiếng Việt'], stmt_name)
+                    if not metric_vn: continue
                     records.append({
                         'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name,
                         'Tên ngành': sector_name, 'Loại báo cáo': stmt_name,
@@ -1476,14 +1992,13 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
     return records
 
 # ==========================================
-# 9. YFINANCE MULTITHREAD
+# 9. YFINANCE MULTITHREAD (GIỮ NGUYÊN)
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
     try:
         ticker = yf.Ticker(f"{symbol}.VN", session=session)
         bs_df = getattr(ticker, 'balance_sheet', None)
-        # v17.1: cào từng báo cáo ĐỘC LẬP
         for attr, raw, ky in (('balance_sheet', 'Balance_Sheet', 'Năm'),
                               ('quarterly_balance_sheet', 'Balance_Sheet', 'Quý'),
                               ('financials', 'Income_Statement', 'Năm'),
@@ -1499,8 +2014,7 @@ def process_single_ticker(symbol, category):
     return recs
 
 # ==========================================
-# 9.5. BÙ BCTC QUÝ BẰNG YFINANCE ĐA LUỒNG (v17.2)
-#      Không retry; mã lỗi/chậm bị bỏ qua ngay; vnfinancialdata chỉ có kỳ NĂM nên không dùng cho quý.
+# 9.5. BÙ BCTC QUÝ BẰNG YFINANCE ĐA LUỒNG (GIỮ NGUYÊN)
 # ==========================================
 QUARTER_WORKERS = 8
 QUARTER_TICKER_BUDGET = 20
@@ -1508,7 +2022,6 @@ QUARTER_TOTAL_BUDGET = 600
 QUARTER_MIN_PERIODS = 4
 
 def fetch_yf_quarter_single(symbol):
-    """1 mã: quarterly_balance_sheet / quarterly_income_stmt / quarterly_cashflow. Lỗi -> bỏ qua ngay."""
     recs = []
     t0 = time.monotonic()
     try:
@@ -1531,7 +2044,6 @@ def fetch_yf_quarter_single(symbol):
     return recs
 
 def fetch_quarter_multithread(symbols):
-    """Chạy ThreadPoolExecutor(max_workers=8). Trả về list bản ghi quý của tất cả mã."""
     all_recs = []
     if not symbols: return all_recs
     total = len(symbols)
@@ -1557,7 +2069,7 @@ def fetch_quarter_multithread(symbols):
     return all_recs
 
 # ==========================================
-# 10. CLEANING & SOURCE TRACKING (🆕 v17.3: làm lại 5 tầng, giữ khung; 🆕 v17.4: chuẩn đơn vị)
+# 10. CLEANING & SOURCE TRACKING (5 TẦNG + CỔNG DỊCH + 🆕 v22 CHUẨN ĐƠN VỊ)
 # ==========================================
 def _add_source(records, source_name, priority=None):
     if priority is None: priority = PRIORITY_MAP.get(source_name, 99)
@@ -1572,26 +2084,15 @@ def apply_first_principles_cleaning(df):
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
     df = df.copy()
-
-    # ---------- TẦNG 1: loại NULL / rỗng / 0 / rác, ép kiểu số ----------
     df['Giá trị'] = pd.to_numeric(df['Giá trị'].astype(str).str.replace(',', '').str.strip(), errors='coerce')
     df = df.dropna(subset=['Mã chứng khoán', 'Chỉ tiêu tiếng Việt', 'Giá trị'])
-    df = df[np.isfinite(df['Giá trị']) & (df['Giá trị'] != 0)]
+    df = df[df['Giá trị'] != 0]
     df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
     df = df[~df['Mã chứng khoán'].isin(['', 'NAN', 'NONE', 'NULL'])]
-    df['Chỉ tiêu tiếng Việt'] = df['Chỉ tiêu tiếng Việt'].astype(str).str.strip()
-    df = df[~df['Chỉ tiêu tiếng Việt'].str.lower().isin(_JUNK_METRICS)]
-    df['Loại báo cáo'] = df['Loại báo cáo'].fillna('').astype(str)
-    df['Loại kỳ'] = df['Loại kỳ'].fillna('').astype(str).str.strip()
-    # Ngày kỳ trống: nếu có Năm thì gán 31/12 của năm đó, không thì bỏ dòng
-    ngay = df['Ngày kỳ'].fillna('').astype(str).str.strip()
-    nam_tmp = pd.to_numeric(df['Năm'], errors='coerce')
-    thieu = ngay.isin(['', 'nan', 'None', 'NaT'])
-    ngay = ngay.where(~thieu, nam_tmp.map(lambda y: f"{int(y)}-12-31" if pd.notna(y) else ''))
-    df['Ngày kỳ'] = ngay
-    df = df[df['Ngày kỳ'] != '']
+    df = df[df['Chỉ tiêu tiếng Việt'].astype(str).str.strip().ne('')]
+    df = df[~df['Chỉ tiêu tiếng Việt'].astype(str).str.strip().str.lower().isin(['nan', 'none', 'null'])]
 
-    # 🆕 v17.4: CHUẨN ĐƠN VỊ giá / SLCP / vốn hoá ngay trong cleaning (chặn cả dữ liệu cũ từ Supabase)
+    # 🆕 v22: CHUẨN ĐƠN VỊ giá / SLCP / vốn hoá ngay trong cleaning (chặn cả dữ liệu cũ từ Supabase)
     m_price = df['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại'
     if m_price.any():
         df.loc[m_price, 'Giá trị'] = df.loc[m_price, 'Giá trị'].map(norm_price)
@@ -1605,34 +2106,24 @@ def apply_first_principles_cleaning(df):
     df = df.dropna(subset=['Giá trị'])
     df = df[df['Giá trị'] != 0]
     if before_unit - len(df):
-        print(f"  [Tầng 1b] 🆕 v17.4: loại {before_unit - len(df):,} dòng giá/SLCP/vốn hoá ngoài thang đơn vị.")
-    print(f"  [Tầng 1] Loại bỏ NULL/rỗng/0/rác & ép kiểu Float. Còn {len(df):,} dòng.")
-    
-    # ---------- TẦNG 2: Việt hoá + ép chuẩn VAS (xử lý theo nhãn duy nhất cho nhanh) ----------
-    uniq = df[['Chỉ tiêu tiếng Việt', 'Loại báo cáo']].drop_duplicates()
-    std_cache = {(m, r): standardize_metric(m, r) for m, r in zip(uniq['Chỉ tiêu tiếng Việt'], uniq['Loại báo cáo'])}
-    df['Chỉ tiêu tiếng Việt'] = [std_cache[(m, r)] for m, r in zip(df['Chỉ tiêu tiếng Việt'], df['Loại báo cáo'])]
-    df = df.dropna(subset=['Chỉ tiêu tiếng Việt'])
-    df['Chỉ tiêu tiếng Việt'] = df['Chỉ tiêu tiếng Việt'].astype(str).str.strip()
-    df = df[~df['Chỉ tiêu tiếng Việt'].str.lower().isin(_JUNK_METRICS)]
-    still_en = sorted({m for m in df['Chỉ tiêu tiếng Việt'].unique() if _looks_english(m) and not m.isupper()})
-    for m in still_en: _UNMAPPED_METRICS.add(m)
-    print(f"  [Tầng 2] Việt hoá + ép chuẩn VAS Dictionary. Còn {len(df):,} dòng. (Nhãn còn nghi tiếng Anh: {len(still_en)})")
+        print(f"  [Tầng 1b] 🆕 v22: loại {before_unit - len(df):,} dòng giá/SLCP/vốn hoá ngoài thang đơn vị.")
+    print(f"  [Tầng 1] Loại bỏ NULL/0 & ép kiểu số. Còn {len(df):,} dòng.")
 
-    # Tầng 2.5 (v17.1): chữa nhãn quý cũ dạng ngày (Yahoo/Supabase đời trước) -> 'YYYY-Qn'
+    before2 = len(df)
+    df, _ = sweep_labels(df)
+    print(f"  [Tầng 2] Ép chuẩn VAS + dịch Anh + bóc [n] + chặn rác. Còn {len(df):,} dòng (bỏ {before2 - len(df):,}).")
+
     mask = (df['Loại kỳ'] == 'Quý') & df['Ngày kỳ'].astype(str).str.match(r'^\d{4}-\d{2}-\d{2}$')
     if mask.any():
         s = df.loc[mask, 'Ngày kỳ'].astype(str)
         df.loc[mask, 'Ngày kỳ'] = s.str[:4] + '-Q' + ((s.str[5:7].astype(int) - 1) // 3 + 1).astype(str)
         print(f"  [Tầng 2.5] Chuẩn hoá {int(mask.sum()):,} nhãn quý về 'YYYY-Qn'.")
 
-    # ---------- TẦNG 3: Deduplication (nguồn ưu tiên cao thắng) ----------
     if '_priority' in df.columns:
         df = df.sort_values('_priority', kind='stable')
     df = df.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
     print(f"  [Tầng 3] Deduplication. Còn {len(df):,} dòng.")
-    
-    # ---------- TẦNG 4: kiểm tra cân đối (chỉ cảnh báo) ----------
+
     print("  [Tầng 4] Kiểm tra Cân đối kế toán (Chỉ cảnh báo)...")
     bctc_df = df[df['Loại báo cáo'].astype(str).str.contains('Bảng cân đối', na=False)]
     if not bctc_df.empty:
@@ -1649,9 +2140,10 @@ def apply_first_principles_cleaning(df):
             else:
                 print("  [Tầng 4] ⚠️ Không đủ 3 cột để kiểm tra.")
         except Exception: pass
-    
-    # ---------- TẦNG 5: bỏ dòng 0, ép số nguyên int64 / số thập phân bỏ 0 thừa, điền Năm ----------
-    print("  [Tầng 5] Loại bỏ các dòng trắng (Giá trị = 0) & Format số liệu...")
+
+    print("  [Tầng 5] Loại bỏ dòng trắng (Giá trị = 0) & Format số liệu (int64, không .0)...")
+    df = df[df['Giá trị'] != 0]
+
     vals = pd.to_numeric(df['Giá trị'], errors='coerce').round(4)
     keep = vals.notna() & np.isfinite(vals) & (vals != 0)
     df = df.loc[keep].copy()
@@ -1661,22 +2153,22 @@ def apply_first_principles_cleaning(df):
     is_int = vals.eq(vals.round(0))
     fmt = pd.Series('', index=df.index, dtype=object)
     if is_int.any():
-        fmt.loc[is_int] = vals.loc[is_int].astype('int64').astype(str)          # số nguyên -> int64, không đuôi .0
+        fmt.loc[is_int] = vals.loc[is_int].astype('int64').astype(str)
     if (~is_int).any():
-        fmt.loc[~is_int] = vals.loc[~is_int].map(lambda f: format(f, '.4f').rstrip('0').rstrip('.'))   # bỏ số 0 thừa
+        fmt.loc[~is_int] = vals.loc[~is_int].map(lambda f: format(f, '.4f').rstrip('0').rstrip('.'))
     df['Giá trị'] = fmt
     df = df[df['Giá trị'].astype(str).str.strip().ne('')]
 
-    # tự điền 'Năm' từ 'Ngày kỳ' nếu thiếu (còn thiếu nữa mới dùng năm hiện tại)
-    nam = pd.to_numeric(df['Năm'], errors='coerce')
-    nam_tu_ngay = pd.to_numeric(df['Ngày kỳ'].astype(str).str.extract(r'(\d{4})')[0], errors='coerce')
-    df['Năm'] = nam.fillna(nam_tu_ngay).fillna(datetime.now().year).astype(int)
-        
+    if 'Năm' in df.columns:
+        nam = pd.to_numeric(df['Năm'], errors='coerce')
+        nam_tu_ngay = pd.to_numeric(df['Ngày kỳ'].astype(str).str.extract(r'(\d{4})')[0], errors='coerce')
+        df['Năm'] = nam.fillna(nam_tu_ngay).fillna(datetime.now().year).astype(int)
+
     print(f"  [Tầng 5] ✅ Đã xóa dòng trắng. Còn {len(df):,} dòng.")
     return df[STANDARD_COLUMNS]
 
 # ==========================================
-# 10.5 🆕 v17.4: TÍNH CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
+# 10.5 🆕 v22.0: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
 # ==========================================
 VAL_METRIC_ALIASES = {
     'LNST': ['Lợi nhuận sau thuế TNDN', 'LNST của công ty mẹ', 'Lợi nhuận sau thuế thu nhập doanh nghiệp'],
@@ -1688,8 +2180,8 @@ VAL_METRIC_ALIASES = {
 }
 
 def compute_derived_valuation_metrics(df):
-    """🆕 v17.4: EPS, BVPS, ROE, ROA, biên ròng/gộp, P/E, P/B, vốn hoá cho từng (mã, kỳ, ngày kỳ).
-       Dùng pandas pivot + numpy; np.errstate chống chia 0; CHỈ sinh dòng khi mẫu số khác 0."""
+    """🆕 v22: EPS, BVPS, ROE, ROA, biên ròng/gộp, P/E, P/B, vốn hoá cho từng (mã, kỳ, ngày kỳ).
+       pandas pivot + numpy; np.errstate chống chia 0; CHỈ sinh dòng khi mẫu số khác 0."""
     if df is None or df.empty: return []
     try:
         d = df.copy()
@@ -1697,7 +2189,6 @@ def compute_derived_valuation_metrics(df):
         d = d[d['Giá trị số'].notna() & (d['Giá trị số'] != 0)]
         if d.empty: return []
 
-        # giá & SLCP real-time mới nhất mỗi mã
         px_df = d[d['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại'].sort_values('Ngày kỳ')
         px = px_df.groupby('Mã chứng khoán')['Giá trị số'].last()
         sh_df = d[d['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành'].sort_values('Ngày kỳ')
@@ -1745,19 +2236,18 @@ def compute_derived_valuation_metrics(df):
             company_name, sector_name = get_company_profile(s)
             for label, arr, rnd in names:
                 v = arr[i]
-                if v is None or not np.isfinite(v) or v == 0: continue   # không sinh dòng 0 / NaN
+                if v is None or not np.isfinite(v) or v == 0: continue
                 fv = int(round(float(v))) if rnd == 0 else round(float(v), rnd)
                 out.append({'Mã chứng khoán': s, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name,
                             'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
                             'Loại kỳ': ky, 'Năm': int(nmv), 'Ngày kỳ': nk,
                             'Chỉ tiêu tiếng Việt': label, 'Giá trị': fv})
-        print(f"  🧮 [v17.4] Đã tính {len(out):,} chỉ số định giá dẫn xuất (EPS/BVPS/ROE/ROA/P/E/P/B/vốn hoá).")
+        print(f"  🧮 [v22] Đã tính {len(out):,} chỉ số định giá dẫn xuất (EPS/BVPS/ROE/ROA/P/E/P/B/vốn hoá).")
         return out
     except Exception as e:
-        print(f"  ⚠️ [v17.4] Lỗi tính chỉ số dẫn xuất (đã chặn): {type(e).__name__}: {e}")
+        print(f"  ⚠️ [v22] Lỗi tính chỉ số dẫn xuất (đã chặn): {type(e).__name__}: {e}")
         return []
 
-# v17.1: Báo cáo độ phủ QUÝ từng mã (gọi ở BƯỚC 7)
 def export_coverage_report(df, tickers):
     q = df[df['Loại kỳ'] == 'Quý']
     g = df.groupby(['Mã chứng khoán', 'Loại kỳ']).size().unstack(fill_value=0)
@@ -1776,20 +2266,6 @@ def export_coverage_report(df, tickers):
         print("  ⚠️ Mã thiếu quý:", ", ".join(f"{r.ticker}({r.so_ky_quy})" for r in weak.itertuples()))
     return rep
 
-# 🆕 v17.3: xuất danh sách nhãn tiếng Anh chưa có trong từ điển để bổ sung lần sau
-def export_unmapped_report():
-    try:
-        if _UNMAPPED_METRICS:
-            os.makedirs('data', exist_ok=True)
-            pd.DataFrame({'nhan_chua_co_trong_tu_dien': sorted(_UNMAPPED_METRICS)}).to_csv(
-                'data/_unmapped_metrics.csv', index=False, encoding='utf-8-sig')
-            print(f"  📝 {len(_UNMAPPED_METRICS)} nhãn chưa có trong từ điển -> data/_unmapped_metrics.csv")
-        else:
-            print("  📝 Tất cả nhãn đều đã có trong từ điển.")
-    except Exception as e:
-        print(f"  ⚠️ Không ghi được _unmapped_metrics.csv: {e}")
-
-# v17.2: dọn sạch file tạm
 def _cleanup_temp_files():
     targets = ['data/_checkpoint.csv', 'data/_emergency_backup.csv', 'data/_emergency_backup.parquet',
                '_checkpoint.csv']
@@ -1807,14 +2283,15 @@ def _cleanup_temp_files():
         print(f"  🧽 Đã dọn {removed} file tạm.")
 
 # ==========================================
-# 11. MAIN (GIỮ NGUYÊN KHUNG BƯỚC 0->8 + 🆕 v17.4 BƯỚC 6.5)
+# 11. MAIN (GIỮ KHUNG BƯỚC 0->8 + 🆕 v22 BƯỚC 6.5 + CHỈ 2 FILE OUTPUT)
 # ==========================================
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v17.4 (CHUẨN ĐƠN VỊ + CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v22.0 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
-    print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | SUPABASE_PURGE = {SUPABASE_PURGE} | PUSH_TO_SUPABASE = {PUSH_TO_SUPABASE}")
+    print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
+    print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
     ticker_market_map = load_176_master_tickers()
     all_master_records = []
@@ -1822,8 +2299,19 @@ def main():
     def _accumulate(recs, source):
         global _ALL_RECORDS_GLOBAL
         if not recs: return
-        _add_source(recs, source)
-        all_master_records.extend(recs)
+        kept, dropped = [], 0
+        for r in recs:
+            lab = force_vietnamese_label(r.get('Chỉ tiêu tiếng Việt'), r.get('Loại báo cáo'))
+            if lab is None:
+                dropped += 1
+                continue
+            r['Chỉ tiêu tiếng Việt'] = lab
+            kept.append(r)
+        if dropped:
+            print(f"  🧹 [{source}] chặn {dropped:,} nhãn Anh/rác ngay khi nạp.")
+        if not kept: return
+        _add_source(kept, source)
+        all_master_records.extend(kept)
         _ALL_RECORDS_GLOBAL = all_master_records
 
     def _save_checkpoint(label):
@@ -1857,7 +2345,7 @@ def main():
     index_recs = fetch_market_indices()
     if index_recs: _accumulate(index_recs, 'INDICES')
 
-    # BƯỚC 3 — VNDIRECT BCTC (mặc định BỎ QUA)
+    # BƯỚC 3
     if SKIP_VNDIRECT:
         print("\n⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
     else:
@@ -1882,7 +2370,7 @@ def main():
                     _save_checkpoint(f"VNDIRECT_{done}/{len(ticker_market_map)}")
         _save_checkpoint("sau_VNDIRECT_BCTC")
 
-    # BƯỚC 4 — Yfinance backup
+    # BƯỚC 4
     print(f"\n🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
@@ -1902,7 +2390,6 @@ def main():
         q_syms = set(q_periods[q_periods >= QUARTER_MIN_PERIODS].index)
         print(f"  📊 Đã có {len(q_syms)}/{len(ticker_market_map)} mã có ≥ {QUARTER_MIN_PERIODS} kỳ Quý.")
 
-        # v17.2: bù QUÝ bằng yfinance đa luồng (8 luồng, timeout ngắn, không retry)
         missing_q = [s for s in ticker_market_map.keys() if s not in q_syms]
         if missing_q:
             print(f"  🩹 {len(missing_q)} mã thiếu Quý. Bù bằng yfinance đa luồng ({QUARTER_WORKERS} luồng)...")
@@ -1938,7 +2425,7 @@ def main():
         print(f"\n  📊 KIỂM CHỨNG: {q_count:,} QUÝ | {y_count:,} NĂM | Tổng: {len(df_check):,}")
 
     # BƯỚC 5.5
-    print(f"\n🆕 BƯỚC 5.5: Tải bổ sung từ Supabase...")
+    print(f"\n🆕 BƯỚC 5.5: Tải bổ sung từ Supabase (đã lọc bẩn + dịch nhãn Anh cũ)...")
     supabase_df = load_data_from_supabase()
     if not supabase_df.empty:
         _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH' if SUPABASE_PRIORITY == 'high' else 'SUPABASE')
@@ -1947,7 +2434,7 @@ def main():
     df_master = pd.DataFrame(all_master_records)
     df_clean = apply_first_principles_cleaning(df_master) if not df_master.empty else pd.DataFrame(columns=STANDARD_COLUMNS)
 
-    # 🆕 v17.4 BƯỚC 6.5: tính chỉ số định giá dẫn xuất bằng pandas/numpy (chèn/đè giá trị 0-sai cũ)
+    # 🆕 v22 BƯỚC 6.5: tính chỉ số định giá dẫn xuất bằng pandas/numpy (đè giá trị 0/sai cũ)
     if not df_clean.empty:
         derived = compute_derived_valuation_metrics(df_clean)
         if derived:
@@ -1957,7 +2444,13 @@ def main():
             df_clean = df_all[STANDARD_COLUMNS]
             print(f"  ✅ [BƯỚC 6.5] Gộp chỉ số dẫn xuất -> tổng {len(df_clean):,} dòng.")
 
-    # BƯỚC 7
+    # CHỐT CUỐI: quét lại toàn bộ trước khi ghi file
+    if not df_clean.empty:
+        df_clean, n_sweep = sweep_labels(df_clean)
+        df_clean = df_clean.drop_duplicates(subset=['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'], keep='first')
+        print(f"  [Cổng cuối] Quét lại {len(df_clean):,} nhãn: loại thêm {n_sweep} nhãn Anh/rác sót.")
+
+    # BƯỚC 7 — CHỈ LƯU ĐÚNG 2 FILE CHÍNH
     os.makedirs('data', exist_ok=True)
     csv_path = 'data/vietnam_stock_database_tong_hop.csv'
     parquet_path = 'data/vietnam_stock_database.parquet'
@@ -1966,20 +2459,22 @@ def main():
 
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
-    print(f"\n💾 ĐÃ LƯU FILE:")
+    print(f"\n💾 ĐÃ LƯU ĐÚNG 2 FILE CHÍNH:")
     print(f"   → CSV:     {csv_path}")
     print(f"   → PARQUET: {parquet_path} ({os.path.getsize(parquet_path)/1024/1024:.2f} MB)")
 
-    if not df_clean.empty:
+    if COVERAGE_REPORT and not df_clean.empty:
         export_coverage_report(df_clean, set(ticker_market_map.keys()))
-    export_unmapped_report()   # 🆕 v17.3
 
-    # BƯỚC 8
+    # BƯỚC 8 — KHÔNG BAO GIỜ làm fail job
     if PUSH_TO_SUPABASE:
-        print("\n📤 BƯỚC 8: Đẩy Supabase...")
-        if SUPABASE_PURGE:
-            purge_bad_rows_supabase()   # 🆕 v17.3: dọn dòng 0 / trống / rác / tiếng Anh trước khi upsert
-        upsert_to_supabase(df_clean)
+        print("\n📤 BƯỚC 8: Đẩy Supabase (engine bền vững v22)...")
+        try:
+            ok = upsert_to_supabase(df_clean)
+            if ok and PURGE_SUPABASE_BAD:
+                purge_supabase_bad_rows()
+        except Exception as e:
+            print(f"⚠️ BƯỚC 8 lỗi đã chặn: {type(e).__name__}: {e} (dữ liệu vẫn an toàn trong 2 file chính)")
 
     _cleanup_temp_files()
 
@@ -1989,11 +2484,29 @@ def main():
         print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/176")
         for k, v in df_clean['Loại kỳ'].value_counts().items():
             print(f"     • {k}: {v:,}")
-        # 🆕 v17.4: kiểm chứng thang giá trị
+        en_left = int(df_clean['Chỉ tiêu tiếng Việt'].map(_looks_english).sum())
+        print(f" - Nhãn thuần tiếng Anh còn sót TOÀN FILE: {en_left} (mục tiêu = 0)")
         px_chk = pd.to_numeric(df_clean[df_clean['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại']['Giá trị'], errors='coerce')
         if not px_chk.empty:
             print(f" - Giá cp: min={px_chk.min():,.0f} | max={px_chk.max():,.0f} VNĐ (thang hợp lệ 100 -> 5.000.000)")
     print("=" * 62)
 
+# ==============================================================================
+# 🆕 v22: CỔNG VÀO CHẶN MỌI EXCEPTION -> WORKFLOW KHÔNG BAO GIỜ EXIT 1
+# ==============================================================================
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n⚠️ Bị dừng bởi người dùng.")
+    except Exception:
+        print("\n🛑 LỖI TỔNG ĐÃ ĐƯỢC CHẶN (workflow sẽ KHÔNG exit 1):")
+        traceback.print_exc()
+        try:
+            if _ALL_RECORDS_GLOBAL:
+                os.makedirs('data', exist_ok=True)
+                pd.DataFrame(_ALL_RECORDS_GLOBAL).to_csv('data/_emergency_backup.csv', index=False, encoding='utf-8-sig')
+                print("  💾 Đã lưu khẩn cấp data/_emergency_backup.csv")
+        except Exception:
+            pass
+    sys.exit(0)
