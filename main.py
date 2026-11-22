@@ -511,7 +511,7 @@ SUPABASE_PRIORITY = os.environ.get("SUPABASE_PRIORITY", "low").lower()
 PUSH_TO_SUPABASE = os.environ.get("PUSH_TO_SUPABASE", "false").lower() == "true"
 SUPABASE_ON_CONFLICT = os.environ.get("SUPABASE_ON_CONFLICT", "ticker,report_type,period_type,report_date,item_vn")
 PURGE_SUPABASE_BAD = os.environ.get("PURGE_SUPABASE_BAD", "true").strip().lower() in ("1", "true", "yes", "y")
-SKIP_VNDIRECT = os.environ.get("SKIP_VNDIRECT", "true").strip().lower() in ("1", "true", "yes", "y")
+SKIP_VNDIRECT = os.environ.get("SKIP_VNDIRECT", "false").strip().lower() in ("1", "true", "yes", "y")
 COVERAGE_REPORT = os.environ.get("COVERAGE_REPORT", "false").strip().lower() in ("1", "true", "yes", "y")
 
 # 🆕 v22: tham số engine upsert chống ConnectionTerminated / GOAWAY HTTP2
@@ -840,6 +840,13 @@ def load_daily_stock_data():
 # 3. DANH SÁCH 176 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
 # ==========================================
 def load_176_master_tickers():
+    # HNX shares in the tracked universe. VNDIRECT is enabled by default below,
+    # because Yahoo's Vietnam coverage does not reliably include HNX filings.
+    hnx_tickers = {
+        'BVS','CEO','DTD','DXP','HGM','HUT','IDC','KSF','L14','L18','LAS','MBS',
+        'NBC','NDN','NET','NTP','PLC','PVB','PVC','PVI','PVS','SHS','SLS','THD',
+        'TIG','TMB','TNG','TVD','VCS','VC3','VGS','DHT','DDV','HMS'
+    }
     raw_tickers = [
         'ACB','ANV','BAF','BCM','BID','BMP','BSI','BSR','BVH','BVS','BWE','CAP',
         'CEO','CII','CMG','CTD','CTG','CTR','CTS','DBC','DCM','DGW','DIG','DP3',
@@ -857,7 +864,8 @@ def load_176_master_tickers():
         'TDC','CTI','SJD','TMP','SBA','VSH','TTA','TV2','VCP','BFC','DDV','SGP',
         'DPR','DHC','TCM','HPP','PAT','DTP','SCL','HMS',
     ]
-    return {t.strip().upper(): "VIETNAM_MARKET" for t in raw_tickers if t.strip()}
+    return {t.strip().upper(): ("HNX" if t.strip().upper() in hnx_tickers else "HOSE_OR_OTHER")
+            for t in raw_tickers if t.strip()}
 
 def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
@@ -1971,7 +1979,8 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
                 else: rename_map['value'] = 'Giá trị'
                 if 'item_name' not in df.columns and 'item' in df.columns: rename_map['item'] = 'Chỉ tiêu tiếng Việt'
                 df = df.rename(columns=rename_map)
-                if 'Giá trị' not in df.columns: continue
+                if 'Giá trị' not in df.columns or 'Mã chứng khoán' not in df.columns: continue
+                df['Mã chứng khoán'] = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
                 df = df[df['Mã chứng khoán'].isin(target_symbols)]
                 for _, row in df.iterrows():
                     fv = format_value(row['Giá trị'])
@@ -1996,21 +2005,29 @@ def fetch_vnfinancialdata_bulk(ticker_market_map):
 # ==========================================
 def process_single_ticker(symbol, category):
     recs = []
-    try:
-        ticker = yf.Ticker(f"{symbol}.VN", session=session)
-        bs_df = getattr(ticker, 'balance_sheet', None)
-        for attr, raw, ky in (('balance_sheet', 'Balance_Sheet', 'Năm'),
-                              ('quarterly_balance_sheet', 'Balance_Sheet', 'Quý'),
-                              ('financials', 'Income_Statement', 'Năm'),
-                              ('quarterly_financials', 'Income_Statement', 'Quý'),
-                              ('cashflow', 'Cash_Flow', 'Năm'),
-                              ('quarterly_cashflow', 'Cash_Flow', 'Quý')):
-            try:
-                recs.extend(parse_financial_df(symbol, getattr(ticker, attr, None), raw, ky))
-            except Exception: pass
-        recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
-        recs.extend(fetch_historical_dividends(symbol, ticker))
-    except Exception: pass
+    suffixes = ['.HN', '.VN'] if category == 'HNX' else ['.VN']
+    for suffix in suffixes:
+        try:
+            ticker = yf.Ticker(f"{symbol}{suffix}", session=session)
+            before = len(recs)
+            bs_df = getattr(ticker, 'balance_sheet', None)
+            for attr, raw, ky in (('balance_sheet', 'Balance_Sheet', 'Năm'),
+                                  ('quarterly_balance_sheet', 'Balance_Sheet', 'Quý'),
+                                  ('financials', 'Income_Statement', 'Năm'),
+                                  ('quarterly_financials', 'Income_Statement', 'Quý'),
+                                  ('cashflow', 'Cash_Flow', 'Năm'),
+                                  ('quarterly_cashflow', 'Cash_Flow', 'Quý')):
+                try:
+                    recs.extend(parse_financial_df(symbol, getattr(ticker, attr, None), raw, ky))
+                except Exception:
+                    pass
+            recs.extend(fetch_market_and_valuation_metrics(symbol, ticker, bs_df))
+            recs.extend(fetch_historical_dividends(symbol, ticker))
+            if len(recs) > before or suffix == suffixes[-1]:
+                break
+        except Exception as exc:
+            if suffix == suffixes[-1]:
+                print(f"  ⚠️ Yahoo {symbol} ({category}): {type(exc).__name__}")
     return recs
 
 # ==========================================
@@ -2021,35 +2038,38 @@ QUARTER_TICKER_BUDGET = 20
 QUARTER_TOTAL_BUDGET = 600
 QUARTER_MIN_PERIODS = 4
 
-def fetch_yf_quarter_single(symbol):
+def fetch_yf_quarter_single(symbol, category=None):
     recs = []
     t0 = time.monotonic()
-    try:
-        ticker = yf.Ticker(f"{symbol}.VN")
-    except Exception:
-        return recs
-    for attr, raw in (('quarterly_balance_sheet', 'Balance_Sheet'),
-                      ('quarterly_income_stmt', 'Income_Statement'),
-                      ('quarterly_cashflow', 'Cash_Flow')):
-        if time.monotonic() - t0 > QUARTER_TICKER_BUDGET:
-            break
+    suffixes = ['.HN', '.VN'] if category == 'HNX' else ['.VN']
+    for suffix in suffixes:
         try:
-            df = getattr(ticker, attr, None)
+            ticker = yf.Ticker(f"{symbol}{suffix}")
         except Exception:
+            continue
+        before = len(recs)
+        for attr, raw in (('quarterly_balance_sheet', 'Balance_Sheet'),
+                          ('quarterly_income_stmt', 'Income_Statement'),
+                          ('quarterly_cashflow', 'Cash_Flow')):
+            if time.monotonic() - t0 > QUARTER_TICKER_BUDGET:
+                break
+            try:
+                df = getattr(ticker, attr, None)
+                recs.extend(parse_financial_df(symbol, df, raw, 'Quý'))
+            except Exception:
+                pass
+        if len(recs) > before or suffix == suffixes[-1]:
             break
-        try:
-            recs.extend(parse_financial_df(symbol, df, raw, 'Quý'))
-        except Exception:
-            pass
     return recs
 
-def fetch_quarter_multithread(symbols):
+def fetch_quarter_multithread(symbols, market_map=None):
     all_recs = []
     if not symbols: return all_recs
     total = len(symbols)
     done = 0
     executor = ThreadPoolExecutor(max_workers=QUARTER_WORKERS)
-    futures = {executor.submit(fetch_yf_quarter_single, s): s for s in symbols}
+    market_map = market_map or {}
+    futures = {executor.submit(fetch_yf_quarter_single, s, market_map.get(s)): s for s in symbols}
     try:
         for future in as_completed(futures, timeout=QUARTER_TOTAL_BUDGET):
             done += 1
@@ -2333,6 +2353,8 @@ def main():
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
     ticker_market_map = load_176_master_tickers()
+    hnx_symbols = sorted(s for s, market in ticker_market_map.items() if market == 'HNX')
+    print(f"  🏦 Universe theo dõi: {len(hnx_symbols)} mã HNX, {len(ticker_market_map) - len(hnx_symbols)} mã HOSE/khác.")
     all_master_records = []
 
     def _accumulate(recs, source):
@@ -2432,7 +2454,7 @@ def main():
         missing_q = [s for s in ticker_market_map.keys() if s not in q_syms]
         if missing_q:
             print(f"  🩹 {len(missing_q)} mã thiếu Quý. Bù bằng yfinance đa luồng ({QUARTER_WORKERS} luồng)...")
-            q_recs = fetch_quarter_multithread(missing_q)
+            q_recs = fetch_quarter_multithread(missing_q, ticker_market_map)
             if q_recs:
                 _accumulate(q_recs, 'YF_QUARTER')
                 print(f"  ✅ Bù quý xong: +{len(q_recs):,} dòng.")
