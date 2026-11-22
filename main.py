@@ -1,7 +1,7 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v22.0 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.0 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v22.0 (viết lại toàn bộ trên nền gốc v19.0, GIỮ NGUYÊN 100% khung + từ điển):
+Changelog v23.0 (viết lại toàn bộ trên nền gốc v19.0, GIỮ NGUYÊN 100% khung + từ điển):
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -1549,7 +1549,7 @@ def translate_metric(metric_original, is_vn=False):
     return result.capitalize()
 
 # ==========================================
-# 5.5 🆕 v22.0: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
+# 5.5 🆕 v23.0: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
 # ==========================================
 PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu
 SHARES_MIN, SHARES_MAX = 1_000_000.0, 5e11      # số cổ phiếu
@@ -2168,7 +2168,7 @@ def apply_first_principles_cleaning(df):
     return df[STANDARD_COLUMNS]
 
 # ==========================================
-# 10.5 🆕 v22.0: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
+# 10.5 🆕 v23.0: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
 # ==========================================
 VAL_METRIC_ALIASES = {
     'LNST': ['Lợi nhuận sau thuế TNDN', 'LNST của công ty mẹ', 'Lợi nhuận sau thuế thu nhập doanh nghiệp'],
@@ -2179,75 +2179,114 @@ VAL_METRIC_ALIASES = {
     'SLCP': ['Số lượng cổ phiếu phổ thông', 'Cổ phiếu đã phát hành'],
 }
 
+def _bounded_ratio(numerator, denominator, *, scale=1.0, abs_limit=None, positive_only=False):
+    """Return a finite ratio only when inputs and result pass plausibility checks."""
+    try:
+        n, d = float(numerator), float(denominator)
+        if not (math.isfinite(n) and math.isfinite(d)) or d == 0:
+            return np.nan
+        value = (n / d) * scale
+        if not math.isfinite(value) or (positive_only and value <= 0):
+            return np.nan
+        if abs_limit is not None and abs(value) > abs_limit:
+            return np.nan
+        return value
+    except (TypeError, ValueError, OverflowError):
+        return np.nan
+
 def compute_derived_valuation_metrics(df):
-    """🆕 v22: EPS, BVPS, ROE, ROA, biên ròng/gộp, P/E, P/B, vốn hoá cho từng (mã, kỳ, ngày kỳ).
-       pandas pivot + numpy; np.errstate chống chia 0; CHỈ sinh dòng khi mẫu số khác 0."""
-    if df is None or df.empty: return []
+    """Calculate EPS, BVPS, ROE, ROA, margins, P/E, P/B and market cap.
+
+    Unsafe/missing inputs produce no metric. Guardrails intentionally reject suspicious
+    ratios instead of manufacturing a valuation when source units are inconsistent.
+    Financial statement values are expected to share the same currency scale (VND).
+    """
+    if df is None or df.empty:
+        return []
     try:
         d = df.copy()
+        required = {'Giá trị', 'Chỉ tiêu tiếng Việt', 'Loại kỳ', 'Mã chứng khoán', 'Ngày kỳ', 'Năm'}
+        if not required.issubset(d.columns):
+            return []
         d['Giá trị số'] = pd.to_numeric(d['Giá trị'], errors='coerce')
-        d = d[d['Giá trị số'].notna() & (d['Giá trị số'] != 0)]
-        if d.empty: return []
+        d = d[np.isfinite(d['Giá trị số']) & (d['Giá trị số'] != 0)]
+        if d.empty:
+            return []
 
-        px_df = d[d['Chỉ tiêu tiếng Việt'] == 'Giá cổ phiếu hiện tại'].sort_values('Ngày kỳ')
-        px = px_df.groupby('Mã chứng khoán')['Giá trị số'].last()
-        sh_df = d[d['Chỉ tiêu tiếng Việt'] == 'Tổng số lượng cổ phiếu lưu hành'].sort_values('Ngày kỳ')
-        sh_rt = sh_df.groupby('Mã chứng khoán')['Giá trị số'].last()
+        def latest(label):
+            x = d[d['Chỉ tiêu tiếng Việt'].eq(label)].copy()
+            if x.empty:
+                return pd.Series(dtype=float)
+            x = x.sort_values('Ngày kỳ', kind='stable')
+            return x.groupby('Mã chứng khoán')['Giá trị số'].last()
 
+        prices = latest('Giá cổ phiếu hiện tại')
+        live_shares = latest('Tổng số lượng cổ phiếu lưu hành')
         grp = d[d['Loại kỳ'].isin(['Năm', 'Quý'])]
-        if grp.empty: return []
+        if grp.empty:
+            return []
         pivot = grp.pivot_table(index=['Mã chứng khoán', 'Loại kỳ', 'Ngày kỳ', 'Năm'],
                                 columns='Chỉ tiêu tiếng Việt', values='Giá trị số', aggfunc='first')
-        if pivot.empty: return []
+        if pivot.empty:
+            return []
 
-        def col(names):
-            for n in names:
-                if n in pivot.columns: return pivot[n]
-            return pd.Series(np.nan, index=pivot.index)
+        def col(key):
+            for name in VAL_METRIC_ALIASES[key]:
+                if name in pivot.columns:
+                    return pivot[name].to_numpy(dtype=float)
+            return np.full(len(pivot), np.nan, dtype=float)
 
-        lnst = col(VAL_METRIC_ALIASES['LNST']); vcsh = col(VAL_METRIC_ALIASES['VCSH'])
-        tts = col(VAL_METRIC_ALIASES['TTS']); dt = col(VAL_METRIC_ALIASES['DT'])
-        lg = col(VAL_METRIC_ALIASES['LG']); slcp = col(VAL_METRIC_ALIASES['SLCP'])
-
+        income = col('LNST')
+        equity = col('VCSH')
+        assets = col('TTS')
+        revenue = col('DT')
+        gross_profit = col('LG')
+        period_shares = col('SLCP')
         idx = pivot.index
-        sym = idx.get_level_values('Mã chứng khoán')
-        shares = slcp.fillna(pd.Series(sh_rt).reindex(sym).values).to_numpy(dtype=float)
-        price = pd.Series(px).reindex(sym).to_numpy(dtype=float)
-        lnst_v = lnst.to_numpy(dtype=float); vcsh_v = vcsh.to_numpy(dtype=float)
-        tts_v = tts.to_numpy(dtype=float); dt_v = dt.to_numpy(dtype=float); lg_v = lg.to_numpy(dtype=float)
+        symbols = idx.get_level_values('Mã chứng khoán')
+        shares = np.array([period_shares[i] if np.isfinite(period_shares[i]) and period_shares[i] > 0
+                           else live_shares.get(sym, np.nan) for i, sym in enumerate(symbols)], dtype=float)
+        price = np.array([prices.get(sym, np.nan) for sym in symbols], dtype=float)
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            eps  = np.where(shares > 0, lnst_v / shares, np.nan)
-            bvps = np.where(shares > 0, vcsh_v / shares, np.nan)
-            roe  = np.where(vcsh_v != 0, lnst_v / vcsh_v * 100.0, np.nan)
-            roa  = np.where(tts_v != 0, lnst_v / tts_v * 100.0, np.nan)
-            nmgn = np.where(dt_v != 0, lnst_v / dt_v * 100.0, np.nan)
-            gmgn = np.where(dt_v != 0, lg_v / dt_v * 100.0, np.nan)
-            pe   = np.where(np.isfinite(eps) & (eps > 0) & np.isfinite(price) & (price > 0), price / np.where(eps > 0, eps, np.nan), np.nan)
-            pb   = np.where(np.isfinite(bvps) & (bvps > 0) & np.isfinite(price) & (price > 0), price / np.where(bvps > 0, bvps, np.nan), np.nan)
-            mcap = np.where(np.isfinite(price) & (price > 0) & (shares > 0), price * shares, np.nan)
+        # Core per-share values. Reject implausible EPS/BVPS rather than propagating
+        # unit errors into a web valuation (e.g. market cap or millions treated as VND).
+        eps = np.array([_bounded_ratio(income[i], shares[i], abs_limit=1_000_000) for i in range(len(idx))])
+        bvps = np.array([_bounded_ratio(equity[i], shares[i], abs_limit=100_000_000) for i in range(len(idx))])
+        roe = np.array([_bounded_ratio(income[i], equity[i], scale=100, abs_limit=300) for i in range(len(idx))])
+        roa = np.array([_bounded_ratio(income[i], assets[i], scale=100, abs_limit=100) for i in range(len(idx))])
+        net_margin = np.array([_bounded_ratio(income[i], revenue[i], scale=100, abs_limit=500) for i in range(len(idx))])
+        gross_margin = np.array([_bounded_ratio(gross_profit[i], revenue[i], scale=100, abs_limit=500) for i in range(len(idx))])
+        pe = np.array([_bounded_ratio(price[i], eps[i], abs_limit=200, positive_only=True)
+                       if np.isfinite(price[i]) and price[i] > 0 and np.isfinite(eps[i]) and eps[i] > 0 else np.nan
+                       for i in range(len(idx))])
+        pb = np.array([_bounded_ratio(price[i], bvps[i], abs_limit=100, positive_only=True)
+                       if np.isfinite(price[i]) and price[i] > 0 and np.isfinite(bvps[i]) and bvps[i] > 0 else np.nan
+                       for i in range(len(idx))])
+        mcap = np.array([_bounded_ratio(price[i], shares[i], abs_limit=MCAP_MAX, positive_only=True)
+                         if np.isfinite(price[i]) and price[i] > 0 and np.isfinite(shares[i]) and shares[i] > 0 else np.nan
+                         for i in range(len(idx))])
 
-        names = [('Lãi cơ bản trên cổ phiếu', eps, 2), ('Giá trị sổ sách mỗi cổ phiếu', bvps, 2),
-                 ('Lợi nhuận trên vốn chủ sở hữu', roe, 4), ('Lợi nhuận trên tổng tài sản', roa, 4),
-                 ('Biên lợi nhuận ròng', nmgn, 4), ('Biên lợi nhuận gộp', gmgn, 4),
-                 ('Hệ số P/E cơ bản', pe, 4), ('Hệ số P/B', pb, 4), ('Vốn hóa thị trường', mcap, 0)]
-        out = []
-        for i, (s, ky, nk, nmv) in enumerate(idx):
-            company_name, sector_name = get_company_profile(s)
-            for label, arr, rnd in names:
-                v = arr[i]
-                if v is None or not np.isfinite(v) or v == 0: continue
-                fv = int(round(float(v))) if rnd == 0 else round(float(v), rnd)
-                out.append({'Mã chứng khoán': s, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name,
-                            'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                            'Loại kỳ': ky, 'Năm': int(nmv), 'Ngày kỳ': nk,
-                            'Chỉ tiêu tiếng Việt': label, 'Giá trị': fv})
-        print(f"  🧮 [v22] Đã tính {len(out):,} chỉ số định giá dẫn xuất (EPS/BVPS/ROE/ROA/P/E/P/B/vốn hoá).")
-        return out
-    except Exception as e:
-        print(f"  ⚠️ [v22] Lỗi tính chỉ số dẫn xuất (đã chặn): {type(e).__name__}: {e}")
+        outputs = [('Lãi cơ bản trên cổ phiếu', eps, 2), ('Giá trị sổ sách mỗi cổ phiếu', bvps, 2),
+                   ('Lợi nhuận trên vốn chủ sở hữu', roe, 4), ('Lợi nhuận trên tổng tài sản', roa, 4),
+                   ('Biên lợi nhuận ròng', net_margin, 4), ('Biên lợi nhuận gộp', gross_margin, 4),
+                   ('Hệ số P/E cơ bản', pe, 4), ('Hệ số P/B', pb, 4), ('Vốn hóa thị trường', mcap, 0)]
+        records = []
+        for i, (symbol, period_type, period_date, year) in enumerate(idx):
+            company_name, sector_name = get_company_profile(symbol)
+            for label, values, digits in outputs:
+                value = values[i]
+                if not np.isfinite(value) or value == 0:
+                    continue
+                clean_value = int(round(float(value))) if digits == 0 else round(float(value), digits)
+                records.append({'Mã chứng khoán': symbol, 'Tên doanh nghiệp': company_name, 'Tên ngành': sector_name,
+                                'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
+                                'Loại kỳ': period_type, 'Năm': int(year), 'Ngày kỳ': period_date,
+                                'Chỉ tiêu tiếng Việt': label, 'Giá trị': clean_value})
+        print(f'  🧮 [v23] Đã tính {len(records):,} chỉ số; các tỷ lệ ngoài giới hạn đã bị loại.')
+        return records
+    except Exception as exc:
+        print(f'  ⚠️ [v23] Không tính được chỉ số dẫn xuất: {type(exc).__name__}: {exc}')
         return []
-
 def export_coverage_report(df, tickers):
     q = df[df['Loại kỳ'] == 'Quý']
     g = df.groupby(['Mã chứng khoán', 'Loại kỳ']).size().unstack(fill_value=0)
@@ -2288,7 +2327,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v22.0 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.0 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
