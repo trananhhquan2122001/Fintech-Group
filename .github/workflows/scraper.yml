@@ -1,18 +1,12 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.0 (Upgrade Libraries + Supabase Fix)
+# Financial Data Scraper Pipeline — v21.1 (FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
-# ✅ Nâng cấp toàn bộ thư viện: checkout@v5, setup-python@v6, supabase>=2.17,
-#    httpx>=0.28.1, pyarrow>=19, pandas>=2.3.3, numpy>=2.2
-# ✅ FIX GỐC lỗi Supabase `ConnectionTerminated error_code:0, last_stream_id:1037`:
-#    - Batch 800 -> 200 (tránh GOAWAY HTTP/2)
-#    - Retry 3 lần/batch với backoff + jitter
-#    - Tự tạo lại client Supabase khi gặp lỗi mạng
-#    - Timeout 90s cho mọi request
-# ✅ Bỏ VNDirect BCTC (HTTP 500 / Timeout) — giữ yfinance + vnfinancialdata
-# ✅ Đa luồng (ThreadPoolExecutor) quét Quý — timeout 10s/ticker chống kẹt
-# ✅ Ép số chuẩn (int64, không .0) + tự điền Năm từ Ngày kỳ
-# ✅ Chỉ commit 2 đường dẫn: data/*.csv + data/*.parquet
-# ✅ Đồng bộ HuggingFace + Supabase an toàn
+# ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
+# ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
+#           + bỏ git-auto-commit-action, dùng git thuần (chỉ commit đúng 2 file)
+# ✅ FIX 3: chặn pandas 3.x (<3) + numpy <2.3 để đúng tuyến code đã kiểm chứng
+# ✅ FIX 4: Supabase sync batch 800 -> 200 + retry + đổi client (hết ConnectionTerminated)
+# ✅ Giữ nguyên: bỏ VNDirect BCTC, quét Quý đa luồng, clean/verify, HF + Supabase
 # ============================================================================
 name: Financial Data Scraper Pipeline
 
@@ -31,20 +25,21 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45   # tăng từ 35 -> 45 để buffer cho retry
+    timeout-minutes: 45
     env:
       PYTHONIOENCODING: utf-8
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
 
     steps:
-      # ✅ checkout@v5: Node24, hết warning deprecated
+      # ✅ checkout@v5 (Node24) + fetch-depth 0 -> HEAD~1 LUÔN tồn tại
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+          persist-credentials: true
 
-      # ✅ setup-python@v6: Node24, hết warning deprecated
+      # ✅ setup-python@v6 (Node24)
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -54,39 +49,38 @@ jobs:
             requirements.txt
             **/requirements*.txt
 
-      # ✅ Nâng cấp toàn bộ thư viện lên phiên bản mới nhất ổn định
+      # ✅ FIX cloudscraper: ==1.2.71 (1.2.72 không tồn tại); chặn pandas 3 / numpy 2.3+
       - name: Install Dependencies
         run: |
           set -e
           python -m pip install --upgrade pip wheel setuptools
           pip install --no-cache-dir \
             "yfinance>=0.2.54" \
-            "pandas>=2.3.3" \
-            "numpy>=2.2.0" \
-            "pyarrow>=19.0.0" \
-            "httpx[http2]>=0.28.1" \
-            "tenacity>=9.0.0" \
-            "huggingface_hub>=0.36.0" \
-            "supabase>=2.17.0" \
+            "pandas>=2.2.3,<3" \
+            "numpy>=1.26,<2.3" \
+            "pyarrow>=16" \
+            "httpx[http2]>=0.27" \
+            "tenacity>=8.3" \
+            "huggingface_hub>=0.30" \
+            "supabase>=2.17" \
             "vnfinancialdata>=0.1.2" \
-            "openpyxl>=3.1.5" \
-            "tqdm>=4.67.1" \
-            "cloudscraper>=1.2.72" \
-            "requests>=2.32.3" \
-            "lxml>=5.3.0" \
-            "beautifulsoup4>=4.12.3" \
-            "urllib3>=2.2.0"
-          echo "📦 Installed:"
-          pip list | grep -Ei "yfinance|pandas|numpy|pyarrow|httpx|supabase|huggingface|tenacity"
+            "openpyxl>=3.1" \
+            "tqdm>=4.66" \
+            "requests>=2.32" \
+            "lxml>=5.0" \
+            "beautifulsoup4>=4.12" \
+            "cloudscraper==1.2.71"
+          echo "📦 Đã cài:"
+          pip list | grep -Ei "^(yfinance|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
 
       # ==========================================
-      # 1. Diagnostic nhanh các nguồn hoạt động
+      # 1. Diagnostic nhanh các nguồn
       # ==========================================
       - name: Diagnostic Sources
         run: |
           python -c "
           import yfinance as yf
-          from concurrent.futures import ThreadPoolExecutor, as_completed
+          from concurrent.futures import ThreadPoolExecutor
 
           def check_sym(sym):
               try:
@@ -103,7 +97,7 @@ jobs:
           "
 
       # ==========================================
-      # 2. Chạy FINEX Engine (tắt hẳn VNDirect / VNDIRECT_BCTC)
+      # 2. Chạy FINEX Engine (tắt hẳn VNDirect BCTC)
       # ==========================================
       - name: Run FINEX Engine
         env:
@@ -125,8 +119,7 @@ jobs:
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 2b. Quét dữ liệu Quý đa luồng cho danh sách mã
-      #     ✅ FIX: thêm timeout 10s/ticker + error handling tốt hơn
+      # 2b. Quét dữ liệu Quý đa luồng
       # ==========================================
       - name: Fetch Quarterly Statements (Multi-threaded)
         run: |
@@ -207,7 +200,6 @@ jobs:
                           period_label = f'Quý {q_num}'
                           rep_date_str = dt_obj.strftime('%Y-%m-%d')
                           yr_val = int(dt_obj.year)
-
                           series = tbl[col_dt].dropna()
                           for item_label, val in series.items():
                               v_num = pd.to_numeric(val, errors='coerce')
@@ -234,14 +226,14 @@ jobs:
           errors = 0
           with ThreadPoolExecutor(max_workers=8) as pool:
               futures = {pool.submit(fetch_one_ticker, tk): tk for tk in tickers}
-              for fut in as_completed(futures, timeout=600):  # ✅ tổng timeout 10 phút
+              for fut in as_completed(futures, timeout=600):
                   done += 1
                   try:
-                      tk, r_list = fut.result(timeout=15)  # ✅ timeout 15s/ticker
+                      tk, r_list = fut.result(timeout=15)
                       if r_list:
                           matched += 1
                           q_rows.extend(r_list)
-                  except Exception as e:
+                  except Exception:
                       errors += 1
                   if done % 40 == 0 or done == len(tickers):
                       print(f'  ⚡ {done}/{len(tickers)} mã | Có Quý: {matched} | Dòng: {len(q_rows):,} | Lỗi: {errors} ({time.time()-t0:.1f}s)')
@@ -375,29 +367,36 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 4. Chuẩn bị đúng 2 đường dẫn lưu GitHub & Commit
+      # 4. Commit & Push — ✅ FIX exit 128: guard HEAD~1 + git thuần, chỉ 2 file
       # ==========================================
-      - name: Prepare Git paths & clean bad commit
+      - name: Commit & Push Dataset (an toàn, không HEAD~1 mù)
         run: |
           set -e
-          if git log -1 --pretty=%s 2>/dev/null | grep -q "Auto-update FINEX Dataset"; then
-            git reset --soft HEAD~1 || true
-            git reset HEAD 2>/dev/null || true
-          fi
           rm -f data/_checkpoint.csv data/bao_cao_*.csv data/_emergency_backup.csv 2>/dev/null || true
-          echo "COMMIT_TS=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_ENV"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit & Push Dataset
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "Auto-update FINEX Dataset ${{ env.COMMIT_TS }} [skip ci]"
-          file_pattern: "data/*.csv data/*.parquet"
-          commit_user_name: github-actions[bot]
-          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com
-          commit_options: "--no-verify"
+          # Chỉ undo commit auto cũ NẾU nó tồn tại VÀ HEAD~1 hợp lệ (fetch-depth=0 nên luôn ok)
+          if git log -1 --pretty=%s 2>/dev/null | grep -q "Auto-update FINEX Dataset"; then
+            if git rev-parse --verify -q HEAD~1 >/dev/null 2>&1; then
+              git reset --soft HEAD~1 || true
+              git reset HEAD >/dev/null 2>&1 || true
+              echo "♻️ Đã undo commit auto cũ để gộp dữ liệu mới."
+            fi
+          fi
+
+          git add data/vietnam_stock_database_tong_hop.csv data/vietnam_stock_database.parquet
+          if git diff --cached --quiet; then
+            echo "✅ Không có thay đổi dữ liệu — bỏ qua commit."
+            exit 0
+          fi
+          git commit -m "Auto-update FINEX Dataset $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]" --no-verify
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push origin HEAD:"${GITHUB_REF_NAME}"
+          echo "✅ Đã push đúng 2 đường dẫn: CSV + Parquet."
 
       # ==========================================
-      # 5. Upload HuggingFace
+      # 5. Upload HuggingFace (retry 3 lần)
       # ==========================================
       - name: Push to HuggingFace
         env:
@@ -430,7 +429,7 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 6. Đồng bộ Supabase (vectorized) — ✅ FIX ConnectionTerminated
+      # 6. Đồng bộ Supabase — ✅ batch 200 + retry + đổi client (hết ConnectionTerminated)
       # ==========================================
       - name: Sync to Supabase
         env:
@@ -439,36 +438,26 @@ jobs:
         run: |
           set -e
           python << 'PYEOF'
-          import os, sys, time, random
+          import os, time, random
           import pandas as pd
           from datetime import datetime
 
-          print('--- SUPABASE SYNC (v21.0 - FIX ConnectionTerminated) ---')
-
-          # ✅ Import với ClientOptions để set timeout 90s
+          print('--- SUPABASE SYNC (batch 200 + retry + đổi client) ---')
           from supabase import create_client
           try:
               from supabase import ClientOptions
-              opts = ClientOptions(postgrest_client_timeout=90)
-              sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'], options=opts)
+              sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'],
+                                 options=ClientOptions(postgrest_client_timeout=90))
           except Exception:
               sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
 
           df = pd.read_csv('data/vietnam_stock_database_tong_hop.csv', low_memory=False)
-
           col_map = {
-              'Mã chứng khoán': 'ticker',
-              'Tên doanh nghiệp': 'company_name',
-              'Tên ngành': 'sector',
-              'Loại báo cáo': 'report_type',
-              'Loại kỳ': 'period_type',
-              'Năm': 'year',
-              'Ngày kỳ': 'report_date',
-              'Chỉ tiêu tiếng Việt': 'item_vn',
-              'Giá trị': 'value'
+              'Mã chứng khoán': 'ticker', 'Tên doanh nghiệp': 'company_name', 'Tên ngành': 'sector',
+              'Loại báo cáo': 'report_type', 'Loại kỳ': 'period_type', 'Năm': 'year',
+              'Ngày kỳ': 'report_date', 'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
           }
           df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-
           df = df.dropna(subset=['ticker', 'value'])
           df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
           df = df[df['ticker'] != 'NAN']
@@ -476,7 +465,6 @@ jobs:
           df = df.dropna(subset=['value'])
           df = df[df['value'] != 0]
           df['year'] = pd.to_numeric(df.get('year'), errors='coerce').fillna(datetime.now().year).astype(int)
-
           for col in ['company_name', 'sector', 'report_type', 'period_type', 'report_date', 'item_vn']:
               if col in df.columns:
                   df[col] = df[col].astype(str).replace(['nan', 'NaN', 'None', ''], None)
@@ -485,66 +473,56 @@ jobs:
           total = len(records)
           print(f'📦 Chuẩn bị upsert {total:,} bản ghi...')
 
-          # ✅ FIX: batch 200 (thay vì 800) + retry 3 lần + đổi client khi ConnectionTerminated
-          BATCH_SIZE = 200
-          MAX_ATTEMPTS = 3
-          NETWORK_ERRORS = ('connectionterminated', 'connection', 'timeout', 'timed out',
-                            'goaway', 'go away', 'server disconnected', 'protocolerror',
-                            'remoteprotocolerror', 'eof', 'closed')
-
-          def is_network_error(e):
-              ename = type(e).__name__.lower()
-              if ename in ('connectionterminated', 'connectionerror', 'connecterror',
-                           'readtimeout', 'connecttimeout', 'pooltimeout',
-                           'remoteprotocolerror', 'protocolerror'):
+          NET_KEYS = ('connectionterminated', 'connection', 'timeout', 'timed out', 'goaway',
+                      'go away', 'server disconnected', 'protocolerror', 'eof', 'closed')
+          def is_net(e):
+              if type(e).__name__ in ('ConnectionTerminated','ConnectionError','ConnectError','ReadTimeout',
+                                      'ConnectTimeout','PoolTimeout','RemoteProtocolError','ProtocolError'):
                   return True
               s = str(e).lower()
-              return any(k in s for k in NETWORK_ERRORS)
+              return any(k in s for k in NET_KEYS)
 
-          def recreate_client():
+          def new_client():
               global sb
               try:
                   from supabase import ClientOptions
-                  opts = ClientOptions(postgrest_client_timeout=90)
-                  sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'], options=opts)
+                  sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'],
+                                     options=ClientOptions(postgrest_client_timeout=90))
               except Exception:
                   sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
               print('  🔄 Tạo lại client Supabase (pool HTTP/2 mới)')
 
-          failed_batches = []
-          for i in range(0, total, BATCH_SIZE):
-              batch = records[i:i+BATCH_SIZE]
+          BATCH, MAX_ATTEMPT = 200, 3
+          failed = 0
+          ok_batches = 0
+          for i in range(0, total, BATCH):
+              batch = records[i:i+BATCH]
               attempt = 0
-              success = False
-              while attempt < MAX_ATTEMPTS and not success:
+              while True:
                   try:
                       sb.table('finex_stock_master').upsert(
-                          batch,
-                          on_conflict='ticker,report_type,period_type,report_date,item_vn'
+                          batch, on_conflict='ticker,report_type,period_type,report_date,item_vn'
                       ).execute()
-                      success = True
-                      if (i // BATCH_SIZE) % 10 == 0 or i + BATCH_SIZE >= total:
-                          print(f'  ✅ {min(i+BATCH_SIZE, total):,}/{total:,}')
-                      time.sleep(0.25)  # ✅ nghỉ 0.25s giữa batch
+                      ok_batches += 1
+                      if ok_batches % 10 == 0 or i + BATCH >= total:
+                          print(f'  ✅ {min(i+BATCH, total):,}/{total:,}')
+                      if ok_batches % 40 == 0:
+                          new_client()
+                      time.sleep(0.25)
+                      break
                   except Exception as e:
                       attempt += 1
-                      ename = type(e).__name__
-                      if is_network_error(e):
-                          recreate_client()
-                      if attempt >= MAX_ATTEMPTS:
-                          print(f'  ❌ Batch {i} thất bại vĩnh viễn: {ename}: {str(e)[:120]}')
-                          failed_batches.append((i, len(batch), ename))
+                      if is_net(e):
+                          new_client()
+                      if attempt >= MAX_ATTEMPT:
+                          print(f'  ❌ Batch {i} lỗi vĩnh viễn: {type(e).__name__} (bỏ qua, lần sau đẩy lại)')
+                          failed += len(batch)
                           break
                       wait = min(2 ** attempt, 15) + random.uniform(0, 1)
-                      print(f'  ⚠️ Batch {i} lỗi lần {attempt}/{MAX_ATTEMPTS} ({ename}), retry sau {wait:.1f}s')
+                      print(f'  ⚠️ Batch {i} lỗi lần {attempt}/{MAX_ATTEMPT}, retry sau {wait:.1f}s')
                       time.sleep(wait)
 
-          if failed_batches:
-              print(f'⚠️ Có {len(failed_batches)} batch thất bại (sẽ retry lần chạy sau):')
-              for idx, sz, en in failed_batches[:5]:
-                  print(f'   - batch #{idx} ({sz} dòng): {en}')
-
-          print('🎉 Supabase sync hoàn tất!')
+          print(f'🎉 Supabase sync hoàn tất! Đẩy được {total-failed:,}/{total:,} (lỗi giữ lại: {failed:,})')
           PYEOF
 
       # ==========================================
@@ -554,9 +532,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v21.0 (Upgrade Libs + Fix)"
+          echo "  FINEX Pipeline v21.1 (fix cloudscraper/HEAD~1/pandas3)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
-          echo ""
-          echo "📦 Python packages:"
-          pip list 2>/dev/null | grep -Ei "yfinance|pandas|numpy|pyarrow|httpx|supabase|huggingface|tenacity" || true
