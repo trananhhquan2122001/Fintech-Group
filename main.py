@@ -1,7 +1,8 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.0 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.1 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.0 (viết lại toàn bộ trên nền gốc v19.0, GIỮ NGUYÊN 100% khung + từ điển):
+Changelog v23.1 (nâng cấp từ v23.0, giữ nguyên khung xử lý và từ điển):
+  ✅ UNIVERSE: đồng bộ danh sách 132 mã người dùng cung cấp; kiểm tra số lượng và mã trùng ngay khi khởi tạo.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -22,7 +23,7 @@ Changelog v23.0 (viết lại toàn bộ trên nền gốc v19.0, GIỮ NGUYÊN 
   ✅ 🆕 CỔNG VÀO CHẶN MỌI EXCEPTION -> workflow luôn exit 0; emergency backup nếu crash.
   ✅ CHỈ LƯU ĐÚNG 2 FILE: data/vietnam_stock_database_tong_hop.csv + .parquet
      (coverage report chỉ chạy khi env COVERAGE_REPORT=true).
-  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 176 mã,
+  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 132 mã,
      BƯỚC 0->8, emergency save, dọn file tạm, purge Supabase dòng 0/rỗng/rác/Anh.
 ================================================================================
 """
@@ -56,7 +57,8 @@ from requests.adapters import HTTPAdapter
 _ALL_RECORDS_GLOBAL = []
 
 def _emergency_save(signum, frame):
-    print(f"\n⚠️ SIGTERM ({signum})! Lưu khẩn cấp...")
+    print(f"
+⚠️ SIGTERM ({signum})! Lưu khẩn cấp...")
     try:
         if _ALL_RECORDS_GLOBAL:
             df = pd.DataFrame(_ALL_RECORDS_GLOBAL)
@@ -361,7 +363,8 @@ def is_junk_label(s):
 
 def _norm_key(s):
     s = unicodedata.normalize('NFC', str(s))
-    s = re.sub(r'[\n\r\t]+', ' ', s)
+    s = re.sub(r'[
+\r\t]+', ' ', s)
     s = re.sub(r'\s{2,}', ' ', s).strip()
     s = re.sub(r'\s*[\[(]\d+[a-zA-Z]?[\])]\s*$', '', s)
     s = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', s)
@@ -837,33 +840,34 @@ def load_daily_stock_data():
     except Exception: return pd.DataFrame()
 
 # ==========================================
-# 3. DANH SÁCH 176 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
+# 3. DANH SÁCH 132 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
 # ==========================================
-def load_176_master_tickers():
-    # HNX shares in the tracked universe. VNDIRECT is enabled by default below,
-    # because Yahoo's Vietnam coverage does not reliably include HNX filings.
+def load_132_master_tickers():
+    # Universe follows the user's curated 132-symbol HOSE list.
+    # Keep known HNX classifications only for any symbol still in the universe.
     hnx_tickers = {
         'BVS','CEO','DTD','DXP','HGM','HUT','IDC','KSF','L14','L18','LAS','MBS',
         'NBC','NDN','NET','NTP','PLC','PVB','PVC','PVI','PVS','SHS','SLS','THD',
         'TIG','TMB','TNG','TVD','VCS','VC3','VGS','DHT','DDV','HMS'
     }
     raw_tickers = [
-        'ACB','ANV','BAF','BCM','BID','BMP','BSI','BSR','BVH','BVS','BWE','CAP',
-        'CEO','CII','CMG','CTD','CTG','CTR','CTS','DBC','DCM','DGW','DIG','DP3',
-        'DPM','DSE','DTD','DXG','DXP','EIB','EVF','FPT','FRT','FTS','GAS','GEE',
-        'GEX','GMD','GVR','HAG','HCM','HDB','HDG','HHV','HPG','HSG','HT1','HUT',
-        'IDC','KBC','KDC','KDH','L14','L18','LAS','LHC','LPB','MBB','MBS','MCH',
-        'MSB','MSN','MWG','NAB','NBC','NDN','NKG','NLG','NT2','NTP','NVL','OCB',
-        'PAN','PC1','PDR','PHR','PLC','PLX','PNJ','POW','PSD','PVB','PVC','PVD',
-        'PVS','PVT','PVI','REE','SAB','SBT','SHB','SHS','SIP','SJS','SLS','SSB',
-        'SSI','STB','TAL','TCB','TCH','TCX','TDM','TIG','TNG','TPB','TVD','VCB',
-        'VC3','VCG','VCI','VCK','VCS','VFS','VGC','VGP','VHC','VHM','VIB','VIC',
-        'VIX','VJC','VND','VNM','VPB','VPI','VPL','VPX','VRE','VSC','VTP','L40',
-        'HVT','GLT','VGS','HGM','KSV','THD','KSF','SCG','CLM','TMB','SAF','NET',
-        'DHT','DGC','SZC','HVN','BAB','AGR','TLH','BMI','PET','LSS','HDC','IJC',
-        'TDC','CTI','SJD','TMP','SBA','VSH','TTA','TV2','VCP','BFC','DDV','SGP',
-        'DPR','DHC','TCM','HPP','PAT','DTP','SCL','HMS',
+        'ACB','AGR','ANV','BAF','BCM','BFC','BID','BMI','BMP','BSI',
+        'BSR','BVH','BWE','CAP','CII','CMG','CTD','CTG','CTI','CTR',
+        'CTS','DBC','DCM','DGC','DGW','DHC','DIG','DP3','DPM','DPR',
+        'DSE','DTP','DXG','EIB','EVF','FPT','FRT','FTS','GAS','GEE',
+        'GEX','GMD','GVR','HAG','HCM','HDB','HDC','HDG','HHV','HPG',
+        'HPP','HSG','HT1','HVN','IJC','KBC','KDC','KDH','LHC','LPB',
+        'LSS','MBB','MCH','MSB','MSN','MWG','NAB','NKG','NLG','NT2',
+        'NVL','OCB','PAN','PAT','PC1','PDR','PET','PHR','PLX','POW',
+        'PSD','PVD','PVT','REE','SAB','SBA','SBT','SCL','SGP','SHB',
+        'SIP','SJD','SJS','SSB','SSI','STB','SZC','TAL','TCB','TCH',
+        'TCM','TCX','TDC','TDM','TMP','TPB','TTA','TV2','VCB','VCG',
+        'VCI','VCK','VCP','VFS','VGC','VGP','VHC','VHM','VIB','VIC',
+        'VIX','VJC','VND','VNM','VPB','VPI','VPL','VPX','VRE','VSC',
+        'VSH','VTP',
     ]
+    if len(raw_tickers) != 132 or len(set(raw_tickers)) != 132:
+        raise ValueError(f"Danh sách mã phải có đúng 132 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
     return {t.strip().upper(): ("HNX" if t.strip().upper() in hnx_tickers else "HOSE_OR_OTHER")
             for t in raw_tickers if t.strip()}
 
@@ -1342,7 +1346,8 @@ def clean_text(text):
     except (TypeError, ValueError):
         pass
     text = unicodedata.normalize('NFC', str(text))
-    text = re.sub(r'[\n\r\t]+', ' ', text)
+    text = re.sub(r'[
+\r\t]+', ' ', text)
     return re.sub(r'\s{2,}', ' ', text).strip()
 
 _TRUNCATED_FIX = {
@@ -1557,7 +1562,7 @@ def translate_metric(metric_original, is_vn=False):
     return result.capitalize()
 
 # ==========================================
-# 5.5 🆕 v23.0: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
+# 5.5 🆕 v23.1: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
 # ==========================================
 PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu
 SHARES_MIN, SHARES_MAX = 1_000_000.0, 5e11      # số cổ phiếu
@@ -2099,7 +2104,8 @@ def _add_source(records, source_name, priority=None):
     return records
 
 def apply_first_principles_cleaning(df):
-    print("\n🧹 BƯỚC 6: 5 TẦNG CLEANING...")
+    print("
+🧹 BƯỚC 6: 5 TẦNG CLEANING...")
     if df is None or df.empty:
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
@@ -2188,7 +2194,7 @@ def apply_first_principles_cleaning(df):
     return df[STANDARD_COLUMNS]
 
 # ==========================================
-# 10.5 🆕 v23.0: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
+# 10.5 🆕 v23.1: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
 # ==========================================
 VAL_METRIC_ALIASES = {
     'LNST': ['Lợi nhuận sau thuế TNDN', 'LNST của công ty mẹ', 'Lợi nhuận sau thuế thu nhập doanh nghiệp'],
@@ -2347,12 +2353,12 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.0 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.1 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
-    ticker_market_map = load_176_master_tickers()
+    ticker_market_map = load_132_master_tickers()
     hnx_symbols = sorted(s for s, market in ticker_market_map.items() if market == 'HNX')
     print(f"  🏦 Universe theo dõi: {len(hnx_symbols)} mã HNX, {len(ticker_market_map) - len(hnx_symbols)} mã HOSE/khác.")
     all_master_records = []
@@ -2387,7 +2393,8 @@ def main():
             print(f"  ⚠️ CKPT fail: {e}")
 
     # BƯỚC 0
-    print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày [DAILY]...")
+    print("
+🚀 BƯỚC 0: Tải dữ liệu hàng ngày [DAILY]...")
     hf_df = load_daily_stock_data()
     if not hf_df.empty:
         hf_df = _normalize_to_standard(hf_df, fill_company=True)
@@ -2396,21 +2403,25 @@ def main():
             print(f" ✅ Đã nạp {len(hf_df):,} dòng.")
 
     # BƯỚC 1
-    print("\n🚀 BƯỚC 1: Tải BCTC Năm bulk [VN_FINANCIAL]...")
+    print("
+🚀 BƯỚC 1: Tải BCTC Năm bulk [VN_FINANCIAL]...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs: _accumulate(vnf_recs, 'VN_FINANCIAL')
     _save_checkpoint("sau_VN_FINANCIAL")
 
     # BƯỚC 2
-    print("\n📈 BƯỚC 2: Cào chỉ số vĩ mô [INDICES]...")
+    print("
+📈 BƯỚC 2: Cào chỉ số vĩ mô [INDICES]...")
     index_recs = fetch_market_indices()
     if index_recs: _accumulate(index_recs, 'INDICES')
 
     # BƯỚC 3
     if SKIP_VNDIRECT:
-        print("\n⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
+        print("
+⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
     else:
-        print(f"\n⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
+        print(f"
+⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {executor.submit(fetch_vndirect_bctc_financials, symbol): symbol for symbol in ticker_market_map.keys()}
             done = 0
@@ -2432,7 +2443,8 @@ def main():
         _save_checkpoint("sau_VNDIRECT_BCTC")
 
     # BƯỚC 4
-    print(f"\n🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
+    print(f"
+🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
@@ -2443,7 +2455,8 @@ def main():
     _save_checkpoint("sau_YFINANCE")
 
     # BƯỚC 5
-    print(f"\n🐢 BƯỚC 5: Kiểm tra thiếu + fallback Giá/SLCP...")
+    print(f"
+🐢 BƯỚC 5: Kiểm tra thiếu + fallback Giá/SLCP...")
     df_temp = pd.DataFrame(all_master_records)
 
     if not df_temp.empty:
@@ -2483,10 +2496,12 @@ def main():
     if not df_check.empty:
         q_count = len(df_check[df_check['Loại kỳ'] == 'Quý'])
         y_count = len(df_check[df_check['Loại kỳ'] == 'Năm'])
-        print(f"\n  📊 KIỂM CHỨNG: {q_count:,} QUÝ | {y_count:,} NĂM | Tổng: {len(df_check):,}")
+        print(f"
+  📊 KIỂM CHỨNG: {q_count:,} QUÝ | {y_count:,} NĂM | Tổng: {len(df_check):,}")
 
     # BƯỚC 5.5
-    print(f"\n🆕 BƯỚC 5.5: Tải bổ sung từ Supabase (đã lọc bẩn + dịch nhãn Anh cũ)...")
+    print(f"
+🆕 BƯỚC 5.5: Tải bổ sung từ Supabase (đã lọc bẩn + dịch nhãn Anh cũ)...")
     supabase_df = load_data_from_supabase()
     if not supabase_df.empty:
         _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH' if SUPABASE_PRIORITY == 'high' else 'SUPABASE')
@@ -2520,7 +2535,8 @@ def main():
 
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
-    print(f"\n💾 ĐÃ LƯU ĐÚNG 2 FILE CHÍNH:")
+    print(f"
+💾 ĐÃ LƯU ĐÚNG 2 FILE CHÍNH:")
     print(f"   → CSV:     {csv_path}")
     print(f"   → PARQUET: {parquet_path} ({os.path.getsize(parquet_path)/1024/1024:.2f} MB)")
 
@@ -2529,7 +2545,8 @@ def main():
 
     # BƯỚC 8 — KHÔNG BAO GIỜ làm fail job
     if PUSH_TO_SUPABASE:
-        print("\n📤 BƯỚC 8: Đẩy Supabase (engine bền vững v22)...")
+        print("
+📤 BƯỚC 8: Đẩy Supabase (engine bền vững v22)...")
         try:
             ok = upsert_to_supabase(df_clean)
             if ok and PURGE_SUPABASE_BAD:
@@ -2542,7 +2559,7 @@ def main():
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng: {len(df_clean):,} dòng")
     if not df_clean.empty:
-        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/176")
+        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/132")
         for k, v in df_clean['Loại kỳ'].value_counts().items():
             print(f"     • {k}: {v:,}")
         en_left = int(df_clean['Chỉ tiêu tiếng Việt'].map(_looks_english).sum())
@@ -2559,9 +2576,11 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n⚠️ Bị dừng bởi người dùng.")
+        print("
+⚠️ Bị dừng bởi người dùng.")
     except Exception:
-        print("\n🛑 LỖI TỔNG ĐÃ ĐƯỢC CHẶN (workflow sẽ KHÔNG exit 1):")
+        print("
+🛑 LỖI TỔNG ĐÃ ĐƯỢC CHẶN (workflow sẽ KHÔNG exit 1):")
         traceback.print_exc()
         try:
             if _ALL_RECORDS_GLOBAL:
