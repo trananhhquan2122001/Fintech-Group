@@ -362,8 +362,7 @@ def is_junk_label(s):
 
 def _norm_key(s):
     s = unicodedata.normalize('NFC', str(s))
-    s = re.sub(r'[
-\r\t]+', ' ', s)
+    s = re.sub(r'[\n\r\t]+', ' ', s)
     s = re.sub(r'\s{2,}', ' ', s).strip()
     s = re.sub(r'\s*[\[(]\d+[a-zA-Z]?[\])]\s*$', '', s)
     s = re.sub(r'\s*\(\d+[a-z]?\)\s*$', '', s)
@@ -1345,8 +1344,7 @@ def clean_text(text):
     except (TypeError, ValueError):
         pass
     text = unicodedata.normalize('NFC', str(text))
-    text = re.sub(r'[
-\r\t]+', ' ', text)
+    text = re.sub(r'[\n\r\t]+', ' ', text)
     return re.sub(r'\s{2,}', ' ', text).strip()
 
 _TRUNCATED_FIX = {
