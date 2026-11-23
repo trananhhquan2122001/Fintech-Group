@@ -57,8 +57,7 @@ from requests.adapters import HTTPAdapter
 _ALL_RECORDS_GLOBAL = []
 
 def _emergency_save(signum, frame):
-    print(f"
-⚠️ SIGTERM ({signum})! Lưu khẩn cấp...")
+    print(f"\n⚠️ SIGTERM ({signum})! Lưu khẩn cấp...")
     try:
         if _ALL_RECORDS_GLOBAL:
             df = pd.DataFrame(_ALL_RECORDS_GLOBAL)
@@ -2104,8 +2103,7 @@ def _add_source(records, source_name, priority=None):
     return records
 
 def apply_first_principles_cleaning(df):
-    print("
-🧹 BƯỚC 6: 5 TẦNG CLEANING...")
+    print("\n🧹 BƯỚC 6: 5 TẦNG CLEANING...")
     if df is None or df.empty:
         return pd.DataFrame(columns=STANDARD_COLUMNS)
 
@@ -2393,8 +2391,7 @@ def main():
             print(f"  ⚠️ CKPT fail: {e}")
 
     # BƯỚC 0
-    print("
-🚀 BƯỚC 0: Tải dữ liệu hàng ngày [DAILY]...")
+    print("\n🚀 BƯỚC 0: Tải dữ liệu hàng ngày [DAILY]...")
     hf_df = load_daily_stock_data()
     if not hf_df.empty:
         hf_df = _normalize_to_standard(hf_df, fill_company=True)
@@ -2403,25 +2400,21 @@ def main():
             print(f" ✅ Đã nạp {len(hf_df):,} dòng.")
 
     # BƯỚC 1
-    print("
-🚀 BƯỚC 1: Tải BCTC Năm bulk [VN_FINANCIAL]...")
+    print("\n🚀 BƯỚC 1: Tải BCTC Năm bulk [VN_FINANCIAL]...")
     vnf_recs = fetch_vnfinancialdata_bulk(ticker_market_map)
     if vnf_recs: _accumulate(vnf_recs, 'VN_FINANCIAL')
     _save_checkpoint("sau_VN_FINANCIAL")
 
     # BƯỚC 2
-    print("
-📈 BƯỚC 2: Cào chỉ số vĩ mô [INDICES]...")
+    print("\n📈 BƯỚC 2: Cào chỉ số vĩ mô [INDICES]...")
     index_recs = fetch_market_indices()
     if index_recs: _accumulate(index_recs, 'INDICES')
 
     # BƯỚC 3
     if SKIP_VNDIRECT:
-        print("
-⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
+        print("\n⏭️ BƯỚC 3: BỎ QUA [VNDIRECT_BCTC] (SKIP_VNDIRECT=true).")
     else:
-        print(f"
-⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
+        print(f"\n⭐ BƯỚC 3: Cào BCTC Quý + Năm [VNDIRECT_BCTC] cho {len(ticker_market_map)} mã...")
         with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {executor.submit(fetch_vndirect_bctc_financials, symbol): symbol for symbol in ticker_market_map.keys()}
             done = 0
@@ -2443,8 +2436,7 @@ def main():
         _save_checkpoint("sau_VNDIRECT_BCTC")
 
     # BƯỚC 4
-    print(f"
-🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
+    print(f"\n🔄 BƯỚC 4: Cào Yfinance song song [YFINANCE]...")
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {executor.submit(process_single_ticker, symbol, cat): symbol for symbol, cat in ticker_market_map.items()}
         for future in as_completed(futures):
@@ -2455,8 +2447,7 @@ def main():
     _save_checkpoint("sau_YFINANCE")
 
     # BƯỚC 5
-    print(f"
-🐢 BƯỚC 5: Kiểm tra thiếu + fallback Giá/SLCP...")
+    print(f"\n🐢 BƯỚC 5: Kiểm tra thiếu + fallback Giá/SLCP...")
     df_temp = pd.DataFrame(all_master_records)
 
     if not df_temp.empty:
@@ -2496,12 +2487,10 @@ def main():
     if not df_check.empty:
         q_count = len(df_check[df_check['Loại kỳ'] == 'Quý'])
         y_count = len(df_check[df_check['Loại kỳ'] == 'Năm'])
-        print(f"
-  📊 KIỂM CHỨNG: {q_count:,} QUÝ | {y_count:,} NĂM | Tổng: {len(df_check):,}")
+        print(f"\n  📊 KIỂM CHỨNG: {q_count:,} QUÝ | {y_count:,} NĂM | Tổng: {len(df_check):,}")
 
     # BƯỚC 5.5
-    print(f"
-🆕 BƯỚC 5.5: Tải bổ sung từ Supabase (đã lọc bẩn + dịch nhãn Anh cũ)...")
+    print(f"\n🆕 BƯỚC 5.5: Tải bổ sung từ Supabase (đã lọc bẩn + dịch nhãn Anh cũ)...")
     supabase_df = load_data_from_supabase()
     if not supabase_df.empty:
         _accumulate(supabase_df.to_dict('records'), 'SUPABASE_HIGH' if SUPABASE_PRIORITY == 'high' else 'SUPABASE')
@@ -2535,8 +2524,7 @@ def main():
 
     df_clean.to_csv(csv_path, index=False, encoding='utf-8-sig')
     df_clean.to_parquet(parquet_path, engine='pyarrow', index=False)
-    print(f"
-💾 ĐÃ LƯU ĐÚNG 2 FILE CHÍNH:")
+    print(f"\n💾 ĐÃ LƯU ĐÚNG 2 FILE CHÍNH:")
     print(f"   → CSV:     {csv_path}")
     print(f"   → PARQUET: {parquet_path} ({os.path.getsize(parquet_path)/1024/1024:.2f} MB)")
 
@@ -2545,8 +2533,7 @@ def main():
 
     # BƯỚC 8 — KHÔNG BAO GIỜ làm fail job
     if PUSH_TO_SUPABASE:
-        print("
-📤 BƯỚC 8: Đẩy Supabase (engine bền vững v22)...")
+        print("\n📤 BƯỚC 8: Đẩy Supabase (engine bền vững v22)...")
         try:
             ok = upsert_to_supabase(df_clean)
             if ok and PURGE_SUPABASE_BAD:
@@ -2576,11 +2563,9 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("
-⚠️ Bị dừng bởi người dùng.")
+        print("\n⚠️ Bị dừng bởi người dùng.")
     except Exception:
-        print("
-🛑 LỖI TỔNG ĐÃ ĐƯỢC CHẶN (workflow sẽ KHÔNG exit 1):")
+        print("\n🛑 LỖI TỔNG ĐÃ ĐƯỢC CHẶN (workflow sẽ KHÔNG exit 1):")
         traceback.print_exc()
         try:
             if _ALL_RECORDS_GLOBAL:
