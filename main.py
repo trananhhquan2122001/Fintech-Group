@@ -1,8 +1,8 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.1 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.2 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.1 (nâng cấp từ v23.0, giữ nguyên khung xử lý và từ điển):
-  ✅ UNIVERSE: đồng bộ danh sách 132 mã người dùng cung cấp; kiểm tra số lượng và mã trùng ngay khi khởi tạo.
+Changelog v23.2 (universe HOSE 132 mã; loại bỏ danh sách mã HNX khỏi cấu hình):
+  ✅ UNIVERSE: danh sách HOSE 132 mã; không đưa các mã HNX vào universe; xác thực số lượng và mã trùng khi khởi tạo.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -841,13 +841,9 @@ def load_daily_stock_data():
 # 3. DANH SÁCH 132 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
 # ==========================================
 def load_132_master_tickers():
-    # Universe follows the user's curated 132-symbol HOSE list.
-    # Keep known HNX classifications only for any symbol still in the universe.
-    hnx_tickers = {
-        'BVS','CEO','DTD','DXP','HGM','HUT','IDC','KSF','L14','L18','LAS','MBS',
-        'NBC','NDN','NET','NTP','PLC','PVB','PVC','PVI','PVS','SHS','SLS','THD',
-        'TIG','TMB','TNG','TVD','VCS','VC3','VGS','DHT','DDV','HMS'
-    }
+
+    # Universe is the curated HOSE-only list; no HNX ticker set is included.
+
     raw_tickers = [
         'ACB','AGR','ANV','BAF','BCM','BFC','BID','BMI','BMP','BSI',
         'BSR','BVH','BWE','CAP','CII','CMG','CTD','CTG','CTI','CTR',
@@ -866,7 +862,7 @@ def load_132_master_tickers():
     ]
     if len(raw_tickers) != 132 or len(set(raw_tickers)) != 132:
         raise ValueError(f"Danh sách mã phải có đúng 132 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
-    return {t.strip().upper(): ("HNX" if t.strip().upper() in hnx_tickers else "HOSE_OR_OTHER")
+    return {t.strip().upper(): "HOSE_OR_OTHER"
             for t in raw_tickers if t.strip()}
 
 def get_company_profile(symbol):
@@ -1559,7 +1555,7 @@ def translate_metric(metric_original, is_vn=False):
     return result.capitalize()
 
 # ==========================================
-# 5.5 🆕 v23.1: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
+# 5.5 🆕 v23.2: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
 # ==========================================
 PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu
 SHARES_MIN, SHARES_MAX = 1_000_000.0, 5e11      # số cổ phiếu
@@ -2190,7 +2186,7 @@ def apply_first_principles_cleaning(df):
     return df[STANDARD_COLUMNS]
 
 # ==========================================
-# 10.5 🆕 v23.1: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
+# 10.5 🆕 v23.2: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
 # ==========================================
 VAL_METRIC_ALIASES = {
     'LNST': ['Lợi nhuận sau thuế TNDN', 'LNST của công ty mẹ', 'Lợi nhuận sau thuế thu nhập doanh nghiệp'],
@@ -2349,14 +2345,13 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.1 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.2 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
     ticker_market_map = load_132_master_tickers()
-    hnx_symbols = sorted(s for s, market in ticker_market_map.items() if market == 'HNX')
-    print(f"  🏦 Universe theo dõi: {len(hnx_symbols)} mã HNX, {len(ticker_market_map) - len(hnx_symbols)} mã HOSE/khác.")
+    print(f"  🏦 Universe HOSE theo dõi: {len(ticker_market_map)} mã.")
     all_master_records = []
 
     def _accumulate(recs, source):
