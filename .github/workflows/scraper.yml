@@ -1,12 +1,20 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.1 (FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v22.0
 # ============================================================================
-# ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
-# ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
-#           + bỏ git-auto-commit-action, dùng git thuần (chỉ commit đúng 2 file)
-# ✅ FIX 3: chặn pandas 3.x (<3) + numpy <2.3 để đúng tuyến code đã kiểm chứng
-# ✅ FIX 4: Supabase sync batch 800 -> 200 + retry + đổi client (hết ConnectionTerminated)
-# ✅ Giữ nguyên: bỏ VNDirect BCTC, quét Quý đa luồng, clean/verify, HF + Supabase
+# ✅ FIX 1 (lỗi bạn gặp): ngưỡng Verify "tickers < 160" -> theo universe 132 mã
+#           (MIN_TICKERS=120, MIN_ROWS=80000 chỉnh được qua env) + in danh sách mã thiếu
+# ✅ FIX 2: BỎ bước "Quét Quý đa luồng" cũ (2b). Bước đó:
+#           - nạp nhãn TIẾNG ANH thô (Total Assets...) phá cổng dịch của main.py
+#           - gán Loại kỳ "Quý 1" / Ngày kỳ "YYYY-MM-DD" sai chuẩn "Quý" / "YYYY-Qn"
+#           - quét cả mã ngoài 132 (glob mọi csv có chữ "stock")
+#           main.py v23.1 đã tự bù Quý (YF_QUARTER) nên bước này thừa và có hại
+# ✅ FIX 3: Engine timeout 1200s -> 2400s (có -k 60) + kiểm tra CSV thật sự được
+#           tạo mới trong lần chạy này (chặn dùng nhầm file cũ trong repo)
+# ✅ FIX 4: Commit: bỏ reset --soft HEAD~1 vô nghĩa; push có retry + rebase -X theirs
+# ✅ FIX 5: Supabase: bỏ replace(..., None) (pandas bị pad/ffill sai nhãn),
+#           khử trùng khóa on_conflict trước upsert (tránh lỗi "affect row a second time"),
+#           bỏ dòng thiếu khóa; HF + Supabase không làm đỏ job nữa (dữ liệu đã commit)
+# ✅ Giữ nguyên: cloudscraper==1.2.71, pandas<3, fetch-depth 0, chỉ commit 2 file
 # ============================================================================
 name: Financial Data Scraper Pipeline
 
@@ -25,21 +33,21 @@ permissions:
 jobs:
   run-scraper:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       PYTHONIOENCODING: utf-8
       PYTHONUNBUFFERED: "1"
       PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      MIN_ROWS: "80000"
+      MIN_TICKERS: "120"        # universe 132 mã; cho phép thiếu tối đa ~12 mã Yahoo không có dữ liệu
 
     steps:
-      # ✅ checkout@v5 (Node24) + fetch-depth 0 -> HEAD~1 LUÔN tồn tại
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
           persist-credentials: true
 
-      # ✅ setup-python@v6 (Node24)
       - name: Set up Python 3.12
         uses: actions/setup-python@v6
         with:
@@ -49,7 +57,6 @@ jobs:
             requirements.txt
             **/requirements*.txt
 
-      # ✅ FIX cloudscraper: ==1.2.71 (1.2.72 không tồn tại); chặn pandas 3 / numpy 2.3+
       - name: Install Dependencies
         run: |
           set -e
@@ -71,12 +78,13 @@ jobs:
             "beautifulsoup4>=4.12" \
             "cloudscraper==1.2.71"
           echo "📦 Đã cài:"
-          pip list | grep -Ei "^(yfinance|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
+          pip list | grep -Ei "^(yfinance|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) " || true
 
       # ==========================================
-      # 1. Diagnostic nhanh các nguồn
+      # 1. Diagnostic nhanh các nguồn (không làm fail job)
       # ==========================================
       - name: Diagnostic Sources
+        continue-on-error: true
         run: |
           python -c "
           import yfinance as yf
@@ -97,7 +105,7 @@ jobs:
           "
 
       # ==========================================
-      # 2. Chạy FINEX Engine (tắt hẳn VNDirect BCTC)
+      # 2. Chạy FINEX Engine (main.py đã tự bù Quý bằng yfinance đa luồng)
       # ==========================================
       - name: Run FINEX Engine
         env:
@@ -110,152 +118,30 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           set -e
+          date +%s > /tmp/finex_start
           echo "🚀 Starting FINEX Engine (skip VNDirect BCTC)..."
-          timeout 1200 python main.py || {
-            code=$?
-            echo "⚠️ Engine dừng với mã thoát: $code"
+          code=0
+          timeout -k 60 2400 python main.py || code=$?
+          if [ "$code" -ne 0 ]; then
+            echo "⚠️ Engine dừng với mã thoát: $code (124 = hết thời gian)"
+          fi
+
+          # Chặn dùng nhầm file cũ trong repo: CSV phải được ghi MỚI trong lần chạy này
+          CSV=data/vietnam_stock_database_tong_hop.csv
+          if [ ! -f "$CSV" ]; then
+            echo "❌ Engine không tạo ra $CSV"
             exit 1
-          }
+          fi
+          START=$(cat /tmp/finex_start)
+          MTIME=$(stat -c %Y "$CSV")
+          if [ "$MTIME" -lt "$START" ]; then
+            echo "❌ $CSV là file CŨ (không được ghi mới trong lần chạy này) — dừng để tránh commit dữ liệu cũ."
+            exit 1
+          fi
           echo "✅ FINEX Engine finished."
 
       # ==========================================
-      # 2b. Quét dữ liệu Quý đa luồng
-      # ==========================================
-      - name: Fetch Quarterly Statements (Multi-threaded)
-        run: |
-          set -e
-          python << 'PYEOF'
-          import os, glob, time
-          from concurrent.futures import ThreadPoolExecutor, as_completed
-          import pandas as pd
-          import numpy as np
-          import yfinance as yf
-
-          t0 = time.time()
-          csv_path = 'data/vietnam_stock_database_tong_hop.csv'
-          if not os.path.exists(csv_path):
-              raise FileNotFoundError(f'Không tìm thấy {csv_path}')
-
-          df = pd.read_csv(csv_path, low_memory=False)
-          cols = list(df.columns)
-
-          ticker_set = set()
-          if 'Mã chứng khoán' in df.columns:
-              ticker_set.update(
-                  df['Mã chứng khoán'].dropna().astype(str).str.strip().str.upper().tolist()
-              )
-          for p in glob.glob('**/*.csv', recursive=True) + glob.glob('**/*.txt', recursive=True):
-              base = os.path.basename(p).lower()
-              if any(k in base for k in ['ticker', 'stock', 'danh_sach', '176', 'vn100', 'vn30']):
-                  try:
-                      if p.endswith('.txt'):
-                          with open(p, 'r', encoding='utf-8', errors='ignore') as f:
-                              for line in f:
-                                  tok = line.strip().upper()
-                                  if 2 <= len(tok) <= 6 and tok.isalnum():
-                                      ticker_set.add(tok)
-                      else:
-                          tdf = pd.read_csv(p, low_memory=False)
-                          for c in ['Mã chứng khoán', 'ticker', 'symbol', 'code', 'Mã']:
-                              if c in tdf.columns:
-                                  for v in tdf[c].dropna().astype(str).str.strip().str.upper():
-                                      if 2 <= len(v) <= 6 and v.isalnum():
-                                          ticker_set.add(v)
-                  except Exception:
-                      pass
-
-          tickers = sorted(ticker_set)
-          print(f'🎯 Quét Quý đa luồng cho {len(tickers)} mã...')
-
-          meta_map = {}
-          if 'Mã chứng khoán' in df.columns:
-              for tk, grp in df.groupby(df['Mã chứng khoán'].astype(str).str.strip().str.upper()):
-                  comp = grp['Tên doanh nghiệp'].dropna().iloc[0] if 'Tên doanh nghiệp' in grp.columns and not grp['Tên doanh nghiệp'].dropna().empty else ''
-                  sec  = grp['Tên ngành'].dropna().iloc[0] if 'Tên ngành' in grp.columns and not grp['Tên ngành'].dropna().empty else ''
-                  meta_map[tk] = (comp, sec)
-
-          stmt_specs = [
-              ('quarterly_balance_sheet', 'Bảng cân đối kế toán'),
-              ('quarterly_income_stmt', 'Báo cáo kết quả kinh doanh'),
-              ('quarterly_cashflow', 'Báo cáo lưu chuyển tiền tệ'),
-          ]
-
-          def fetch_one_ticker(tk):
-              comp, sec = meta_map.get(tk, ('', ''))
-              rows = []
-              try:
-                  yf_tk = yf.Ticker(f'{tk}.VN')
-                  for attr, rep_name in stmt_specs:
-                      try:
-                          tbl = getattr(yf_tk, attr, None)
-                      except Exception:
-                          continue
-                      if tbl is None or getattr(tbl, 'empty', True):
-                          continue
-                      for col_dt in tbl.columns:
-                          dt_obj = pd.to_datetime(col_dt, errors='coerce')
-                          if pd.isna(dt_obj):
-                              continue
-                          q_num = (dt_obj.month - 1) // 3 + 1
-                          period_label = f'Quý {q_num}'
-                          rep_date_str = dt_obj.strftime('%Y-%m-%d')
-                          yr_val = int(dt_obj.year)
-                          series = tbl[col_dt].dropna()
-                          for item_label, val in series.items():
-                              v_num = pd.to_numeric(val, errors='coerce')
-                              if pd.isna(v_num) or not np.isfinite(float(v_num)) or float(v_num) == 0.0:
-                                  continue
-                              row = {c: '' for c in cols}
-                              if 'Mã chứng khoán' in row: row['Mã chứng khoán'] = tk
-                              if 'Tên doanh nghiệp' in row: row['Tên doanh nghiệp'] = comp
-                              if 'Tên ngành' in row: row['Tên ngành'] = sec
-                              if 'Loại báo cáo' in row: row['Loại báo cáo'] = rep_name
-                              if 'Loại kỳ' in row: row['Loại kỳ'] = period_label
-                              if 'Năm' in row: row['Năm'] = yr_val
-                              if 'Ngày kỳ' in row: row['Ngày kỳ'] = rep_date_str
-                              if 'Chỉ tiêu tiếng Việt' in row: row['Chỉ tiêu tiếng Việt'] = str(item_label).strip()
-                              if 'Giá trị' in row: row['Giá trị'] = float(v_num)
-                              rows.append(row)
-              except Exception as e:
-                  print(f'  ⚠️ {tk}: {type(e).__name__}')
-              return tk, rows
-
-          q_rows = []
-          matched = 0
-          done = 0
-          errors = 0
-          with ThreadPoolExecutor(max_workers=8) as pool:
-              futures = {pool.submit(fetch_one_ticker, tk): tk for tk in tickers}
-              for fut in as_completed(futures, timeout=600):
-                  done += 1
-                  try:
-                      tk, r_list = fut.result(timeout=15)
-                      if r_list:
-                          matched += 1
-                          q_rows.extend(r_list)
-                  except Exception:
-                      errors += 1
-                  if done % 40 == 0 or done == len(tickers):
-                      print(f'  ⚡ {done}/{len(tickers)} mã | Có Quý: {matched} | Dòng: {len(q_rows):,} | Lỗi: {errors} ({time.time()-t0:.1f}s)')
-
-          if q_rows:
-              df_q = pd.DataFrame(q_rows)[cols]
-              dedup_cols = [c for c in ['Mã chứng khoán', 'Loại báo cáo', 'Loại kỳ', 'Ngày kỳ', 'Chỉ tiêu tiếng Việt'] if c in df.columns]
-              if dedup_cols:
-                  existing_keys = set(zip(*(df[c].astype(str).str.strip() for c in dedup_cols)))
-                  q_keys = list(zip(*(df_q[c].astype(str).str.strip() for c in dedup_cols)))
-                  keep_mask = [k not in existing_keys for k in q_keys]
-                  df_q = df_q[keep_mask]
-              if len(df_q) > 0:
-                  df = pd.concat([df, df_q], ignore_index=True)
-                  df.to_csv(csv_path, index=False)
-                  print(f'✅ Gộp thêm {len(df_q):,} dòng Quý mới trong {time.time()-t0:.1f}s')
-          else:
-              print(f'ℹ️ Không có dòng Quý mới từ yfinance ({time.time()-t0:.1f}s)')
-          PYEOF
-
-      # ==========================================
-      # 2c. Làm sạch dữ liệu, ép số chuẩn & tự điền Năm
+      # 3. Làm sạch dữ liệu, ép số chuẩn & tự điền Năm
       # ==========================================
       - name: Clean Data & Format Numbers
         run: |
@@ -314,17 +200,19 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 3. Verify chất lượng dữ liệu
+      # 4. Verify chất lượng dữ liệu (ngưỡng theo universe 132 mã)
       # ==========================================
       - name: Verify Data Quality
         run: |
           set -e
           python << 'PYEOF'
-          import pandas as pd
           import os, sys
+          import pandas as pd
 
           csv_path = 'data/vietnam_stock_database_tong_hop.csv'
           pq_path  = 'data/vietnam_stock_database.parquet'
+          MIN_ROWS = int(os.environ.get('MIN_ROWS', '80000'))
+          MIN_TICKERS = int(os.environ.get('MIN_TICKERS', '120'))
 
           if not os.path.exists(csv_path):
               print('❌ Không tìm thấy file CSV')
@@ -341,6 +229,19 @@ jobs:
               print(f'❌ Thiếu cột bắt buộc: {missing}')
               sys.exit(1)
 
+          # In danh sách mã thiếu so với universe (chỉ để thông tin, không làm fail)
+          try:
+              from main import load_132_master_tickers
+              universe = set(load_132_master_tickers().keys())
+              have = set(df['Mã chứng khoán'].astype(str).str.strip().str.upper().unique())
+              miss = sorted(universe - have)
+              extra = sorted(have - universe)
+              print(f'🧭 Universe {len(universe)} mã | thiếu {len(miss)}: {", ".join(miss) if miss else "-"}')
+              if extra:
+                  print(f'ℹ️ Mã ngoài universe (chỉ số/dữ liệu cũ): {", ".join(extra[:20])}')
+          except Exception as e:
+              print(f'ℹ️ Bỏ qua đối chiếu universe: {type(e).__name__}')
+
           val_num = pd.to_numeric(df['Giá trị'], errors='coerce')
           null_count = int(val_num.isna().sum())
           zero_count = int((val_num == 0).sum())
@@ -350,8 +251,8 @@ jobs:
               print('❌ Vẫn còn dòng trống hoặc giá trị bằng 0')
               sys.exit(1)
 
-          if total < 80000 or tickers < 160:
-              print(f'❌ Dữ liệu quá ít (dòng={total}, mã={tickers})')
+          if total < MIN_ROWS or tickers < MIN_TICKERS:
+              print(f'❌ Dữ liệu quá ít (dòng={total} < {MIN_ROWS} hoặc mã={tickers} < {MIN_TICKERS})')
               sys.exit(1)
 
           csv_mb = os.path.getsize(csv_path) / 1024 / 1024
@@ -367,23 +268,14 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 4. Commit & Push — ✅ FIX exit 128: guard HEAD~1 + git thuần, chỉ 2 file
+      # 5. Commit & Push — git thuần, chỉ 2 file, push có retry
       # ==========================================
-      - name: Commit & Push Dataset (an toàn, không HEAD~1 mù)
+      - name: Commit & Push Dataset
         run: |
           set -e
-          rm -f data/_checkpoint.csv data/bao_cao_*.csv data/_emergency_backup.csv 2>/dev/null || true
+          rm -f data/_checkpoint.csv data/bao_cao_*.csv data/_emergency_backup.csv data/_emergency_backup.parquet 2>/dev/null || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # Chỉ undo commit auto cũ NẾU nó tồn tại VÀ HEAD~1 hợp lệ (fetch-depth=0 nên luôn ok)
-          if git log -1 --pretty=%s 2>/dev/null | grep -q "Auto-update FINEX Dataset"; then
-            if git rev-parse --verify -q HEAD~1 >/dev/null 2>&1; then
-              git reset --soft HEAD~1 || true
-              git reset HEAD >/dev/null 2>&1 || true
-              echo "♻️ Đã undo commit auto cũ để gộp dữ liệu mới."
-            fi
-          fi
 
           git add data/vietnam_stock_database_tong_hop.csv data/vietnam_stock_database.parquet
           if git diff --cached --quiet; then
@@ -391,14 +283,28 @@ jobs:
             exit 0
           fi
           git commit -m "Auto-update FINEX Dataset $(date -u +'%Y-%m-%d %H:%M UTC') [skip ci]" --no-verify
-          git pull --rebase origin "${GITHUB_REF_NAME}" || true
-          git push origin HEAD:"${GITHUB_REF_NAME}"
+
+          pushed=0
+          for i in 1 2 3; do
+            if git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push origin HEAD:"${GITHUB_REF_NAME}"; then
+              pushed=1
+              break
+            fi
+            git rebase --abort 2>/dev/null || true
+            echo "⚠️ Push lần $i lỗi, thử lại..."
+            sleep $((i * 5))
+          done
+          if [ "$pushed" != "1" ]; then
+            echo "❌ Push thất bại sau 3 lần"
+            exit 1
+          fi
           echo "✅ Đã push đúng 2 đường dẫn: CSV + Parquet."
 
       # ==========================================
-      # 5. Upload HuggingFace (retry 3 lần)
+      # 6. Upload HuggingFace (retry 3 lần; không làm đỏ job)
       # ==========================================
       - name: Push to HuggingFace
+        continue-on-error: true
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -429,9 +335,10 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 6. Đồng bộ Supabase — ✅ batch 200 + retry + đổi client (hết ConnectionTerminated)
+      # 7. Đồng bộ Supabase — batch 200, retry, đổi client, khử trùng khóa
       # ==========================================
       - name: Sync to Supabase
+        continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
@@ -441,15 +348,19 @@ jobs:
           import os, time, random
           import pandas as pd
           from datetime import datetime
+          from supabase import create_client
 
           print('--- SUPABASE SYNC (batch 200 + retry + đổi client) ---')
-          from supabase import create_client
-          try:
-              from supabase import ClientOptions
-              sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'],
-                                 options=ClientOptions(postgrest_client_timeout=90))
-          except Exception:
-              sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+
+          def make_client():
+              try:
+                  from supabase import ClientOptions
+                  return create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'],
+                                       options=ClientOptions(postgrest_client_timeout=90))
+              except Exception:
+                  return create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
+
+          sb = make_client()
 
           df = pd.read_csv('data/vietnam_stock_database_tong_hop.csv', low_memory=False)
           col_map = {
@@ -458,45 +369,50 @@ jobs:
               'Ngày kỳ': 'report_date', 'Chỉ tiêu tiếng Việt': 'item_vn', 'Giá trị': 'value'
           }
           df = df.rename(columns={k: v for k, v in col_map.items() if k in df.columns})
-          df = df.dropna(subset=['ticker', 'value'])
-          df['ticker'] = df['ticker'].astype(str).str.strip().str.upper()
-          df = df[df['ticker'] != 'NAN']
+
+          # Chuẩn hoá chuỗi: rỗng / nan / None -> None (không dùng replace(...None) vì pandas sẽ ffill sai)
+          str_cols = ['ticker', 'company_name', 'sector', 'report_type', 'period_type', 'report_date', 'item_vn']
+          for col in str_cols:
+              if col in df.columns:
+                  df[col] = df[col].map(
+                      lambda x: None if x is None or (isinstance(x, float) and pd.isna(x))
+                      or str(x).strip() in ('', 'nan', 'NaN', 'None') else str(x).strip()
+                  )
+
           df['value'] = pd.to_numeric(df['value'], errors='coerce')
-          df = df.dropna(subset=['value'])
+          df['ticker'] = df['ticker'].map(lambda x: x.upper() if x else x)
+          key_cols = ['ticker', 'report_type', 'period_type', 'report_date', 'item_vn']
+          df = df.dropna(subset=key_cols + ['value'])
           df = df[df['value'] != 0]
           df['year'] = pd.to_numeric(df.get('year'), errors='coerce').fillna(datetime.now().year).astype(int)
-          for col in ['company_name', 'sector', 'report_type', 'period_type', 'report_date', 'item_vn']:
-              if col in df.columns:
-                  df[col] = df[col].astype(str).replace(['nan', 'NaN', 'None', ''], None)
 
-          records = df.to_dict('records')
+          # Khử trùng khóa on_conflict: tránh "ON CONFLICT DO UPDATE command cannot affect row a second time"
+          before = len(df)
+          df = df.drop_duplicates(subset=key_cols, keep='last')
+          if before - len(df):
+              print(f'🧹 Loại {before - len(df):,} dòng trùng khóa trước khi upsert')
+
+          df = df[[c for c in ['ticker', 'company_name', 'sector', 'report_type', 'period_type',
+                               'year', 'report_date', 'item_vn', 'value'] if c in df.columns]]
+          df['value'] = df['value'].astype(float)
+          records = df.astype(object).where(df.notna(), None).to_dict('records')
           total = len(records)
           print(f'📦 Chuẩn bị upsert {total:,} bản ghi...')
 
           NET_KEYS = ('connectionterminated', 'connection', 'timeout', 'timed out', 'goaway',
                       'go away', 'server disconnected', 'protocolerror', 'eof', 'closed')
           def is_net(e):
-              if type(e).__name__ in ('ConnectionTerminated','ConnectionError','ConnectError','ReadTimeout',
-                                      'ConnectTimeout','PoolTimeout','RemoteProtocolError','ProtocolError'):
+              if type(e).__name__ in ('ConnectionTerminated', 'ConnectionError', 'ConnectError', 'ReadTimeout',
+                                      'ConnectTimeout', 'PoolTimeout', 'RemoteProtocolError', 'ProtocolError'):
                   return True
               s = str(e).lower()
               return any(k in s for k in NET_KEYS)
 
-          def new_client():
-              global sb
-              try:
-                  from supabase import ClientOptions
-                  sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'],
-                                     options=ClientOptions(postgrest_client_timeout=90))
-              except Exception:
-                  sb = create_client(os.environ['SUPABASE_URL'], os.environ['SUPABASE_KEY'])
-              print('  🔄 Tạo lại client Supabase (pool HTTP/2 mới)')
-
-          BATCH, MAX_ATTEMPT = 200, 3
+          BATCH, MAX_ATTEMPT = 200, 4
           failed = 0
           ok_batches = 0
           for i in range(0, total, BATCH):
-              batch = records[i:i+BATCH]
+              batch = records[i:i + BATCH]
               attempt = 0
               while True:
                   try:
@@ -505,33 +421,35 @@ jobs:
                       ).execute()
                       ok_batches += 1
                       if ok_batches % 10 == 0 or i + BATCH >= total:
-                          print(f'  ✅ {min(i+BATCH, total):,}/{total:,}')
+                          print(f'  ✅ {min(i + BATCH, total):,}/{total:,}')
                       if ok_batches % 40 == 0:
-                          new_client()
+                          sb = make_client()
+                          print('  🔄 Tạo lại client Supabase')
                       time.sleep(0.25)
                       break
                   except Exception as e:
                       attempt += 1
                       if is_net(e):
-                          new_client()
+                          sb = make_client()
+                          print('  🔄 Tạo lại client Supabase (lỗi mạng)')
                       if attempt >= MAX_ATTEMPT:
-                          print(f'  ❌ Batch {i} lỗi vĩnh viễn: {type(e).__name__} (bỏ qua, lần sau đẩy lại)')
+                          print(f'  ❌ Batch {i} lỗi vĩnh viễn: {type(e).__name__}: {str(e)[:120]} (bỏ qua, lần sau đẩy lại)')
                           failed += len(batch)
                           break
                       wait = min(2 ** attempt, 15) + random.uniform(0, 1)
                       print(f'  ⚠️ Batch {i} lỗi lần {attempt}/{MAX_ATTEMPT}, retry sau {wait:.1f}s')
                       time.sleep(wait)
 
-          print(f'🎉 Supabase sync hoàn tất! Đẩy được {total-failed:,}/{total:,} (lỗi giữ lại: {failed:,})')
+          print(f'🎉 Supabase sync hoàn tất! Đẩy được {total - failed:,}/{total:,} (lỗi giữ lại: {failed:,})')
           PYEOF
 
       # ==========================================
-      # 7. Báo cáo cuối
+      # 8. Báo cáo cuối
       # ==========================================
       - name: Final Report
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v21.1 (fix cloudscraper/HEAD~1/pandas3)"
+          echo "  FINEX Pipeline v22.0"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
