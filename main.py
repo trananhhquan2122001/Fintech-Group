@@ -1,8 +1,8 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.3 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.4 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.3 (universe HOSE 125 mã; loại bỏ danh sách mã HNX khỏi cấu hình):
-  ✅ UNIVERSE: danh sách HOSE 125 mã; xác thực số lượng/mã trùng và loại mọi mã ngoài universe khỏi nguồn nạp.
+Changelog v23.4 (universe HOSE 123 mã; loại bỏ danh sách mã HNX khỏi cấu hình):
+  ✅ UNIVERSE: danh sách HOSE 123 mã; xác thực số lượng/mã trùng và loại mọi mã ngoài universe khỏi nguồn nạp.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -23,7 +23,7 @@ Changelog v23.3 (universe HOSE 125 mã; loại bỏ danh sách mã HNX khỏi c�
   ✅ 🆕 CỔNG VÀO CHẶN MỌI EXCEPTION -> workflow luôn exit 0; emergency backup nếu crash.
   ✅ CHỈ LƯU ĐÚNG 2 FILE: data/vietnam_stock_database_tong_hop.csv + .parquet
      (coverage report chỉ chạy khi env COVERAGE_REPORT=true).
-  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 125 mã,
+  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 123 mã,
      BƯỚC 0->8, emergency save, dọn file tạm, purge Supabase dòng 0/rỗng/rác/Anh.
 ================================================================================
 """
@@ -838,29 +838,29 @@ def load_daily_stock_data():
     except Exception: return pd.DataFrame()
 
 # ==========================================
-# 3. DANH SÁCH 125 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
+# 3. DANH SÁCH 123 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
 # ==========================================
-def load_125_master_tickers():
+def load_123_master_tickers():
 
     # Universe is the curated HOSE-only list; no HNX ticker set is included.
 
     raw_tickers = [
         'ACB', 'AGR', 'ANV', 'BAF', 'BCM', 'BFC', 'BID', 'BMI', 'BMP', 'BSI',
-        'BSR', 'BVH', 'BWE', 'CAP', 'CII', 'CMG', 'CTD', 'CTG', 'CTI', 'CTR',
-        'CTS', 'DBC', 'DCM', 'DGC', 'DGW', 'DHC', 'DIG', 'DP3', 'DPM', 'DPR',
-        'DSE', 'DTP', 'DXG', 'EIB', 'EVF', 'FPT', 'FRT', 'FTS', 'GAS', 'GEE',
-        'GEX', 'GMD', 'GVR', 'HAG', 'HCM', 'HDB', 'HDC', 'HDG', 'HHV', 'HPG',
-        'HSG', 'HT1', 'HVN', 'IJC', 'KBC', 'KDC', 'KDH', 'LHC', 'LPB', 'LSS',
-        'MBB', 'MCH', 'MSB', 'MSN', 'MWG', 'NAB', 'NKG', 'NLG', 'NT2', 'NVL',
-        'OCB', 'PAN', 'PC1', 'PDR', 'PET', 'PHR', 'PLX', 'POW', 'PSD', 'PVD',
-        'PVT', 'REE', 'SAB', 'SBA', 'SBT', 'SHB', 'SIP', 'SJD', 'SJS', 'SSB',
-        'SSI', 'STB', 'SZC', 'TAL', 'TCB', 'TCH', 'TCM', 'TCX', 'TDC', 'TDM',
-        'TMP', 'TPB', 'TTA', 'TV2', 'VCB', 'VCG', 'VCI', 'VCK', 'VGC', 'VHC',
-        'VHM', 'VIB', 'VIC', 'VIX', 'VJC', 'VND', 'VNM', 'VPB', 'VPI', 'VPL',
-        'VPX', 'VRE', 'VSC', 'VSH', 'VTP'
+        'BSR', 'BVH', 'BWE', 'CII', 'CMG', 'CTD', 'CTG', 'CTI', 'CTR', 'CTS',
+        'DBC', 'DCM', 'DGC', 'DGW', 'DHC', 'DIG', 'DP3', 'DPM', 'DPR', 'DSE',
+        'DTP', 'DXG', 'EIB', 'EVF', 'FPT', 'FRT', 'FTS', 'GAS', 'GEE', 'GEX',
+        'GMD', 'GVR', 'HAG', 'HCM', 'HDB', 'HDC', 'HDG', 'HHV', 'HPG', 'HSG',
+        'HT1', 'HVN', 'IJC', 'KBC', 'KDC', 'KDH', 'LPB', 'LSS', 'MBB', 'MCH',
+        'MSB', 'MSN', 'MWG', 'NAB', 'NKG', 'NLG', 'NT2', 'NVL', 'OCB', 'PAN',
+        'PC1', 'PDR', 'PET', 'PHR', 'PLX', 'POW', 'PSD', 'PVD', 'PVT', 'REE',
+        'SAB', 'SBA', 'SBT', 'SHB', 'SIP', 'SJD', 'SJS', 'SSB', 'SSI', 'STB',
+        'SZC', 'TAL', 'TCB', 'TCH', 'TCM', 'TCX', 'TDC', 'TDM', 'TMP', 'TPB',
+        'TTA', 'TV2', 'VCB', 'VCG', 'VCI', 'VCK', 'VGC', 'VHC', 'VHM', 'VIB',
+        'VIC', 'VIX', 'VJC', 'VND', 'VNM', 'VPB', 'VPI', 'VPL', 'VPX', 'VRE',
+        'VSC', 'VSH', 'VTP'
     ]
-    if len(raw_tickers) != 125 or len(set(raw_tickers)) != 125:
-        raise ValueError(f"Danh sách mã phải có đúng 125 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
+    if len(raw_tickers) != 123 or len(set(raw_tickers)) != 123:
+        raise ValueError(f"Danh sách mã phải có đúng 123 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
     return {t.strip().upper(): "HOSE_OR_OTHER"
             for t in raw_tickers if t.strip()}
 
@@ -868,11 +868,11 @@ def get_company_profile(symbol):
     tech_list = ["FPT", "CMG", "VTP", "ICT", "ELC", "CTR", "VGI", "VNZ", "FOX", "FOC", "VTK", "MFS", "VEC"]
     bank_list = ["VCB","BID","TCB","MBB","ACB","CTG","VPB","STB","SHB","HDB","LPB","MSB","OCB","NAB","SSB","EIB","TPB","ABB","BAB"]
     securities_list = ["SSI","VCI","HCM","VND","SHS","MBS","FTS","BSI","CTS","VIX","VDS","ORS","AGR","DSE","BVS","EVF","IPA","EVS","HBS","PSI","WSS","F88"]
-    realestate_list = ["VIC","VHM","VRE","BCM","KBC","IDC","SIP","SZC","KDH","NLG","DXG","PDR","DIG","CEO","HDC","NVL","TCH","VC3","VPI","SJS","L14","L18","NDN","THD","KSF","IJC","TDC","CTI","VEF","TED","CC1","PCC","LIC","CLI","HEC"]
-    retail_list = ["MWG","FRT","DGW","PNJ","PET","DMX"]
+    realestate_list = ["VIC","VHM","VRE","BCM","KBC","IDC","SIP","SZC","KDH","NLG","DXG","PDR","DIG","CEO","HDC","NVL","TCH","VC3","VPI","SJS","L14","NDN","THD","KSF","IJC","TDC","CTI","VEF","TED","CC1","PCC","LIC","CLI","HEC"]
+    retail_list = ["MWG","FRT","DGW","PET","DMX"]
     oil_gas_list = ["GAS","PLX","PVD","PVS","PVT","PVB","BSR","OIL","POW","DTK","PGV","NT2","PGI","PLC","PSD","PVC","SJD","TMP","SBA","VSH","TTA","TV2","ODE","AVC"]
-    steel_materials = ["HPG","HSG","NKG","GDA","BMP","NTP","AAA","DGC","CSV","LAS","PHR","DPM","DCM","BFC","HPA","VGS","HT1","LHC","HGM","KSV","TLH","DDV","BFC","DPR","DHC","VLB","VXB","SIV","ACE","HAM","SBM","NAS","HMS","QPH"]
-    agriculture_list = ["HAG","ANV","BAF","DBC","CAP","IDP","KDC","MCH","MSN","QNS","SAB","SBT","SLS","VHC","CKA","SEA","APF","LSG","VSF","AGP","DTP","WSB","BWS","QHW","HLB"]
+    steel_materials = ["HPG","HSG","NKG","GDA","BMP","NTP","AAA","DGC","CSV","LAS","PHR","DPM","DCM","BFC","HPA","VGS","HT1","HGM","KSV","TLH","DDV","BFC","DPR","DHC","VLB","VXB","SIV","ACE","HAM","SBM","NAS","HMS","QPH"]
+    agriculture_list = ["HAG","ANV","BAF","DBC","IDP","KDC","MCH","MSN","QNS","SAB","SBT","SLS","VHC","CKA","SEA","APF","LSG","VSF","AGP","DTP","WSB","BWS","QHW","HLB"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -900,11 +900,11 @@ def get_company_profile(symbol):
         "HMS":"Công ty CP Cơ khí Hà Nội","PCC":"Công ty CP Tập đoàn XD PCC1","QHW":"Công ty CP Nước Khoáng Quảng Ninh",
         "MFS":"Công ty CP Dịch vụ Kỹ thuật Mobifone","VEC":"Tổng Công ty Điện tử và Tin học VN","HEC":"Công ty CP Tư vấn XD Thủy lợi và Môi trường",
         "ABB":"Ngân hàng TMCP An Bình","ACB":"Ngân hàng TMCP Á Châu","ACV":"TCT Cảng hàng không VN","BVS":"CTCP Chứng khoán Bảo Việt",
-        "CAP":"CTCP Lâm nông sản thực phẩm Yên Bái","CEO":"CTCP Tập đoàn C.E.O","DNH":"CTCP Thủy điện Đa Nhim",
+        "CEO":"CTCP Tập đoàn C.E.O","DNH":"CTCP Thủy điện Đa Nhim",
         "DP3":"CTCP Dược phẩm Trung ương 3","DTD":"CTCP Đầu tư Phát triển Thành Đạt","DVN":"Tổng Công ty Dược Việt Nam",
         "DXP":"CTCP Cảng Đình Vũ","FOX":"CTCP Viễn thông FPT","HND":"CTCP Nhiệt điện Hải Phòng","HUT":"CTCP Tasco",
-        "IDC":"Tổng công ty IDICO","IDP":"CTCP Sữa Quốc tế IDP","L14":"CTCP Licogi 14","L18":"CTCP Đầu tư và Xây dựng số 18",
-        "LAS":"CTCP Supe Phốt phát và Hóa chất Lâm Thao","LHC":"CTCP Đầu tư và Xây dựng Lắp máy IDICO","MBS":"CTCP Chứng khoán MB",
+        "IDC":"Tổng công ty IDICO","IDP":"CTCP Sữa Quốc tế IDP","L14":"CTCP Licogi 14",
+        "LAS":"CTCP Supe Phốt phát và Hóa chất Lâm Thao","MBS":"CTCP Chứng khoán MB",
         "MSR":"CTCP Masan High-Tech Materials","MVN":"Tổng Công ty Hàng hải Việt Nam","NBC":"CTCP Than Núi Béo",
         "NDN":"CTCP Đầu tư Phát triển Nhà Đà Nẵng","NTP":"CTCP Nhựa Thiếu niên Tiền Phong","OIL":"Tổng Công ty Dầu Việt Nam",
         "PLC":"Tổng Công ty Hóa dầu Petrolimex","PSD":"CTCP Dịch vụ Tổng hợp Dầu khí","PVB":"CTCP bọc ống Dầu khí Việt Nam",
@@ -1554,7 +1554,7 @@ def translate_metric(metric_original, is_vn=False):
     return result.capitalize()
 
 # ==========================================
-# 5.5 🆕 v23.3: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
+# 5.5 🆕 v23.4: CHUẨN HOÁ ĐƠN VỊ NGAY KHI CÀO (chặn giá/vốn hoá/SLCP sai thang)
 # ==========================================
 PRICE_MIN, PRICE_MAX = 100.0, 5_000_000.0        # VNĐ/cổ phiếu
 SHARES_MIN, SHARES_MAX = 1_000_000.0, 5e11      # số cổ phiếu
@@ -2185,7 +2185,7 @@ def apply_first_principles_cleaning(df):
     return df[STANDARD_COLUMNS]
 
 # ==========================================
-# 10.5 🆕 v23.3: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
+# 10.5 🆕 v23.4: CHỈ SỐ ĐỊNH GIÁ DẪN XUẤT BẰNG PANDAS/NUMPY (hết dòng P/E, P/B, ROE = 0)
 # ==========================================
 VAL_METRIC_ALIASES = {
     'LNST': ['Lợi nhuận sau thuế TNDN', 'LNST của công ty mẹ', 'Lợi nhuận sau thuế thu nhập doanh nghiệp'],
@@ -2344,12 +2344,12 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.3 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.4 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
-    ticker_market_map = load_125_master_tickers()
+    ticker_market_map = load_123_master_tickers()
     print(f"  🏦 Universe HOSE theo dõi: {len(ticker_market_map)} mã.")
     all_master_records = []
 
@@ -2371,7 +2371,7 @@ def main():
             r['Chỉ tiêu tiếng Việt'] = lab
             kept.append(r)
         if dropped_outside:
-            print(f"  🧹 [{source}] loại {dropped_outside:,} dòng ngoài universe 125 mã.")
+            print(f"  🧹 [{source}] loại {dropped_outside:,} dòng ngoài universe 123 mã.")
         if dropped:
             print(f"  🧹 [{source}] chặn {dropped:,} nhãn Anh/rác ngay khi nạp.")
         if not kept: return
@@ -2546,7 +2546,7 @@ def main():
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng: {len(df_clean):,} dòng")
     if not df_clean.empty:
-        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/125")
+        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/123")
         for k, v in df_clean['Loại kỳ'].value_counts().items():
             print(f"     • {k}: {v:,}")
         en_left = int(df_clean['Chỉ tiêu tiếng Việt'].map(_looks_english).sum())
