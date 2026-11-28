@@ -1,9 +1,9 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.7 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.8 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.7 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+Changelog v23.8 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
   ✅ UNIVERSE: 122 mã; mã ngoài danh sách bị loại trước khi lưu.
-  ✅ VN-INDEX: Yahoo + Vnstock fallback; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ; lưu vào đúng 2 file chính, app hiển thị 100 phiên.
+  ✅ VN-INDEX: bỏ session requests không tương thích khi gọi yfinance; Yahoo + Vnstock fallback; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -1978,7 +1978,8 @@ def fetch_market_indices():
     # Yahoo có thể trả một nến rời rạc dù ticker tồn tại; không dừng ở kết quả một dòng.
     for candidate in ("^VNINDEX.VN", "^VNINDEX"):
         try:
-            raw = yf.Ticker(candidate, session=session).history(
+            # Để yfinance tự tạo session tương thích curl_cffi; session=requests.Session() toàn cục chỉ dùng cho nguồn HTTP khác.
+            raw = yf.Ticker(candidate).history(
                 period="1y", interval="1d", auto_adjust=False, actions=False,
                 raise_errors=True,
             )
@@ -2460,7 +2461,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.7 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.8 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
