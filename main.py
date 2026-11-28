@@ -1,9 +1,9 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.6 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.7 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.6 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+Changelog v23.7 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
   ✅ UNIVERSE: 122 mã; mã ngoài danh sách bị loại trước khi lưu.
-  ✅ VN-INDEX: tải OHLCV thực 1 năm bằng yfinance; lưu cùng 2 file Parquet/CSV chính, không tạo file thứ ba; app hiển thị 100 phiên.
+  ✅ VN-INDEX: Yahoo + Vnstock fallback; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ; lưu vào đúng 2 file chính, app hiển thị 100 phiên.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -43,7 +43,7 @@ import re
 import json
 import unicodedata
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -1926,95 +1926,146 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     except Exception: pass
     return records
 
+def _normalize_vnindex_ohlcv(raw):
+    """Chuẩn hóa nhiều biến thể cột OHLCV và loại nến lỗi/không đầy đủ."""
+    if raw is None or not isinstance(raw, pd.DataFrame) or raw.empty:
+        return pd.DataFrame()
+    frame = raw.copy()
+    if isinstance(frame.columns, pd.MultiIndex):
+        frame.columns = [str(col[-1] if col[-1] else col[0]) for col in frame.columns]
+    aliases = {
+        "date": ("date", "time", "timestamp", "trading_date", "tradingdate", "ngày", "ngay"),
+        "open": ("open", "o", "giá mở cửa", "gia mo cua"),
+        "high": ("high", "h", "giá cao nhất", "gia cao nhat"),
+        "low": ("low", "l", "giá thấp nhất", "gia thap nhat"),
+        "close": ("close", "c", "giá đóng cửa", "gia dong cua"),
+        "volume": ("volume", "vol", "khối lượng giao dịch", "khoi luong giao dich"),
+    }
+    by_lower = {str(col).strip().lower(): col for col in frame.columns}
+    rename = {}
+    for canonical, choices in aliases.items():
+        for choice in choices:
+            if choice in by_lower:
+                rename[by_lower[choice]] = canonical
+                break
+    frame = frame.rename(columns=rename)
+    if "date" not in frame.columns:
+        frame = frame.reset_index()
+        first_col = frame.columns[0]
+        if first_col not in ("open", "high", "low", "close", "volume"):
+            frame = frame.rename(columns={first_col: "date"})
+    if not {"date", "open", "high", "low", "close"}.issubset(frame.columns):
+        return pd.DataFrame()
+    frame["date"] = pd.to_datetime(frame["date"], errors="coerce", utc=True).dt.tz_convert("Asia/Ho_Chi_Minh").dt.tz_localize(None).dt.normalize()
+    for col in ("open", "high", "low", "close", "volume"):
+        if col in frame.columns:
+            frame[col] = pd.to_numeric(frame[col], errors="coerce")
+    if "volume" not in frame.columns:
+        frame["volume"] = 0.0
+    frame = frame.dropna(subset=["date", "open", "high", "low", "close"])
+    frame = frame[(frame[["open", "high", "low", "close"]] > 0).all(axis=1)]
+    frame = frame[(frame["high"] >= frame[["open", "close", "low"]].max(axis=1)) &
+                  (frame["low"] <= frame[["open", "close", "high"]].min(axis=1))]
+    return frame.sort_values("date").drop_duplicates("date", keep="last").set_index("date")
+
+
 def fetch_market_indices():
-    """Cào 1 năm OHLCV VN-INDEX để biểu đồ nến lấy dữ liệu thực từ Parquet."""
+    """Lấy nến VN-Index từ nhiều nguồn và chỉ nhận nguồn có >=20 phiên OHLC hợp lệ."""
     market_records = []
-    try:
-        history = pd.DataFrame()
-        source_symbol = None
-        # Yahoo Finance công bố VN-Index dưới mã ^VNINDEX.VN; giữ mã cũ làm dự phòng.
-        for candidate in ("^VNINDEX.VN", "^VNINDEX"):
-            try:
-                candidate_history = yf.Ticker(candidate, session=session).history(
-                    period="1y", interval="1d", auto_adjust=False, actions=False
-                )
-                if candidate_history is not None and not candidate_history.empty:
-                    history = candidate_history
-                    source_symbol = candidate
-                    break
-            except Exception as source_exc:
-                print(f"⚠️ [VN-INDEX] Nguồn {candidate} lỗi: {type(source_exc).__name__}")
-        if history is None or history.empty:
-            print("⚠️ [VN-INDEX] Yahoo không trả OHLCV; không tạo dữ liệu thay thế.")
-            return market_records
-        print(f"ℹ️ [VN-INDEX] Nguồn dữ liệu: Yahoo Finance {source_symbol}")
-        history = history.copy()
-        history.index = pd.to_datetime(history.index, errors="coerce")
-        if getattr(history.index, "tz", None) is not None:
-            history.index = history.index.tz_localize(None)
-        history = history[~history.index.isna()].sort_index()
-        required = {"Open", "High", "Low", "Close"}
-        if not required.issubset(history.columns):
-            print(f"⚠️ [VN-INDEX] Thiếu cột OHLC: {sorted(required - set(history.columns))}")
-            return market_records
+    history = pd.DataFrame()
+    source_label = None
 
-        metric_columns = [
-            ("Open", "Giá mở cửa"),
-            ("High", "Giá cao nhất"),
-            ("Low", "Giá thấp nhất"),
-            ("Close", "Giá đóng cửa"),
-        ]
-        if "Volume" in history.columns:
-            metric_columns.append(("Volume", "Khối lượng giao dịch"))
-        for session_date, row in history.iterrows():
-            date_text = session_date.strftime("%Y-%m-%d")
-            for source_col, metric_name in metric_columns:
+    # Yahoo có thể trả một nến rời rạc dù ticker tồn tại; không dừng ở kết quả một dòng.
+    for candidate in ("^VNINDEX.VN", "^VNINDEX"):
+        try:
+            raw = yf.Ticker(candidate, session=session).history(
+                period="1y", interval="1d", auto_adjust=False, actions=False,
+                raise_errors=True,
+            )
+            candidate_history = _normalize_vnindex_ohlcv(raw)
+            print(f"ℹ️ [VN-INDEX] Yahoo {candidate}: {len(candidate_history):,} phiên OHLC hợp lệ.")
+            if len(candidate_history) >= 20:
+                history, source_label = candidate_history, f"Yahoo Finance {candidate}"
+                break
+        except Exception as exc:
+            print(f"⚠️ [VN-INDEX] Yahoo {candidate}: {type(exc).__name__}: {str(exc)[:160]}")
+
+    # Nguồn dự phòng độc lập; Vnstock v6 chuẩn hóa OHLCV từ SSI/TCBS/DNSE/FHSC.
+    if history.empty:
+        try:
+            from vnstock import Market
+            end_date = datetime.utcnow().date()
+            start_date = end_date - timedelta(days=370)
+            for provider in ("tcbs", "ssi", "dnse", "fhsc"):
                 try:
-                    value = float(row[source_col])
-                except (TypeError, ValueError):
-                    continue
-                if not np.isfinite(value) or value <= 0:
-                    continue
-                market_records.append({
-                    "Mã chứng khoán": "VN-INDEX",
-                    "Tên doanh nghiệp": "Chỉ số VN-INDEX",
-                    "Tên ngành": "Chỉ số thị trường",
-                    "Loại báo cáo": "Chỉ số thị trường OHLCV",
-                    "Loại kỳ": "Ngày",
-                    "Năm": int(session_date.year),
-                    "Ngày kỳ": date_text,
-                    "Chỉ tiêu tiếng Việt": metric_name,
-                    "Giá trị": value,
-                })
+                    raw = Market(provider).index("VNINDEX").ohlcv(
+                        start=start_date.isoformat(), end=end_date.isoformat(), interval="1D"
+                    )
+                    candidate_history = _normalize_vnindex_ohlcv(raw)
+                    print(f"ℹ️ [VN-INDEX] Vnstock/{provider}: {len(candidate_history):,} phiên OHLC hợp lệ.")
+                    if len(candidate_history) >= 20:
+                        history, source_label = candidate_history, f"Vnstock/{provider}"
+                        break
+                except Exception as exc:
+                    print(f"⚠️ [VN-INDEX] Vnstock/{provider}: {type(exc).__name__}: {str(exc)[:160]}")
+        except Exception as exc:
+            print(f"⚠️ [VN-INDEX] Không nạp được Vnstock: {type(exc).__name__}: {str(exc)[:160]}")
 
-        latest = history.iloc[-1]
-        close_value = float(latest["Close"])
-        previous_close = float(history["Close"].iloc[-2]) if len(history) > 1 else close_value
-        change_value = close_value - previous_close
-        change_pct = (change_value / previous_close * 100.0) if previous_close else 0.0
-        latest_date = history.index[-1]
-        for metric_name, value in [
-            ("Giá trị chỉ số", close_value),
-            ("Biến động điểm", change_value),
-            ("Biến động phần trăm", change_pct),
-        ]:
-            if np.isfinite(value) and value != 0:
-                market_records.append({
-                    "Mã chứng khoán": "VN-INDEX",
-                    "Tên doanh nghiệp": "Chỉ số VN-INDEX",
-                    "Tên ngành": "Chỉ số thị trường",
-                    "Loại báo cáo": "Chỉ số thị trường, Định giá & Cổ tức",
-                    "Loại kỳ": "Real-time hằng ngày",
-                    "Năm": int(latest_date.year),
-                    "Ngày kỳ": latest_date.strftime("%Y-%m-%d"),
-                    "Chỉ tiêu tiếng Việt": metric_name,
-                    "Giá trị": value,
-                })
-        print(f"✅ [VN-INDEX] Cào được {len(history):,} phiên OHLCV; phiên mới nhất {history.index[-1].date()}.")
-    except Exception as exc:
-        print(f"⚠️ [VN-INDEX] Lỗi tải OHLCV: {type(exc).__name__}: {exc}")
+    if len(history) < 20:
+        print(f"❌ [VN-INDEX] Không có nguồn nào trả đủ 20 phiên OHLC; chỉ nhận {len(history)} phiên. Không ghi dữ liệu giả.")
+        return market_records
+
+    print(f"✅ [VN-INDEX] Dùng {source_label}, {len(history):,} phiên; mới nhất {history.index.max().date()}.")
+    metric_columns = [
+        ("open", "Giá mở cửa"), ("high", "Giá cao nhất"),
+        ("low", "Giá thấp nhất"), ("close", "Giá đóng cửa"),
+        ("volume", "Khối lượng giao dịch"),
+    ]
+    for session_date, row in history.iterrows():
+        for source_col, metric_name in metric_columns:
+            try:
+                value = float(row[source_col])
+            except (TypeError, ValueError):
+                continue
+            if not np.isfinite(value) or value <= 0:
+                continue
+            market_records.append({
+                "Mã chứng khoán": "VN-INDEX",
+                "Tên doanh nghiệp": "Chỉ số VN-INDEX",
+                "Tên ngành": "Chỉ số thị trường",
+                "Loại báo cáo": "Chỉ số thị trường OHLCV",
+                "Loại kỳ": "Ngày",
+                "Năm": int(session_date.year),
+                "Ngày kỳ": session_date.strftime("%Y-%m-%d"),
+                "Chỉ tiêu tiếng Việt": metric_name,
+                "Giá trị": value,
+            })
+
+    latest = history.iloc[-1]
+    close_value = float(latest["close"])
+    previous_close = float(history["close"].iloc[-2])
+    change_value = close_value - previous_close
+    change_pct = (change_value / previous_close * 100.0) if previous_close else 0.0
+    latest_date = history.index[-1]
+    for metric_name, value in [
+        ("Giá trị chỉ số", close_value),
+        ("Biến động điểm", change_value),
+        ("Biến động phần trăm", change_pct),
+    ]:
+        if np.isfinite(value) and value != 0:
+            market_records.append({
+                "Mã chứng khoán": "VN-INDEX",
+                "Tên doanh nghiệp": "Chỉ số VN-INDEX",
+                "Tên ngành": "Chỉ số thị trường",
+                "Loại báo cáo": "Chỉ số thị trường, Định giá & Cổ tức",
+                "Loại kỳ": "Real-time hằng ngày",
+                "Năm": int(latest_date.year),
+                "Ngày kỳ": latest_date.strftime("%Y-%m-%d"),
+                "Chỉ tiêu tiếng Việt": metric_name,
+                "Giá trị": value,
+            })
+    print(f"✅ [VN-INDEX] Đã tạo {len(history):,} phiên OHLCV / {len(market_records):,} dòng.")
     return market_records
-
 
 def find_value_column(df):
     for name in ['value','ratio_value','value_ratio','Value','ratio','val']:
@@ -2409,7 +2460,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.6 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.7 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
