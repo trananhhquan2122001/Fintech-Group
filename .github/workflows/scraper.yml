@@ -1,5 +1,5 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.7 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v21.8 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
@@ -304,6 +304,93 @@ jobs:
       # ==========================================
       # 3. Verify chất lượng dữ liệu
       # ==========================================
+      - name: Recover and write VN-Index candles
+        run: |
+          set -e
+          python << 'PYEOF'
+          import os
+          import pandas as pd
+          import numpy as np
+          import requests
+          import yfinance as yf
+          from urllib.parse import quote
+
+          def norm(raw):
+              if raw is None or not isinstance(raw, pd.DataFrame) or raw.empty: return pd.DataFrame()
+              x=raw.copy()
+              if isinstance(x.columns,pd.MultiIndex): x.columns=[str(c[0]) for c in x.columns]
+              x=x.rename(columns={c:str(c).strip().lower() for c in x.columns})
+              if 'date' not in x.columns:
+                  for c in ('time','timestamp','trading_date'):
+                      if c in x.columns: x=x.rename(columns={c:'date'}); break
+              if 'date' not in x.columns:
+                  x=x.reset_index()
+                  first_col=x.columns[0]
+                  x=x.rename(columns={first_col:'date'})
+              if not {'date','open','high','low','close'}.issubset(x.columns): return pd.DataFrame()
+              x['date']=pd.to_datetime(x['date'],errors='coerce',utc=True).dt.tz_convert('Asia/Ho_Chi_Minh').dt.tz_localize(None).dt.normalize()
+              for c in ('open','high','low','close','volume'):
+                  if c in x: x[c]=pd.to_numeric(x[c],errors='coerce')
+              if 'volume' not in x: x['volume']=0.0
+              x=x.dropna(subset=['date','open','high','low','close'])
+              x=x[(x[['open','high','low','close']]>0).all(axis=1)]
+              x=x[(x.high>=x[['open','close','low']].max(axis=1))&(x.low<=x[['open','close','high']].min(axis=1))]
+              return x.sort_values('date').drop_duplicates('date',keep='last').set_index('date')
+
+          history=pd.DataFrame(); provider=''
+          for sym in ('^VNINDEX.VN','^VNINDEX'):
+              try:
+                  candidate=norm(yf.Ticker(sym).history(period='1y',interval='1d',auto_adjust=False,actions=False))
+                  print(f'yfinance {sym}: {len(candidate)} nến')
+                  if len(candidate)>=20: history,provider=candidate,f'yfinance {sym}'; break
+              except Exception as e: print(f'yfinance {sym}: {type(e).__name__}: {str(e)[:120]}')
+          if history.empty:
+              for host in ('query1.finance.yahoo.com','query2.finance.yahoo.com'):
+                  for sym in ('^VNINDEX.VN','^VNINDEX'):
+                      try:
+                          url=f'https://{host}/v8/finance/chart/{quote(sym,safe="")}'
+                          r=requests.get(url,params={'range':'1y','interval':'1d','events':'history'},headers={'User-Agent':'Mozilla/5.0'},timeout=25); r.raise_for_status()
+                          result=(r.json().get('chart',{}).get('result') or [None])[0]
+                          if not result: continue
+                          q=result.get('indicators',{}).get('quote',[{}])[0]
+                          raw=pd.DataFrame({'date':pd.to_datetime(result.get('timestamp',[]),unit='s',utc=True),'open':q.get('open',[]),'high':q.get('high',[]),'low':q.get('low',[]),'close':q.get('close',[]),'volume':q.get('volume',[])})
+                          candidate=norm(raw); print(f'{host} {sym}: {len(candidate)} nến')
+                          if len(candidate)>=20: history,provider=candidate,f'{host} {sym}'; break
+                      except Exception as e: print(f'{host} {sym}: {type(e).__name__}: {str(e)[:120]}')
+                  if not history.empty: break
+          if history.empty:
+              try:
+                  from vnstock import Market
+                  end=pd.Timestamp.utcnow().date(); start=end-pd.Timedelta(days=370)
+                  for src in ('tcbs','ssi','dnse','fhsc'):
+                      try:
+                          candidate=norm(Market(src).index('VNINDEX').ohlcv(start=start.isoformat(),end=end.isoformat(),interval='1D'))
+                          print(f'Vnstock/{src}: {len(candidate)} nến')
+                          if len(candidate)>=20: history,provider=candidate,f'Vnstock/{src}'; break
+                      except Exception as e: print(f'Vnstock/{src}: {type(e).__name__}: {str(e)[:120]}')
+              except Exception as e: print(f'Vnstock unavailable: {type(e).__name__}: {str(e)[:120]}')
+          if len(history)<20: raise RuntimeError(f'Không lấy được 20 phiên nến từ nguồn nào; nhận {len(history)} phiên.')
+
+          csv='data/vietnam_stock_database_tong_hop.csv'; parquet='data/vietnam_stock_database.parquet'
+          df=pd.read_csv(csv,low_memory=False)
+          required=['Mã chứng khoán','Tên doanh nghiệp','Tên ngành','Loại báo cáo','Loại kỳ','Năm','Ngày kỳ','Chỉ tiêu tiếng Việt','Giá trị']
+          if any(c not in df for c in required): raise RuntimeError('CSV thiếu cột dữ liệu chuẩn.')
+          ticker=df['Mã chứng khoán'].fillna('').astype(str).str.strip().str.upper()
+          metric=df['Chỉ tiêu tiếng Việt'].fillna('').astype(str).str.strip().str.lower()
+          labels={'giá mở cửa','giá cao nhất','giá thấp nhất','giá đóng cửa','khối lượng giao dịch'}
+          df=df.loc[~(ticker.isin({'VN-INDEX','VNINDEX'})&metric.isin(labels))].copy()
+          names={'open':'Giá mở cửa','high':'Giá cao nhất','low':'Giá thấp nhất','close':'Giá đóng cửa','volume':'Khối lượng giao dịch'}
+          rows=[]
+          for date,bar in history.iterrows():
+              for key,label in names.items():
+                  value=pd.to_numeric(bar.get(key),errors='coerce')
+                  if pd.notna(value) and np.isfinite(value) and value>0:
+                      rows.append({'Mã chứng khoán':'VN-INDEX','Tên doanh nghiệp':'Chỉ số VN-INDEX','Tên ngành':'Chỉ số thị trường','Loại báo cáo':'Chỉ số thị trường OHLCV','Loại kỳ':'Ngày','Năm':int(date.year),'Ngày kỳ':date.strftime('%Y-%m-%d'),'Chỉ tiêu tiếng Việt':label,'Giá trị':float(value)})
+          if not rows: raise RuntimeError('Nguồn có dữ liệu nhưng không tạo được hàng OHLCV.')
+          df=pd.concat([df,pd.DataFrame(rows)],ignore_index=True)
+          df.to_csv(csv,index=False,encoding='utf-8-sig'); df.to_parquet(parquet,index=False,engine='pyarrow',compression='snappy')
+          print(f'✅ Đã ghi {len(history)} phiên / {len(rows)} dòng VN-Index từ {provider} vào đúng CSV + Parquet.')
+          PYEOF
       - name: Verify Data Quality
         run: |
           set -e
