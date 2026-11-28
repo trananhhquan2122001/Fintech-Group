@@ -1,5 +1,5 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.9 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v22.0 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
@@ -342,36 +342,18 @@ jobs:
                   if len(candidate)>=20: history,provider=candidate,f'yfinance {sym}'; break
               except Exception as e: print(f'yfinance {sym}: {type(e).__name__}: {str(e)[:120]}')
           if history.empty:
-              for host in ('query1.finance.yahoo.com','query2.finance.yahoo.com'):
-                  for sym in ('^VNINDEX.VN','^VNINDEX'):
-                      try:
-                          url=f'https://{host}/v8/finance/chart/{quote(sym,safe="")}'
-                          r=requests.get(url,params={'range':'1y','interval':'1d','events':'history'},headers={'User-Agent':'Mozilla/5.0'},timeout=25); r.raise_for_status()
-                          result=(r.json().get('chart',{}).get('result') or [None])[0]
-                          if not result: continue
-                          q=result.get('indicators',{}).get('quote',[{}])[0]
-                          raw=pd.DataFrame({'date':pd.to_datetime(result.get('timestamp',[]),unit='s',utc=True),'open':q.get('open',[]),'high':q.get('high',[]),'low':q.get('low',[]),'close':q.get('close',[]),'volume':q.get('volume',[])})
-                          candidate=norm(raw); print(f'{host} {sym}: {len(candidate)} nến')
-                          if len(candidate)>=20: history,provider=candidate,f'{host} {sym}'; break
-                      except Exception as e: print(f'{host} {sym}: {type(e).__name__}: {str(e)[:120]}')
-                  if not history.empty: break
-          if history.empty:
               try:
-                  end_ts=int(pd.Timestamp.utcnow().timestamp())
-                  start_ts=end_ts-370*24*60*60
-                  url='https://dchart-api.vndirect.com.vn/dchart/history'
-                  params={'resolution':'D','symbol':'VNINDEX','from':start_ts,'to':end_ts}
-                  headers={'User-Agent':'Mozilla/5.0 FINEX/1.0','Origin':'https://dstock.vndirect.com.vn','Referer':'https://dstock.vndirect.com.vn/','Accept':'application/json'}
-                  response=requests.get(url,params=params,headers=headers,timeout=30)
+                  response=requests.get('https://finfo-api.vndirect.com.vn/tradingView/history',params={'symbol':'VNINDEX'},headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'},timeout=30)
                   response.raise_for_status()
                   payload=response.json()
-                  if payload.get('s')!='ok': raise RuntimeError(f"VNDirect chart status={payload.get('s')!r}")
+                  if not isinstance(payload,dict) or not payload.get('t'):
+                      raise RuntimeError(f'VNDirect finfo không có mảng thời gian: {str(payload)[:160]}')
                   raw=pd.DataFrame({'date':pd.to_datetime(payload.get('t',[]),unit='s',utc=True),'open':payload.get('o',[]),'high':payload.get('h',[]),'low':payload.get('l',[]),'close':payload.get('c',[]),'volume':payload.get('v',[])})
-                  candidate=norm(raw)
-                  print(f'VNDirect chart VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
-                  if len(candidate)>=20: history,provider=candidate,'VNDirect chart API'
+                  candidate=norm(raw).tail(300)
+                  print(f'VNDirect finfo VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
+                  if len(candidate)>=20: history,provider=candidate,'VNDirect finfo history'
               except Exception as e:
-                  print(f'VNDirect chart lỗi: {type(e).__name__}: {str(e)[:180]}')
+                  print(f'VNDirect finfo lỗi: {type(e).__name__}: {str(e)[:180]}')
           if len(history)<20: raise RuntimeError(f'Không lấy được 20 phiên nến từ nguồn nào; nhận {len(history)} phiên.')
 
           csv='data/vietnam_stock_database_tong_hop.csv'; parquet='data/vietnam_stock_database.parquet'
