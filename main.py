@@ -1,9 +1,9 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v24.1 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v24.2 (VN-INDEX NHIỀU NGUỒN DỰ PHÒNG)
 ================================================================================
-Changelog v24.1 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+Changelog v24.2 (universe 122 mã đã rà soát, loại UPCoM; VN-INDEX multi-provider):
   ✅ UNIVERSE: 122 mã; mã ngoài danh sách bị loại trước khi lưu.
-  ✅ VN-INDEX: yfinance + VNDirect finfo history fallback không cần khóa nguồn; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ.
+  ✅ VN-INDEX: Yahoo → TCBS legacy public + TCBS OpenAPI (nếu có TCBS_API_KEY) → VNDirect finfo (2 host) → VNDirect dchart; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -1991,33 +1991,78 @@ def fetch_market_indices():
         except Exception as exc:
             print(f"⚠️ [VN-INDEX] Yahoo {candidate}: {type(exc).__name__}: {str(exc)[:160]}")
 
-    # Nguồn lịch sử không cần API key: VNDIRECT finfo TradingView history.
-    if history.empty:
+    # Mỗi provider độc lập; lỗi/timeout của một host không ngăn các host còn lại.
+    end_epoch = int(time.time())
+    start_epoch = end_epoch - 550 * 86400
+
+    def parse_bars(payload):
+        if isinstance(payload, dict):
+            if payload.get("t") and all(k in payload for k in ("o", "h", "l", "c")):
+                bars = [{"t": t, "o": o, "h": h, "l": l, "c": c,
+                         "v": payload.get("v", [0] * len(payload["t"]))[i]}
+                        for i, (t, o, h, l, c) in enumerate(zip(payload["t"], payload["o"], payload["h"], payload["l"], payload["c"]))]
+            else:
+                bars = payload.get("data") or payload.get("items") or payload.get("result") or []
+        elif isinstance(payload, list):
+            bars = payload
+        else:
+            bars = []
+        if isinstance(bars, dict):
+            bars = bars.get("data", [])
+        frame = pd.DataFrame(bars)
+        if frame.empty:
+            return pd.DataFrame()
+        aliases = {"tradingdate":"date", "trading_date":"date", "time":"date", "timestamp":"date",
+                   "t":"date", "o":"open", "h":"high", "l":"low", "c":"close", "v":"volume"}
+        frame = frame.rename(columns={str(c).strip().lower(): aliases.get(str(c).strip().lower(), str(c).strip().lower()) for c in frame.columns})
+        if "date" in frame:
+            sample = pd.to_numeric(frame["date"], errors="coerce")
+            if sample.notna().any():
+                unit = "ms" if sample.dropna().median() > 10**12 else "s"
+                frame["date"] = pd.to_datetime(sample, unit=unit, errors="coerce", utc=True)
+        return _normalize_vnindex_ohlcv(frame)
+
+    legacy_url = "https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term"
+    tcbs_params = {"ticker":"VNINDEX", "type":"index", "resolution":"D", "from":start_epoch, "to":end_epoch}
+    tcbs_sources = [("TCBS legacy index", legacy_url, tcbs_params, {})]
+    tcbs_key = os.getenv("TCBS_API_KEY", "").strip()
+    if tcbs_key:
+        tcbs_sources.insert(0, ("TCBS OpenAPI index", "https://openapi.tcbs.com.vn/nyx/v2/stock/bars-long-term",
+                                {"ticker":"VNINDEX", "type":"index", "resolution":"D", "to":end_epoch, "countBack":400},
+                                {"Authorization":f"Bearer {tcbs_key}"}))
+    for label, url, params, extra_headers in tcbs_sources:
+        if not history.empty:
+            break
         try:
-            response = requests.get(
-                "https://finfo-api.vndirect.com.vn/tradingView/history",
-                params={"symbol": "VNINDEX"},
-                headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
-                timeout=30,
-            )
+            response = requests.get(url, params=params, headers={"User-Agent":"Mozilla/5.0", "Accept":"application/json", **extra_headers}, timeout=(5, 15))
+            response.raise_for_status()
+            candidate_history = parse_bars(response.json())
+            print(f"ℹ️ [VN-INDEX] {label}: {len(candidate_history):,} phiên OHLC hợp lệ.")
+            if len(candidate_history) >= 20:
+                history, source_label = candidate_history, label
+        except Exception as exc:
+            print(f"⚠️ [VN-INDEX] {label}: {type(exc).__name__}: {str(exc)[:180]}")
+
+    vndirect_sources = [
+        ("VNDirect finfo", "https://finfo-api.vndirect.com.vn/tradingView/history", {"symbol":"VNINDEX"}),
+        ("VNDirect finfo alternate host", "https://api-finfo.vndirect.com.vn/tradingView/history", {"symbol":"VNINDEX"}),
+        ("VNDirect dchart", "https://dchart-api.vndirect.com.vn/dchart/history", {"resolution":"D", "symbol":"VNINDEX", "from":start_epoch, "to":end_epoch}),
+    ]
+    for label, url, params in vndirect_sources:
+        if not history.empty:
+            break
+        try:
+            response = requests.get(url, params=params, headers={"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36", "Accept":"application/json, text/plain, */*", "Origin":"https://dstock.vndirect.com.vn", "Referer":"https://dstock.vndirect.com.vn/"}, timeout=(5, 12))
             response.raise_for_status()
             payload = response.json()
-            if not isinstance(payload, dict) or not payload.get("t"):
-                raise RuntimeError(f"VNDirect finfo không có mảng thời gian: {str(payload)[:160]}")
-            raw = pd.DataFrame({
-                "date": pd.to_datetime(payload.get("t", []), unit="s", utc=True),
-                "open": payload.get("o", []),
-                "high": payload.get("h", []),
-                "low": payload.get("l", []),
-                "close": payload.get("c", []),
-                "volume": payload.get("v", []),
-            })
-            candidate_history = _normalize_vnindex_ohlcv(raw)
-            print(f"ℹ️ [VN-INDEX] VNDirect finfo history: {len(candidate_history):,} phiên OHLC hợp lệ.")
+            if isinstance(payload, dict) and payload.get("s") == "no_data":
+                raise RuntimeError("API phản hồi no_data")
+            candidate_history = parse_bars(payload)
+            print(f"ℹ️ [VN-INDEX] {label}: {len(candidate_history):,} phiên OHLC hợp lệ.")
             if len(candidate_history) >= 20:
-                history, source_label = candidate_history, "VNDirect finfo history"
+                history, source_label = candidate_history, label
         except Exception as exc:
-            print(f"⚠️ [VN-INDEX] VNDirect finfo history: {type(exc).__name__}: {str(exc)[:200]}")
+            print(f"⚠️ [VN-INDEX] {label}: {type(exc).__name__}: {str(exc)[:180]}")
     if len(history) < 20:
         print(f"❌ [VN-INDEX] Không có nguồn nào trả đủ 20 phiên OHLC; chỉ nhận {len(history)} phiên. Không ghi dữ liệu giả.")
         return market_records
