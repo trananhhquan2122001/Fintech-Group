@@ -1,8 +1,9 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.5 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.6 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.5 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
-  ✅ UNIVERSE: danh sách 122 mã sau khi loại mã UPCoM; xác thực số lượng/mã trùng và loại mọi mã ngoài universe khỏi nguồn nạp.
+Changelog v23.6 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+  ✅ UNIVERSE: 122 mã; mã ngoài danh sách bị loại trước khi lưu.
+  ✅ VN-INDEX: tải OHLCV thực 1 năm bằng yfinance; lưu cùng 2 file Parquet/CSV chính, không tạo file thứ ba; app hiển thị 100 phiên.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -859,6 +860,8 @@ def load_122_master_tickers():
         'VIC', 'VIX', 'VJC', 'VND', 'VNM', 'VPB', 'VPI', 'VPL', 'VPX', 'VRE',
         'VSC', 'VSH', 'VTP'
     ]
+    # Loại L18 và PNJ; danh sách crawler hiện tại vốn đã không có hai mã này.
+    raw_tickers = [ticker for ticker in raw_tickers if ticker not in {"L18", "PNJ"}]
     if len(raw_tickers) != 122 or len(set(raw_tickers)) != 122:
         raise ValueError(f"Danh sách mã phải có đúng 122 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
     return {t.strip().upper(): "HOSE_OR_OTHER"
@@ -1924,33 +1927,95 @@ def fetch_market_and_valuation_metrics(symbol, ticker_obj, balance_sheet_df):
     return records
 
 def fetch_market_indices():
-    indices = {"VN-INDEX": "^VNINDEX", "HNX-INDEX": "^HNX"}
+    """Cào 1 năm OHLCV VN-INDEX để biểu đồ nến lấy dữ liệu thực từ Parquet."""
     market_records = []
-    current_year = str(datetime.now().year)
-    today_str = datetime.today().strftime('%Y-%m-%d')
-    for index_name, ticker_symbol in indices.items():
-        try:
-            t = yf.Ticker(ticker_symbol, session=session)
-            hist = t.history(period="5d")
-            current_val = float(hist['Close'].iloc[-1]) if not hist.empty else 0
-            prev_close = float(hist['Close'].iloc[-2]) if len(hist) > 1 else current_val
-            change_val = current_val - prev_close
-            change_pct = (change_val / prev_close) * 100 if prev_close else 0
-            for name, val in [('Giá trị chỉ số', current_val), ('Biến động điểm', change_val), ('Biến động phần trăm', change_pct)]:
-                fv = format_value(val)
-                if fv is not None and fv != 0:
-                    market_records.append({
-                        'Mã chứng khoán': index_name, 'Tên doanh nghiệp': f'Chỉ số thị trường {index_name}',
-                        'Tên ngành': 'Chỉ số vĩ mô', 'Loại báo cáo': 'Chỉ số thị trường, Định giá & Cổ tức',
-                        'Loại kỳ': 'Real-time hằng ngày', 'Năm': current_year, 'Ngày kỳ': today_str,
-                        'Chỉ tiêu tiếng Việt': name, 'Giá trị': fv
-                    })
-        except Exception: pass
+    try:
+        history = pd.DataFrame()
+        source_symbol = None
+        # Yahoo Finance công bố VN-Index dưới mã ^VNINDEX.VN; giữ mã cũ làm dự phòng.
+        for candidate in ("^VNINDEX.VN", "^VNINDEX"):
+            try:
+                candidate_history = yf.Ticker(candidate, session=session).history(
+                    period="1y", interval="1d", auto_adjust=False, actions=False
+                )
+                if candidate_history is not None and not candidate_history.empty:
+                    history = candidate_history
+                    source_symbol = candidate
+                    break
+            except Exception as source_exc:
+                print(f"⚠️ [VN-INDEX] Nguồn {candidate} lỗi: {type(source_exc).__name__}")
+        if history is None or history.empty:
+            print("⚠️ [VN-INDEX] Yahoo không trả OHLCV; không tạo dữ liệu thay thế.")
+            return market_records
+        print(f"ℹ️ [VN-INDEX] Nguồn dữ liệu: Yahoo Finance {source_symbol}")
+        history = history.copy()
+        history.index = pd.to_datetime(history.index, errors="coerce")
+        if getattr(history.index, "tz", None) is not None:
+            history.index = history.index.tz_localize(None)
+        history = history[~history.index.isna()].sort_index()
+        required = {"Open", "High", "Low", "Close"}
+        if not required.issubset(history.columns):
+            print(f"⚠️ [VN-INDEX] Thiếu cột OHLC: {sorted(required - set(history.columns))}")
+            return market_records
+
+        metric_columns = [
+            ("Open", "Giá mở cửa"),
+            ("High", "Giá cao nhất"),
+            ("Low", "Giá thấp nhất"),
+            ("Close", "Giá đóng cửa"),
+        ]
+        if "Volume" in history.columns:
+            metric_columns.append(("Volume", "Khối lượng giao dịch"))
+        for session_date, row in history.iterrows():
+            date_text = session_date.strftime("%Y-%m-%d")
+            for source_col, metric_name in metric_columns:
+                try:
+                    value = float(row[source_col])
+                except (TypeError, ValueError):
+                    continue
+                if not np.isfinite(value) or value <= 0:
+                    continue
+                market_records.append({
+                    "Mã chứng khoán": "VN-INDEX",
+                    "Tên doanh nghiệp": "Chỉ số VN-INDEX",
+                    "Tên ngành": "Chỉ số thị trường",
+                    "Loại báo cáo": "Chỉ số thị trường OHLCV",
+                    "Loại kỳ": "Ngày",
+                    "Năm": int(session_date.year),
+                    "Ngày kỳ": date_text,
+                    "Chỉ tiêu tiếng Việt": metric_name,
+                    "Giá trị": value,
+                })
+
+        latest = history.iloc[-1]
+        close_value = float(latest["Close"])
+        previous_close = float(history["Close"].iloc[-2]) if len(history) > 1 else close_value
+        change_value = close_value - previous_close
+        change_pct = (change_value / previous_close * 100.0) if previous_close else 0.0
+        latest_date = history.index[-1]
+        for metric_name, value in [
+            ("Giá trị chỉ số", close_value),
+            ("Biến động điểm", change_value),
+            ("Biến động phần trăm", change_pct),
+        ]:
+            if np.isfinite(value) and value != 0:
+                market_records.append({
+                    "Mã chứng khoán": "VN-INDEX",
+                    "Tên doanh nghiệp": "Chỉ số VN-INDEX",
+                    "Tên ngành": "Chỉ số thị trường",
+                    "Loại báo cáo": "Chỉ số thị trường, Định giá & Cổ tức",
+                    "Loại kỳ": "Real-time hằng ngày",
+                    "Năm": int(latest_date.year),
+                    "Ngày kỳ": latest_date.strftime("%Y-%m-%d"),
+                    "Chỉ tiêu tiếng Việt": metric_name,
+                    "Giá trị": value,
+                })
+        print(f"✅ [VN-INDEX] Cào được {len(history):,} phiên OHLCV; phiên mới nhất {history.index[-1].date()}.")
+    except Exception as exc:
+        print(f"⚠️ [VN-INDEX] Lỗi tải OHLCV: {type(exc).__name__}: {exc}")
     return market_records
 
-# ==========================================
-# 8. VNFINANCIALDATA BULK (GIỮ KHUNG + CỔNG DỊCH)
-# ==========================================
+
 def find_value_column(df):
     for name in ['value','ratio_value','value_ratio','Value','ratio','val']:
         if name in df.columns: return name
@@ -2344,7 +2409,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.4 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.6 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
@@ -2575,5 +2640,7 @@ if __name__ == "__main__":
         except Exception:
             pass
     sys.exit(0)
+
+
 
 
