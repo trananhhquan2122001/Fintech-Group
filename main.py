@@ -1,9 +1,9 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.9 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v24.1 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.9 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+Changelog v24.1 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
   ✅ UNIVERSE: 122 mã; mã ngoài danh sách bị loại trước khi lưu.
-  ✅ VN-INDEX: yfinance mặc định + Yahoo Chart API trực tiếp + Vnstock fallback; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ.
+  ✅ VN-INDEX: yfinance + VNDirect finfo history fallback không cần khóa nguồn; chỉ nhận tối thiểu 20 phiên OHLC hợp lệ.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -1991,59 +1991,33 @@ def fetch_market_indices():
         except Exception as exc:
             print(f"⚠️ [VN-INDEX] Yahoo {candidate}: {type(exc).__name__}: {str(exc)[:160]}")
 
-    # Dự phòng trực tiếp Yahoo Chart API: tránh phụ thuộc vào adapter/session của yfinance.
-    if history.empty:
-        for candidate in ("^VNINDEX.VN", "^VNINDEX"):
-            try:
-                url = f"https://query1.finance.yahoo.com/v8/finance/chart/{candidate}"
-                response = requests.get(
-                    url,
-                    params={"range": "1y", "interval": "1d", "events": "history"},
-                    headers={"User-Agent": "Mozilla/5.0 FINEX/1.0"},
-                    timeout=25,
-                )
-                response.raise_for_status()
-                result = (response.json().get("chart", {}).get("result") or [None])[0]
-                if not result:
-                    continue
-                timestamps = result.get("timestamp") or []
-                quote_rows = result.get("indicators", {}).get("quote", [{}])[0]
-                raw = pd.DataFrame({
-                    "date": pd.to_datetime(timestamps, unit="s", utc=True),
-                    "open": quote_rows.get("open", []),
-                    "high": quote_rows.get("high", []),
-                    "low": quote_rows.get("low", []),
-                    "close": quote_rows.get("close", []),
-                    "volume": quote_rows.get("volume", []),
-                })
-                candidate_history = _normalize_vnindex_ohlcv(raw)
-                print(f"ℹ️ [VN-INDEX] Yahoo Chart API {candidate}: {len(candidate_history):,} phiên OHLC hợp lệ.")
-                if len(candidate_history) >= 20:
-                    history, source_label = candidate_history, f"Yahoo Chart API {candidate}"
-                    break
-            except Exception as exc:
-                print(f"⚠️ [VN-INDEX] Yahoo Chart API {candidate}: {type(exc).__name__}: {str(exc)[:160]}")
-    # Nguồn dự phòng độc lập; Vnstock v6 chuẩn hóa OHLCV từ SSI/TCBS/DNSE/FHSC.
+    # Nguồn lịch sử không cần API key: VNDIRECT finfo TradingView history.
     if history.empty:
         try:
-            from vnstock import Market
-            end_date = datetime.utcnow().date()
-            start_date = end_date - timedelta(days=370)
-            for provider in ("tcbs", "ssi", "dnse", "fhsc"):
-                try:
-                    raw = Market(provider).index("VNINDEX").ohlcv(
-                        start=start_date.isoformat(), end=end_date.isoformat(), interval="1D"
-                    )
-                    candidate_history = _normalize_vnindex_ohlcv(raw)
-                    print(f"ℹ️ [VN-INDEX] Vnstock/{provider}: {len(candidate_history):,} phiên OHLC hợp lệ.")
-                    if len(candidate_history) >= 20:
-                        history, source_label = candidate_history, f"Vnstock/{provider}"
-                        break
-                except Exception as exc:
-                    print(f"⚠️ [VN-INDEX] Vnstock/{provider}: {type(exc).__name__}: {str(exc)[:160]}")
+            response = requests.get(
+                "https://finfo-api.vndirect.com.vn/tradingView/history",
+                params={"symbol": "VNINDEX"},
+                headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict) or not payload.get("t"):
+                raise RuntimeError(f"VNDirect finfo không có mảng thời gian: {str(payload)[:160]}")
+            raw = pd.DataFrame({
+                "date": pd.to_datetime(payload.get("t", []), unit="s", utc=True),
+                "open": payload.get("o", []),
+                "high": payload.get("h", []),
+                "low": payload.get("l", []),
+                "close": payload.get("c", []),
+                "volume": payload.get("v", []),
+            })
+            candidate_history = _normalize_vnindex_ohlcv(raw)
+            print(f"ℹ️ [VN-INDEX] VNDirect finfo history: {len(candidate_history):,} phiên OHLC hợp lệ.")
+            if len(candidate_history) >= 20:
+                history, source_label = candidate_history, "VNDirect finfo history"
         except Exception as exc:
-            print(f"⚠️ [VN-INDEX] Không nạp được Vnstock: {type(exc).__name__}: {str(exc)[:160]}")
-
+            print(f"⚠️ [VN-INDEX] VNDirect finfo history: {type(exc).__name__}: {str(exc)[:200]}")
     if len(history) < 20:
         print(f"❌ [VN-INDEX] Không có nguồn nào trả đủ 20 phiên OHLC; chỉ nhận {len(history)} phiên. Không ghi dữ liệu giả.")
         return market_records
@@ -2493,7 +2467,7 @@ def _cleanup_temp_files():
 def main():
     global _ALL_RECORDS_GLOBAL
     print("=" * 62)
-    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v23.9 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
+    print("🚀 FINEX VN STOCK DATABASE CRAWLER — v24.1 (HỢP NHẤT: SẠCH ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT)")
     print("=" * 62)
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
