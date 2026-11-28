@@ -1,12 +1,13 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.4 (FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v21.6 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
 #           + bỏ git-auto-commit-action, dùng git thuần (chỉ commit đúng 2 file)
 # ✅ FIX 3: chặn pandas 3.x (<3) + numpy <2.3 để đúng tuyến code đã kiểm chứng
 # ✅ FIX 4: Supabase sync batch 800 -> 200 + retry + đổi client (hết ConnectionTerminated)
-# ✅ FIX 5: vũ trụ mã lấy trực tiếp từ main.py; quality gate động 95% (125 mã -> tối thiểu 119), báo rõ mã thiếu
+# ✅ FIX 5: vũ trụ mã lấy trực tiếp từ main.py; quality gate động 95% (122 mã -> tính tự động từ danh sách main.py), báo rõ mã thiếu
+# ✅ VN-INDEX: xác thực tối thiểu 20 phiên OHLC thật, không commit nếu dữ liệu quá cũ hoặc thiếu cột.
 # ✅ Giữ nguyên: bỏ VNDirect BCTC, quét Quý đa luồng, clean/verify, HF + Supabase
 # ============================================================================
 name: Financial Data Scraper Pipeline
@@ -348,6 +349,25 @@ jobs:
           if null_count > 0 or zero_count > 0:
               print('❌ Vẫn còn dòng trống hoặc giá trị bằng 0')
               sys.exit(1)
+          # Biểu đồ nến chỉ được cập nhật bằng OHLC thật của VN-Index.
+          ticker_col = df['Mã chứng khoán'].astype(str).str.strip().str.upper()
+          index_df = df[ticker_col.isin(['VN-INDEX', 'VNINDEX'])].copy()
+          index_df['metric'] = index_df['Chỉ tiêu tiếng Việt'].astype(str).str.strip().str.lower()
+          index_df['trade_date'] = pd.to_datetime(index_df['Ngày kỳ'], errors='coerce')
+          index_df['value_num'] = pd.to_numeric(index_df['Giá trị'], errors='coerce')
+          ohlc = {'giá mở cửa', 'giá cao nhất', 'giá thấp nhất', 'giá đóng cửa'}
+          candle_rows = index_df[index_df['metric'].isin(ohlc)].dropna(subset=['trade_date', 'value_num'])
+          candles = candle_rows.pivot_table(index='trade_date', columns='metric', values='value_num', aggfunc='last')
+          candles = candles.dropna(subset=list(ohlc), how='any') if set(ohlc).issubset(candles.columns) else pd.DataFrame()
+          if len(candles) < 20:
+              print(f'❌ VN-Index OHLCV thiếu dữ liệu nến thật: {len(candles)} phiên (cần tối thiểu 20).')
+              sys.exit(1)
+          latest_date = candles.index.max()
+          age_days = (pd.Timestamp.utcnow().tz_localize(None).normalize() - latest_date.normalize()).days
+          print(f'🕯️ VN-Index: {len(candles)} phiên OHLC thật; mới nhất {latest_date.date()} ({age_days} ngày).')
+          if age_days > 7:
+              print(f'❌ Dữ liệu nến VN-Index đã cũ {age_days} ngày; giữ lại dataset trước đó và dừng workflow.')
+              sys.exit(1)
 
           if total < 80000 or len(covered_tickers) < min_coverage_count:
               print(f'❌ Dữ liệu chưa đạt ngưỡng (dòng={total}/80,000, độ phủ={len(covered_tickers)}/{len(expected_tickers)}, yêu cầu tối thiểu {min_coverage_count} mã = 95%)')
@@ -573,6 +593,6 @@ jobs:
         if: always()
         run: |
           echo "=============================================="
-          echo "  FINEX Pipeline v21.4 (125 mã, kiểm tra độ phủ 95%)"
+          echo "  FINEX Pipeline v21.5 (122 mã, kiểm tra độ phủ 95%)"
           echo "=============================================="
           ls -lh data/*.parquet data/*.csv 2>/dev/null || echo "⚠️ Không có file data"
