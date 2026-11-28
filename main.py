@@ -1,8 +1,8 @@
 """
-FINEX VN STOCK DATABASE CRAWLER - v23.4 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
+FINEX VN STOCK DATABASE CRAWLER - v23.5 (BẢN HỢP NHẤT: SẠCH TIẾNG ANH + CHUẨN ĐƠN VỊ + CHỈ SỐ DẪN XUẤT + SUPABASE BỀN VỮNG)
 ================================================================================
-Changelog v23.4 (universe HOSE 123 mã; loại bỏ danh sách mã HNX khỏi cấu hình):
-  ✅ UNIVERSE: danh sách HOSE 123 mã; xác thực số lượng/mã trùng và loại mọi mã ngoài universe khỏi nguồn nạp.
+Changelog v23.5 (universe 122 mã đã rà soát, loại UPCoM; loại bỏ danh sách mã HNX khỏi cấu hình):
+  ✅ UNIVERSE: danh sách 122 mã sau khi loại mã UPCoM; xác thực số lượng/mã trùng và loại mọi mã ngoài universe khỏi nguồn nạp.
   ✅ GIỮ NGUYÊN v19.0: cổng dịch duy nhất force_vietnamese_label() 5 chốt
      (_accumulate, nguồn cào, Tầng 2, trước ghi file, trước upsert); fix_yfinance_typos
      an toàn; blacklist nhãn rác; purge Supabase; bóc [2]/(2); hết đuôi .0; lru_cache.
@@ -23,7 +23,7 @@ Changelog v23.4 (universe HOSE 123 mã; loại bỏ danh sách mã HNX khỏi c�
   ✅ 🆕 CỔNG VÀO CHẶN MỌI EXCEPTION -> workflow luôn exit 0; emergency backup nếu crash.
   ✅ CHỈ LƯU ĐÚNG 2 FILE: data/vietnam_stock_database_tong_hop.csv + .parquet
      (coverage report chỉ chạy khi env COVERAGE_REPORT=true).
-  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, bỏ ^UPCOM, 123 mã,
+  ✅ GIỮ NGUYÊN: SKIP_VNDIRECT=true, quý yfinance 8 luồng, không lấy chỉ số ^UPCOM, 122 mã sau rà soát,
      BƯỚC 0->8, emergency save, dọn file tạm, purge Supabase dòng 0/rỗng/rác/Anh.
 ================================================================================
 """
@@ -838,17 +838,17 @@ def load_daily_stock_data():
     except Exception: return pd.DataFrame()
 
 # ==========================================
-# 3. DANH SÁCH 123 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
+# 3. DANH SÁCH 122 MÃ & THÔNG TIN DOANH NGHIỆP (GIỮ NGUYÊN 100%)
 # ==========================================
-def load_123_master_tickers():
+def load_122_master_tickers():
 
-    # Universe is the curated HOSE-only list; no HNX ticker set is included.
+    # Curated universe excludes UPCoM; it may include verified HOSE and HNX symbols.
 
     raw_tickers = [
         'ACB', 'AGR', 'ANV', 'BAF', 'BCM', 'BFC', 'BID', 'BMI', 'BMP', 'BSI',
         'BSR', 'BVH', 'BWE', 'CII', 'CMG', 'CTD', 'CTG', 'CTI', 'CTR', 'CTS',
         'DBC', 'DCM', 'DGC', 'DGW', 'DHC', 'DIG', 'DP3', 'DPM', 'DPR', 'DSE',
-        'DTP', 'DXG', 'EIB', 'EVF', 'FPT', 'FRT', 'FTS', 'GAS', 'GEE', 'GEX',
+        'DXG', 'EIB', 'EVF', 'FPT', 'FRT', 'FTS', 'GAS', 'GEE', 'GEX',
         'GMD', 'GVR', 'HAG', 'HCM', 'HDB', 'HDC', 'HDG', 'HHV', 'HPG', 'HSG',
         'HT1', 'HVN', 'IJC', 'KBC', 'KDC', 'KDH', 'LPB', 'LSS', 'MBB', 'MCH',
         'MSB', 'MSN', 'MWG', 'NAB', 'NKG', 'NLG', 'NT2', 'NVL', 'OCB', 'PAN',
@@ -859,8 +859,8 @@ def load_123_master_tickers():
         'VIC', 'VIX', 'VJC', 'VND', 'VNM', 'VPB', 'VPI', 'VPL', 'VPX', 'VRE',
         'VSC', 'VSH', 'VTP'
     ]
-    if len(raw_tickers) != 123 or len(set(raw_tickers)) != 123:
-        raise ValueError(f"Danh sách mã phải có đúng 123 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
+    if len(raw_tickers) != 122 or len(set(raw_tickers)) != 122:
+        raise ValueError(f"Danh sách mã phải có đúng 122 mã duy nhất, hiện có {len(raw_tickers)} mã / {len(set(raw_tickers))} mã duy nhất.")
     return {t.strip().upper(): "HOSE_OR_OTHER"
             for t in raw_tickers if t.strip()}
 
@@ -872,7 +872,7 @@ def get_company_profile(symbol):
     retail_list = ["MWG","FRT","DGW","PET","DMX"]
     oil_gas_list = ["GAS","PLX","PVD","PVS","PVT","PVB","BSR","OIL","POW","DTK","PGV","NT2","PGI","PLC","PSD","PVC","SJD","TMP","SBA","VSH","TTA","TV2","ODE","AVC"]
     steel_materials = ["HPG","HSG","NKG","GDA","BMP","NTP","AAA","DGC","CSV","LAS","PHR","DPM","DCM","BFC","HPA","VGS","HT1","HGM","KSV","TLH","DDV","BFC","DPR","DHC","VLB","VXB","SIV","ACE","HAM","SBM","NAS","HMS","QPH"]
-    agriculture_list = ["HAG","ANV","BAF","DBC","IDP","KDC","MCH","MSN","QNS","SAB","SBT","SLS","VHC","CKA","SEA","APF","LSG","VSF","AGP","DTP","WSB","BWS","QHW","HLB"]
+    agriculture_list = ["HAG","ANV","BAF","DBC","IDP","KDC","MCH","MSN","QNS","SAB","SBT","SLS","VHC","CKA","SEA","APF","LSG","VSF","AGP","WSB","BWS","QHW","HLB"]
 
     if symbol in tech_list: sector = "Công nghệ thông tin"
     elif symbol in bank_list: sector = "Ngân hàng"
@@ -890,7 +890,7 @@ def get_company_profile(symbol):
         "ODE":"Công ty CP Dịch vụ Dầu khí Biển","PHP":"Công ty CP Cảng Hải Phòng","VXB":"Công ty CP Vật liệu XD Bến Tre",
         "APF":"Công ty CP Nông sản Thực phẩm Quảng Ngãi","VNZ":"Công ty CP VNG","HLB":"Công ty CP Hữu Liên",
         "TED":"Công ty CP XD và Công nghệ Tiến Đạt","VEF":"Công ty CP Trung tâm Hội chợ Triển lãm VN",
-        "FOC":"Công ty CP Dịch vụ Trực tuyến FPT","DTP":"Công ty CP Dược phẩm CPC1 Hà Nội","SIV":"Công ty CP SIVICO",
+        "FOC":"Công ty CP Dịch vụ Trực tuyến FPT","SIV":"Công ty CP SIVICO",
         "VGG":"Công ty CP May Vĩnh Phú","AVC":"Công ty CP Thủy điện A Vương","LSG":"Công ty CP Mía đường Lam Sơn",
         "CQN":"Công ty CP Cảng Quảng Ninh","QPH":"Công ty CP Quảng Ninh","TCW":"Công ty CP Kho vận Tân Cảng",
         "ACE":"Công ty CP Bê tông Hà Thanh","VSF":"Công ty CP Giống cây trồng TW","HAM":"Công ty CP Vật tư Hà Nội",
@@ -2349,8 +2349,8 @@ def main():
     print(f"  ⚙️ SKIP_VNDIRECT = {SKIP_VNDIRECT} | PURGE = {PURGE_SUPABASE_BAD} | BATCH = {UPSERT_BATCH_START}")
     print(f"  📚 Từ điển: VAS={len(VAS_WHITELIST)} | ALIAS={len(ALIAS_TO_VAS)} | TRANSLATION={len(TRANSLATION_MAP)}")
 
-    ticker_market_map = load_123_master_tickers()
-    print(f"  🏦 Universe HOSE theo dõi: {len(ticker_market_map)} mã.")
+    ticker_market_map = load_122_master_tickers()
+    print(f"  🏦 Universe theo dõi (không gồm UPCoM): {len(ticker_market_map)} mã.")
     all_master_records = []
 
     def _accumulate(recs, source):
@@ -2371,7 +2371,7 @@ def main():
             r['Chỉ tiêu tiếng Việt'] = lab
             kept.append(r)
         if dropped_outside:
-            print(f"  🧹 [{source}] loại {dropped_outside:,} dòng ngoài universe 123 mã.")
+            print(f"  🧹 [{source}] loại {dropped_outside:,} dòng ngoài universe 122 mã.")
         if dropped:
             print(f"  🧹 [{source}] chặn {dropped:,} nhãn Anh/rác ngay khi nạp.")
         if not kept: return
@@ -2546,7 +2546,7 @@ def main():
     print("=" * 62)
     print(f" 🎉 HOÀN TẤT! Tổng: {len(df_clean):,} dòng")
     if not df_clean.empty:
-        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/123")
+        print(f" - Số mã: {df_clean['Mã chứng khoán'].nunique()}/122")
         for k, v in df_clean['Loại kỳ'].value_counts().items():
             print(f"     • {k}: {v:,}")
         en_left = int(df_clean['Chỉ tiêu tiếng Việt'].map(_looks_english).sum())
@@ -2575,3 +2575,5 @@ if __name__ == "__main__":
         except Exception:
             pass
     sys.exit(0)
+
+
