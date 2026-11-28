@@ -1,5 +1,5 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.8 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v21.9 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
@@ -72,10 +72,8 @@ jobs:
             "lxml>=5.0" \
             "beautifulsoup4>=4.12" \
             "cloudscraper==1.2.71"
-          # Cài nguồn chỉ số dự phòng độc lập với Yahoo.
-          python -m pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages "vnstock==6.0.1" "vnstock-oapi==0.1.2"
           echo "📦 Đã cài:"
-          pip list | grep -Ei "^(yfinance|vnstock|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
+          pip list | grep -Ei "^(yfinance|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
 
       # ==========================================
       # 1. Diagnostic nhanh các nguồn
@@ -302,7 +300,7 @@ jobs:
           PYEOF
 
       # ==========================================
-      # 3. Verify chất lượng dữ liệu
+      # 2d. Tải nến VN-Index và ghi vào hai file dữ liệu chính
       # ==========================================
       - name: Recover and write VN-Index candles
         run: |
@@ -313,7 +311,6 @@ jobs:
           import numpy as np
           import requests
           import yfinance as yf
-          from urllib.parse import quote
 
           def norm(raw):
               if raw is None or not isinstance(raw, pd.DataFrame) or raw.empty: return pd.DataFrame()
@@ -360,15 +357,21 @@ jobs:
                   if not history.empty: break
           if history.empty:
               try:
-                  from vnstock import Market
-                  end=pd.Timestamp.utcnow().date(); start=end-pd.Timedelta(days=370)
-                  for src in ('tcbs','ssi','dnse','fhsc'):
-                      try:
-                          candidate=norm(Market(src).index('VNINDEX').ohlcv(start=start.isoformat(),end=end.isoformat(),interval='1D'))
-                          print(f'Vnstock/{src}: {len(candidate)} nến')
-                          if len(candidate)>=20: history,provider=candidate,f'Vnstock/{src}'; break
-                      except Exception as e: print(f'Vnstock/{src}: {type(e).__name__}: {str(e)[:120]}')
-              except Exception as e: print(f'Vnstock unavailable: {type(e).__name__}: {str(e)[:120]}')
+                  end_ts=int(pd.Timestamp.utcnow().timestamp())
+                  start_ts=end_ts-370*24*60*60
+                  url='https://dchart-api.vndirect.com.vn/dchart/history'
+                  params={'resolution':'D','symbol':'VNINDEX','from':start_ts,'to':end_ts}
+                  headers={'User-Agent':'Mozilla/5.0 FINEX/1.0','Origin':'https://dstock.vndirect.com.vn','Referer':'https://dstock.vndirect.com.vn/','Accept':'application/json'}
+                  response=requests.get(url,params=params,headers=headers,timeout=30)
+                  response.raise_for_status()
+                  payload=response.json()
+                  if payload.get('s')!='ok': raise RuntimeError(f"VNDirect chart status={payload.get('s')!r}")
+                  raw=pd.DataFrame({'date':pd.to_datetime(payload.get('t',[]),unit='s',utc=True),'open':payload.get('o',[]),'high':payload.get('h',[]),'low':payload.get('l',[]),'close':payload.get('c',[]),'volume':payload.get('v',[])})
+                  candidate=norm(raw)
+                  print(f'VNDirect chart VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
+                  if len(candidate)>=20: history,provider=candidate,'VNDirect chart API'
+              except Exception as e:
+                  print(f'VNDirect chart lỗi: {type(e).__name__}: {str(e)[:180]}')
           if len(history)<20: raise RuntimeError(f'Không lấy được 20 phiên nến từ nguồn nào; nhận {len(history)} phiên.')
 
           csv='data/vietnam_stock_database_tong_hop.csv'; parquet='data/vietnam_stock_database.parquet'
@@ -391,6 +394,9 @@ jobs:
           df.to_csv(csv,index=False,encoding='utf-8-sig'); df.to_parquet(parquet,index=False,engine='pyarrow',compression='snappy')
           print(f'✅ Đã ghi {len(history)} phiên / {len(rows)} dòng VN-Index từ {provider} vào đúng CSV + Parquet.')
           PYEOF
+      # ==========================================
+      # 3. Verify chất lượng dữ liệu
+      # ==========================================
       - name: Verify Data Quality
         run: |
           set -e
