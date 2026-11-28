@@ -1,5 +1,5 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v22.0 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v22.1 (MULTI-SOURCE VN-INDEX + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
@@ -303,6 +303,8 @@ jobs:
       # 2d. Tải nến VN-Index và ghi vào hai file dữ liệu chính
       # ==========================================
       - name: Recover and write VN-Index candles
+        env:
+          TCBS_API_KEY: ${{ secrets.TCBS_API_KEY }}
         run: |
           set -e
           python << 'PYEOF'
@@ -341,19 +343,47 @@ jobs:
                   print(f'yfinance {sym}: {len(candidate)} nến')
                   if len(candidate)>=20: history,provider=candidate,f'yfinance {sym}'; break
               except Exception as e: print(f'yfinance {sym}: {type(e).__name__}: {str(e)[:120]}')
-          if history.empty:
+          def parse_bars(payload):
+              if isinstance(payload,dict) and payload.get('t') and all(k in payload for k in ('o','h','l','c')):
+                  bars=[{'t':t,'o':o,'h':h,'l':l,'c':c,'v':payload.get('v',[0]*len(payload['t']))[i]} for i,(t,o,h,l,c) in enumerate(zip(payload['t'],payload['o'],payload['h'],payload['l'],payload['c']))]
+              elif isinstance(payload,dict): bars=payload.get('data') or payload.get('items') or payload.get('result') or []
+              elif isinstance(payload,list): bars=payload
+              else: bars=[]
+              if isinstance(bars,dict): bars=bars.get('data',[])
+              frame=pd.DataFrame(bars)
+              if frame.empty: return pd.DataFrame()
+              aliases={'tradingdate':'date','trading_date':'date','time':'date','timestamp':'date','t':'date','o':'open','h':'high','l':'low','c':'close','v':'volume'}
+              frame=frame.rename(columns={str(c).strip().lower():aliases.get(str(c).strip().lower(),str(c).strip().lower()) for c in frame.columns})
+              if 'date' in frame:
+                  vals=pd.to_numeric(frame['date'],errors='coerce')
+                  if vals.notna().any(): frame['date']=pd.to_datetime(vals,unit='ms' if vals.dropna().median()>10**12 else 's',errors='coerce',utc=True)
+              return norm(frame)
+
+          now=int(pd.Timestamp.now(tz='UTC').timestamp()); start=now-550*86400
+          sources=[('TCBS legacy index','https://apipubaws.tcbs.com.vn/stock-insight/v1/stock/bars-long-term',{'ticker':'VNINDEX','type':'index','resolution':'D','from':start,'to':now},{})]
+          tcbs_key=os.getenv('TCBS_API_KEY','').strip()
+          if tcbs_key:
+              sources.insert(0,('TCBS OpenAPI index','https://openapi.tcbs.com.vn/nyx/v2/stock/bars-long-term',{'ticker':'VNINDEX','type':'index','resolution':'D','to':now,'countBack':400},{'Authorization':f'Bearer {tcbs_key}'}))
+          for name,url,params,extra in sources:
+              if not history.empty: break
               try:
-                  response=requests.get('https://finfo-api.vndirect.com.vn/tradingView/history',params={'symbol':'VNINDEX'},headers={'User-Agent':'Mozilla/5.0','Accept':'application/json'},timeout=30)
-                  response.raise_for_status()
+                  response=requests.get(url,params=params,headers={'User-Agent':'Mozilla/5.0','Accept':'application/json',**extra},timeout=(5,15)); response.raise_for_status()
+                  candidate=parse_bars(response.json()).tail(500)
+                  print(f'{name} VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
+                  if len(candidate)>=20: history,provider=candidate,name
+              except Exception as e: print(f'{name} lỗi: {type(e).__name__}: {str(e)[:180]}')
+
+          vndirect=[('VNDirect finfo','https://finfo-api.vndirect.com.vn/tradingView/history',{'symbol':'VNINDEX'}),('VNDirect finfo alternate host','https://api-finfo.vndirect.com.vn/tradingView/history',{'symbol':'VNINDEX'}),('VNDirect dchart','https://dchart-api.vndirect.com.vn/dchart/history',{'resolution':'D','symbol':'VNINDEX','from':start,'to':now})]
+          for name,url,params in vndirect:
+              if not history.empty: break
+              try:
+                  response=requests.get(url,params=params,headers={'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36','Accept':'application/json, text/plain, */*','Origin':'https://dstock.vndirect.com.vn','Referer':'https://dstock.vndirect.com.vn/'},timeout=(5,12)); response.raise_for_status()
                   payload=response.json()
-                  if not isinstance(payload,dict) or not payload.get('t'):
-                      raise RuntimeError(f'VNDirect finfo không có mảng thời gian: {str(payload)[:160]}')
-                  raw=pd.DataFrame({'date':pd.to_datetime(payload.get('t',[]),unit='s',utc=True),'open':payload.get('o',[]),'high':payload.get('h',[]),'low':payload.get('l',[]),'close':payload.get('c',[]),'volume':payload.get('v',[])})
-                  candidate=norm(raw).tail(300)
-                  print(f'VNDirect finfo VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
-                  if len(candidate)>=20: history,provider=candidate,'VNDirect finfo history'
-              except Exception as e:
-                  print(f'VNDirect finfo lỗi: {type(e).__name__}: {str(e)[:180]}')
+                  if isinstance(payload,dict) and payload.get('s')=='no_data': raise RuntimeError('API phản hồi no_data')
+                  candidate=parse_bars(payload).tail(500)
+                  print(f'{name} VNINDEX: {len(candidate)} nến OHLC hợp lệ.')
+                  if len(candidate)>=20: history,provider=candidate,name
+              except Exception as e: print(f'{name} lỗi: {type(e).__name__}: {str(e)[:180]}')
           if len(history)<20: raise RuntimeError(f'Không lấy được 20 phiên nến từ nguồn nào; nhận {len(history)} phiên.')
 
           csv='data/vietnam_stock_database_tong_hop.csv'; parquet='data/vietnam_stock_database.parquet'
