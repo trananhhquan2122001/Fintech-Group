@@ -1,5 +1,5 @@
 # ============================================================================
-# Financial Data Scraper Pipeline — v21.6 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
+# Financial Data Scraper Pipeline — v21.7 (AUTO VN-INDEX OHLCV + FIX cloudscraper + HEAD~1 + pandas 3)
 # ============================================================================
 # ✅ FIX 1: cloudscraper>=1.2.72 KHÔNG TỒN TẠI trên PyPI -> chốt ==1.2.71 (bản cao nhất)
 # ✅ FIX 2: exit 128 "HEAD~1 unknown revision" -> fetch-depth: 0 + guard rev-parse
@@ -72,8 +72,10 @@ jobs:
             "lxml>=5.0" \
             "beautifulsoup4>=4.12" \
             "cloudscraper==1.2.71"
+          # Cài nguồn chỉ số dự phòng độc lập với Yahoo.
+          python -m pip install --no-cache-dir --extra-index-url https://vnstocks.com/api/packages "vnstock==6.0.1" "vnstock-oapi==0.1.2"
           echo "📦 Đã cài:"
-          pip list | grep -Ei "^(yfinance|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
+          pip list | grep -Ei "^(yfinance|vnstock|pandas|numpy|pyarrow|httpx|supabase|cloudscraper|huggingface-hub|tenacity) "
 
       # ==========================================
       # 1. Diagnostic nhanh các nguồn
